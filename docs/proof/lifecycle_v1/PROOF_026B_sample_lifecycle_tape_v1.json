@@ -1,0 +1,733 @@
+{
+  "schema": "gt_directive_026b_lifecycle_proof_v1",
+  "contract_version": 1,
+  "tape": {
+    "schema": "lifecycle_tape_result_v1",
+    "contract_version": 1,
+    "closed_v1": true,
+    "exit_at_bar_index_v1": 7,
+    "exit_reason_code_v1": "target_hit_v1",
+    "per_bar_v1": [
+      {
+        "bar_index": 3,
+        "lifecycle_reasoning_eval_v1": {
+          "schema": "lifecycle_reasoning_eval_v1",
+          "contract_version": 1,
+          "symbol": "PROOF",
+          "candle_timeframe_minutes": 5,
+          "bar_index_in_packet_v1": 3,
+          "bar_index_in_trade_v1": 0,
+          "phase_v1": "entry",
+          "time_in_trade_v1": 0,
+          "entry_thesis_v1": {
+            "schema": "entry_thesis_v1",
+            "contract_version": 1,
+            "side_v1": "long",
+            "summary_english_v1": "side=long; entry engine action was enter_long; ema_trend=bullish_trend; rsi_state=neutral.",
+            "invalidation_rules_text_v1": "4h close below 100.4 invalidates long",
+            "entry_confidence_01": 0.68
+          },
+          "thesis_valid_v1": true,
+          "thesis_degrading_v1": false,
+          "thesis_invalidated_v1": false,
+          "thesis_update_v1": "Thesis still aligned with tape.",
+          "confidence_01": 0.7,
+          "confidence_delta_v1": 0.02,
+          "risk_state_v1": "stable",
+          "unrealized_pnl_r_multiple_v1": 0.0,
+          "unrealized_pnl_fraction_v1": 0.0,
+          "decision_v1": "hold",
+          "exit_reason_code_v1": null,
+          "indicator_context_eval_v1": {
+            "schema": "indicator_context_eval_v1",
+            "contract_version": 1,
+            "rsi_last": 50.0,
+            "ema_last": 100.425,
+            "ema_prev": 100.25,
+            "atr_last": 0.3,
+            "rsi_state": "neutral",
+            "ema_trend": "bullish_trend",
+            "atr_volume_state": "normal_volatility",
+            "volume_state": "strong_participation",
+            "normalized_state_v1": {
+              "rsi": "neutral",
+              "ema_trend": "bullish_trend",
+              "atr": "normal_volatility",
+              "volume": "strong_participation"
+            },
+            "confidence_effect_v1": {
+              "atr_adjustment": 0.0
+            },
+            "support_flags_v1": {
+              "long": true,
+              "short": false,
+              "no_trade": false
+            }
+          },
+          "memory_context_eval_v1": {
+            "schema": "memory_context_eval_v1",
+            "scored_records_v1": [],
+            "aggregate_memory_effect_v1": "none"
+          },
+          "prior_outcome_eval_v1": {
+            "schema": "prior_outcome_eval_v1",
+            "wins_total_fraction_v1": 0.0,
+            "total_with_pnl": 0,
+            "avg_pnl": 0.0,
+            "prior_outcome_confidence_delta_v1": 0.0
+          },
+          "risk_inputs_v1": {
+            "schema": "lifecycle_risk_snapshot_v1",
+            "stop_price_v1": 100.24,
+            "target_price_v1": 101.32,
+            "distance_to_stop_r_v1": 1.0,
+            "distance_to_target_r_v1": 2.0,
+            "atr_entry_v1": 0.3,
+            "atr_now_v1": 0.3,
+            "entry_invalidation_text_v1": "4h close below 100.4 invalidates long"
+          },
+          "risk_defined_v1": true,
+          "opposing_bar_streak_v1": 0,
+          "thesis_degrading_streak_v1": 0
+        },
+        "lifecycle_reasoning_stage_v1": {
+          "schema": "lifecycle_reasoning_stage_v1",
+          "contract_version": 1,
+          "bar_index_in_packet_v1": 3,
+          "bar_index_in_trade_v1": 0,
+          "phase_v1": "entry",
+          "decision_v1": "hold",
+          "confidence_01": 0.7000000000000001,
+          "thesis_state_v1": "valid",
+          "risk_state_v1": "stable"
+        }
+      },
+      {
+        "bar_index": 4,
+        "lifecycle_reasoning_eval_v1": {
+          "schema": "lifecycle_reasoning_eval_v1",
+          "contract_version": 1,
+          "symbol": "PROOF",
+          "candle_timeframe_minutes": 5,
+          "bar_index_in_packet_v1": 4,
+          "bar_index_in_trade_v1": 1,
+          "phase_v1": "hold",
+          "time_in_trade_v1": 1,
+          "entry_thesis_v1": {
+            "schema": "entry_thesis_v1",
+            "contract_version": 1,
+            "side_v1": "long",
+            "summary_english_v1": "side=long; entry engine action was enter_long; ema_trend=bullish_trend; rsi_state=neutral.",
+            "invalidation_rules_text_v1": "4h close below 100.4 invalidates long",
+            "entry_confidence_01": 0.68
+          },
+          "thesis_valid_v1": true,
+          "thesis_degrading_v1": false,
+          "thesis_invalidated_v1": false,
+          "thesis_update_v1": "Thesis still aligned with tape.",
+          "confidence_01": 0.72,
+          "confidence_delta_v1": 0.02,
+          "risk_state_v1": "stable",
+          "unrealized_pnl_r_multiple_v1": 0.555556,
+          "unrealized_pnl_fraction_v1": 0.00198807,
+          "decision_v1": "hold",
+          "exit_reason_code_v1": null,
+          "indicator_context_eval_v1": {
+            "schema": "indicator_context_eval_v1",
+            "contract_version": 1,
+            "rsi_last": 50.0,
+            "ema_last": 100.53888,
+            "ema_prev": 100.3648,
+            "atr_last": 0.3,
+            "rsi_state": "neutral",
+            "ema_trend": "bullish_trend",
+            "atr_volume_state": "normal_volatility",
+            "volume_state": "strong_participation",
+            "normalized_state_v1": {
+              "rsi": "neutral",
+              "ema_trend": "bullish_trend",
+              "atr": "normal_volatility",
+              "volume": "strong_participation"
+            },
+            "confidence_effect_v1": {
+              "atr_adjustment": 0.0
+            },
+            "support_flags_v1": {
+              "long": true,
+              "short": false,
+              "no_trade": false
+            }
+          },
+          "memory_context_eval_v1": {
+            "schema": "memory_context_eval_v1",
+            "scored_records_v1": [],
+            "aggregate_memory_effect_v1": "none"
+          },
+          "prior_outcome_eval_v1": {
+            "schema": "prior_outcome_eval_v1",
+            "wins_total_fraction_v1": 0.0,
+            "total_with_pnl": 0,
+            "avg_pnl": 0.0,
+            "prior_outcome_confidence_delta_v1": 0.0
+          },
+          "risk_inputs_v1": {
+            "schema": "lifecycle_risk_snapshot_v1",
+            "stop_price_v1": 100.24,
+            "target_price_v1": 101.32,
+            "distance_to_stop_r_v1": 1.5556,
+            "distance_to_target_r_v1": 1.4444,
+            "atr_entry_v1": 0.3,
+            "atr_now_v1": 0.3,
+            "entry_invalidation_text_v1": "4h close below 100.4 invalidates long"
+          },
+          "risk_defined_v1": true,
+          "opposing_bar_streak_v1": 0,
+          "thesis_degrading_streak_v1": 0
+        },
+        "lifecycle_reasoning_stage_v1": {
+          "schema": "lifecycle_reasoning_stage_v1",
+          "contract_version": 1,
+          "bar_index_in_packet_v1": 4,
+          "bar_index_in_trade_v1": 1,
+          "phase_v1": "hold",
+          "decision_v1": "hold",
+          "confidence_01": 0.72,
+          "thesis_state_v1": "valid",
+          "risk_state_v1": "stable"
+        }
+      },
+      {
+        "bar_index": 5,
+        "lifecycle_reasoning_eval_v1": {
+          "schema": "lifecycle_reasoning_eval_v1",
+          "contract_version": 1,
+          "symbol": "PROOF",
+          "candle_timeframe_minutes": 5,
+          "bar_index_in_packet_v1": 5,
+          "bar_index_in_trade_v1": 2,
+          "phase_v1": "hold",
+          "time_in_trade_v1": 2,
+          "entry_thesis_v1": {
+            "schema": "entry_thesis_v1",
+            "contract_version": 1,
+            "side_v1": "long",
+            "summary_english_v1": "side=long; entry engine action was enter_long; ema_trend=bullish_trend; rsi_state=neutral.",
+            "invalidation_rules_text_v1": "4h close below 100.4 invalidates long",
+            "entry_confidence_01": 0.68
+          },
+          "thesis_valid_v1": true,
+          "thesis_degrading_v1": false,
+          "thesis_invalidated_v1": false,
+          "thesis_update_v1": "Thesis still aligned with tape.",
+          "confidence_01": 0.74,
+          "confidence_delta_v1": 0.02,
+          "risk_state_v1": "stable",
+          "unrealized_pnl_r_multiple_v1": 1.111111,
+          "unrealized_pnl_fraction_v1": 0.00397614,
+          "decision_v1": "hold",
+          "exit_reason_code_v1": null,
+          "indicator_context_eval_v1": {
+            "schema": "indicator_context_eval_v1",
+            "contract_version": 1,
+            "rsi_last": 50.0,
+            "ema_last": 100.652675,
+            "ema_prev": 100.479012,
+            "atr_last": 0.3,
+            "rsi_state": "neutral",
+            "ema_trend": "bullish_trend",
+            "atr_volume_state": "normal_volatility",
+            "volume_state": "strong_participation",
+            "normalized_state_v1": {
+              "rsi": "neutral",
+              "ema_trend": "bullish_trend",
+              "atr": "normal_volatility",
+              "volume": "strong_participation"
+            },
+            "confidence_effect_v1": {
+              "atr_adjustment": 0.0
+            },
+            "support_flags_v1": {
+              "long": true,
+              "short": false,
+              "no_trade": false
+            }
+          },
+          "memory_context_eval_v1": {
+            "schema": "memory_context_eval_v1",
+            "scored_records_v1": [],
+            "aggregate_memory_effect_v1": "none"
+          },
+          "prior_outcome_eval_v1": {
+            "schema": "prior_outcome_eval_v1",
+            "wins_total_fraction_v1": 0.0,
+            "total_with_pnl": 0,
+            "avg_pnl": 0.0,
+            "prior_outcome_confidence_delta_v1": 0.0
+          },
+          "risk_inputs_v1": {
+            "schema": "lifecycle_risk_snapshot_v1",
+            "stop_price_v1": 100.24,
+            "target_price_v1": 101.32,
+            "distance_to_stop_r_v1": 2.1111,
+            "distance_to_target_r_v1": 0.8889,
+            "atr_entry_v1": 0.3,
+            "atr_now_v1": 0.3,
+            "entry_invalidation_text_v1": "4h close below 100.4 invalidates long"
+          },
+          "risk_defined_v1": true,
+          "opposing_bar_streak_v1": 0,
+          "thesis_degrading_streak_v1": 0
+        },
+        "lifecycle_reasoning_stage_v1": {
+          "schema": "lifecycle_reasoning_stage_v1",
+          "contract_version": 1,
+          "bar_index_in_packet_v1": 5,
+          "bar_index_in_trade_v1": 2,
+          "phase_v1": "hold",
+          "decision_v1": "hold",
+          "confidence_01": 0.74,
+          "thesis_state_v1": "valid",
+          "risk_state_v1": "stable"
+        }
+      },
+      {
+        "bar_index": 6,
+        "lifecycle_reasoning_eval_v1": {
+          "schema": "lifecycle_reasoning_eval_v1",
+          "contract_version": 1,
+          "symbol": "PROOF",
+          "candle_timeframe_minutes": 5,
+          "bar_index_in_packet_v1": 6,
+          "bar_index_in_trade_v1": 3,
+          "phase_v1": "hold",
+          "time_in_trade_v1": 3,
+          "entry_thesis_v1": {
+            "schema": "entry_thesis_v1",
+            "contract_version": 1,
+            "side_v1": "long",
+            "summary_english_v1": "side=long; entry engine action was enter_long; ema_trend=bullish_trend; rsi_state=neutral.",
+            "invalidation_rules_text_v1": "4h close below 100.4 invalidates long",
+            "entry_confidence_01": 0.68
+          },
+          "thesis_valid_v1": true,
+          "thesis_degrading_v1": false,
+          "thesis_invalidated_v1": false,
+          "thesis_update_v1": "Thesis still aligned with tape.",
+          "confidence_01": 0.76,
+          "confidence_delta_v1": 0.02,
+          "risk_state_v1": "stable",
+          "unrealized_pnl_r_multiple_v1": 1.666667,
+          "unrealized_pnl_fraction_v1": 0.00596421,
+          "decision_v1": "hold",
+          "exit_reason_code_v1": null,
+          "indicator_context_eval_v1": {
+            "schema": "indicator_context_eval_v1",
+            "contract_version": 1,
+            "rsi_last": 50.0,
+            "ema_last": 100.766405,
+            "ema_prev": 100.592967,
+            "atr_last": 0.3,
+            "rsi_state": "neutral",
+            "ema_trend": "bullish_trend",
+            "atr_volume_state": "normal_volatility",
+            "volume_state": "strong_participation",
+            "normalized_state_v1": {
+              "rsi": "neutral",
+              "ema_trend": "bullish_trend",
+              "atr": "normal_volatility",
+              "volume": "strong_participation"
+            },
+            "confidence_effect_v1": {
+              "atr_adjustment": 0.0
+            },
+            "support_flags_v1": {
+              "long": true,
+              "short": false,
+              "no_trade": false
+            }
+          },
+          "memory_context_eval_v1": {
+            "schema": "memory_context_eval_v1",
+            "scored_records_v1": [],
+            "aggregate_memory_effect_v1": "none"
+          },
+          "prior_outcome_eval_v1": {
+            "schema": "prior_outcome_eval_v1",
+            "wins_total_fraction_v1": 0.0,
+            "total_with_pnl": 0,
+            "avg_pnl": 0.0,
+            "prior_outcome_confidence_delta_v1": 0.0
+          },
+          "risk_inputs_v1": {
+            "schema": "lifecycle_risk_snapshot_v1",
+            "stop_price_v1": 100.24,
+            "target_price_v1": 101.32,
+            "distance_to_stop_r_v1": 2.6667,
+            "distance_to_target_r_v1": 0.3333,
+            "atr_entry_v1": 0.3,
+            "atr_now_v1": 0.3,
+            "entry_invalidation_text_v1": "4h close below 100.4 invalidates long"
+          },
+          "risk_defined_v1": true,
+          "opposing_bar_streak_v1": 0,
+          "thesis_degrading_streak_v1": 0
+        },
+        "lifecycle_reasoning_stage_v1": {
+          "schema": "lifecycle_reasoning_stage_v1",
+          "contract_version": 1,
+          "bar_index_in_packet_v1": 6,
+          "bar_index_in_trade_v1": 3,
+          "phase_v1": "hold",
+          "decision_v1": "hold",
+          "confidence_01": 0.76,
+          "thesis_state_v1": "valid",
+          "risk_state_v1": "stable"
+        }
+      },
+      {
+        "bar_index": 7,
+        "lifecycle_reasoning_eval_v1": {
+          "schema": "lifecycle_reasoning_eval_v1",
+          "contract_version": 1,
+          "symbol": "PROOF",
+          "candle_timeframe_minutes": 5,
+          "bar_index_in_packet_v1": 7,
+          "bar_index_in_trade_v1": 4,
+          "phase_v1": "exit",
+          "time_in_trade_v1": 4,
+          "entry_thesis_v1": {
+            "schema": "entry_thesis_v1",
+            "contract_version": 1,
+            "side_v1": "long",
+            "summary_english_v1": "side=long; entry engine action was enter_long; ema_trend=bullish_trend; rsi_state=neutral.",
+            "invalidation_rules_text_v1": "4h close below 100.4 invalidates long",
+            "entry_confidence_01": 0.68
+          },
+          "thesis_valid_v1": true,
+          "thesis_degrading_v1": false,
+          "thesis_invalidated_v1": false,
+          "thesis_update_v1": "Thesis still aligned with tape.",
+          "confidence_01": 0.78,
+          "confidence_delta_v1": 0.02,
+          "risk_state_v1": "stable",
+          "unrealized_pnl_r_multiple_v1": 2.222222,
+          "unrealized_pnl_fraction_v1": 0.00795229,
+          "decision_v1": "exit",
+          "exit_reason_code_v1": "target_hit_v1",
+          "indicator_context_eval_v1": {
+            "schema": "indicator_context_eval_v1",
+            "contract_version": 1,
+            "rsi_last": 50.0,
+            "ema_last": 100.88009,
+            "ema_prev": 100.706787,
+            "atr_last": 0.3,
+            "rsi_state": "neutral",
+            "ema_trend": "bullish_trend",
+            "atr_volume_state": "normal_volatility",
+            "volume_state": "strong_participation",
+            "normalized_state_v1": {
+              "rsi": "neutral",
+              "ema_trend": "bullish_trend",
+              "atr": "normal_volatility",
+              "volume": "strong_participation"
+            },
+            "confidence_effect_v1": {
+              "atr_adjustment": 0.0
+            },
+            "support_flags_v1": {
+              "long": true,
+              "short": false,
+              "no_trade": false
+            }
+          },
+          "memory_context_eval_v1": {
+            "schema": "memory_context_eval_v1",
+            "scored_records_v1": [],
+            "aggregate_memory_effect_v1": "none"
+          },
+          "prior_outcome_eval_v1": {
+            "schema": "prior_outcome_eval_v1",
+            "wins_total_fraction_v1": 0.0,
+            "total_with_pnl": 0,
+            "avg_pnl": 0.0,
+            "prior_outcome_confidence_delta_v1": 0.0
+          },
+          "risk_inputs_v1": {
+            "schema": "lifecycle_risk_snapshot_v1",
+            "stop_price_v1": 100.24,
+            "target_price_v1": 101.32,
+            "distance_to_stop_r_v1": 3.2222,
+            "distance_to_target_r_v1": -0.2222,
+            "atr_entry_v1": 0.3,
+            "atr_now_v1": 0.3,
+            "entry_invalidation_text_v1": "4h close below 100.4 invalidates long"
+          },
+          "risk_defined_v1": true,
+          "opposing_bar_streak_v1": 0,
+          "thesis_degrading_streak_v1": 0
+        },
+        "lifecycle_reasoning_stage_v1": {
+          "schema": "lifecycle_reasoning_stage_v1",
+          "contract_version": 1,
+          "bar_index_in_packet_v1": 7,
+          "bar_index_in_trade_v1": 4,
+          "phase_v1": "exit",
+          "decision_v1": "exit",
+          "confidence_01": 0.78,
+          "thesis_state_v1": "valid",
+          "risk_state_v1": "stable"
+        }
+      }
+    ],
+    "final_fault_map_v1": {
+      "schema": "student_reasoning_fault_map_v1",
+      "contract_version": 1,
+      "nodes_v1": [
+        {
+          "node_id": "market_data_loaded",
+          "status": "NOT_PROVEN",
+          "input_summary_v1": "\u2014",
+          "output_summary_v1": "\u2014",
+          "blocking_rule_v1": "",
+          "error_codes_v1": [],
+          "evidence_fields_v1": [],
+          "evidence_values_v1": {},
+          "operator_message_v1": "Missing node."
+        },
+        {
+          "node_id": "indicator_context_evaluated",
+          "status": "NOT_PROVEN",
+          "input_summary_v1": "\u2014",
+          "output_summary_v1": "\u2014",
+          "blocking_rule_v1": "",
+          "error_codes_v1": [],
+          "evidence_fields_v1": [],
+          "evidence_values_v1": {},
+          "operator_message_v1": "Missing node."
+        },
+        {
+          "node_id": "memory_context_evaluated",
+          "status": "NOT_PROVEN",
+          "input_summary_v1": "\u2014",
+          "output_summary_v1": "\u2014",
+          "blocking_rule_v1": "",
+          "error_codes_v1": [],
+          "evidence_fields_v1": [],
+          "evidence_values_v1": {},
+          "operator_message_v1": "Missing node."
+        },
+        {
+          "node_id": "prior_outcomes_evaluated",
+          "status": "NOT_PROVEN",
+          "input_summary_v1": "\u2014",
+          "output_summary_v1": "\u2014",
+          "blocking_rule_v1": "",
+          "error_codes_v1": [],
+          "evidence_fields_v1": [],
+          "evidence_values_v1": {},
+          "operator_message_v1": "Missing node."
+        },
+        {
+          "node_id": "risk_reward_evaluated",
+          "status": "NOT_PROVEN",
+          "input_summary_v1": "\u2014",
+          "output_summary_v1": "\u2014",
+          "blocking_rule_v1": "",
+          "error_codes_v1": [],
+          "evidence_fields_v1": [],
+          "evidence_values_v1": {},
+          "operator_message_v1": "Missing node."
+        },
+        {
+          "node_id": "decision_synthesized",
+          "status": "NOT_PROVEN",
+          "input_summary_v1": "\u2014",
+          "output_summary_v1": "\u2014",
+          "blocking_rule_v1": "",
+          "error_codes_v1": [],
+          "evidence_fields_v1": [],
+          "evidence_values_v1": {},
+          "operator_message_v1": "Missing node."
+        },
+        {
+          "node_id": "entry_reasoning_validated",
+          "status": "NOT_PROVEN",
+          "input_summary_v1": "\u2014",
+          "output_summary_v1": "\u2014",
+          "blocking_rule_v1": "",
+          "error_codes_v1": [],
+          "evidence_fields_v1": [],
+          "evidence_values_v1": {},
+          "operator_message_v1": "Missing node."
+        },
+        {
+          "node_id": "llm_output_checked",
+          "status": "NOT_PROVEN",
+          "input_summary_v1": "\u2014",
+          "output_summary_v1": "\u2014",
+          "blocking_rule_v1": "",
+          "error_codes_v1": [],
+          "evidence_fields_v1": [],
+          "evidence_values_v1": {},
+          "operator_message_v1": "Missing node."
+        },
+        {
+          "node_id": "student_output_sealed",
+          "status": "NOT_PROVEN",
+          "input_summary_v1": "\u2014",
+          "output_summary_v1": "\u2014",
+          "blocking_rule_v1": "",
+          "error_codes_v1": [],
+          "evidence_fields_v1": [],
+          "evidence_values_v1": {},
+          "operator_message_v1": "Missing node."
+        },
+        {
+          "node_id": "execution_intent_created",
+          "status": "NOT_PROVEN",
+          "input_summary_v1": "\u2014",
+          "output_summary_v1": "\u2014",
+          "blocking_rule_v1": "",
+          "error_codes_v1": [],
+          "evidence_fields_v1": [],
+          "evidence_values_v1": {},
+          "operator_message_v1": "Missing node."
+        },
+        {
+          "node_id": "reasoning_router_evaluated",
+          "status": "NOT_PROVEN",
+          "input_summary_v1": "\u2014",
+          "output_summary_v1": "\u2014",
+          "blocking_rule_v1": "",
+          "error_codes_v1": [],
+          "evidence_fields_v1": [],
+          "evidence_values_v1": {},
+          "operator_message_v1": "Missing node."
+        },
+        {
+          "node_id": "external_escalation_governed",
+          "status": "NOT_PROVEN",
+          "input_summary_v1": "\u2014",
+          "output_summary_v1": "\u2014",
+          "blocking_rule_v1": "",
+          "error_codes_v1": [],
+          "evidence_fields_v1": [],
+          "evidence_values_v1": {},
+          "operator_message_v1": "Missing node."
+        },
+        {
+          "node_id": "external_reasoning_review_recorded",
+          "status": "NOT_PROVEN",
+          "input_summary_v1": "\u2014",
+          "output_summary_v1": "\u2014",
+          "blocking_rule_v1": "",
+          "error_codes_v1": [],
+          "evidence_fields_v1": [],
+          "evidence_values_v1": {},
+          "operator_message_v1": "Missing node."
+        },
+        {
+          "node_id": "lifecycle_context_loaded",
+          "status": "PASS",
+          "input_summary_v1": "Per-bar market + position context for in-trade reasoning.",
+          "output_summary_v1": "Loaded",
+          "blocking_rule_v1": "",
+          "error_codes_v1": [],
+          "evidence_fields_v1": [],
+          "evidence_values_v1": {},
+          "operator_message_v1": "Entry thesis, PnL state, and bar window are available for lifecycle evaluation."
+        },
+        {
+          "node_id": "lifecycle_reasoning_evaluated",
+          "status": "PASS",
+          "input_summary_v1": "Thesis, indicators, memory over the open trade.",
+          "output_summary_v1": "Eval record produced",
+          "blocking_rule_v1": "",
+          "error_codes_v1": [],
+          "evidence_fields_v1": [],
+          "evidence_values_v1": {},
+          "operator_message_v1": "Thesis and risk are compared to current tape each bar (deterministic)."
+        },
+        {
+          "node_id": "lifecycle_decision_made",
+          "status": "PASS",
+          "input_summary_v1": "Explicit hold/exit/force_exit decision.",
+          "output_summary_v1": "Decision recorded",
+          "blocking_rule_v1": "",
+          "error_codes_v1": [],
+          "evidence_fields_v1": [],
+          "evidence_values_v1": {},
+          "operator_message_v1": "Engine chose hold, exit, or force_exit; no silent continuation between bars."
+        },
+        {
+          "node_id": "lifecycle_exit_evaluated",
+          "status": "PASS",
+          "input_summary_v1": "When closing, reason codes and last-bar evaluation.",
+          "output_summary_v1": "Exit state evaluated",
+          "blocking_rule_v1": "",
+          "error_codes_v1": [],
+          "evidence_fields_v1": [],
+          "evidence_values_v1": {},
+          "operator_message_v1": "Stops, targets, time cap, and thesis lines are applied in fixed order (deterministic)."
+        }
+      ]
+    }
+  },
+  "per_bar_stages": [
+    {
+      "schema": "lifecycle_reasoning_stage_v1",
+      "contract_version": 1,
+      "bar_index_in_packet_v1": 3,
+      "bar_index_in_trade_v1": 0,
+      "phase_v1": "entry",
+      "decision_v1": "hold",
+      "confidence_01": 0.7000000000000001,
+      "thesis_state_v1": "valid",
+      "risk_state_v1": "stable"
+    },
+    {
+      "schema": "lifecycle_reasoning_stage_v1",
+      "contract_version": 1,
+      "bar_index_in_packet_v1": 4,
+      "bar_index_in_trade_v1": 1,
+      "phase_v1": "hold",
+      "decision_v1": "hold",
+      "confidence_01": 0.72,
+      "thesis_state_v1": "valid",
+      "risk_state_v1": "stable"
+    },
+    {
+      "schema": "lifecycle_reasoning_stage_v1",
+      "contract_version": 1,
+      "bar_index_in_packet_v1": 5,
+      "bar_index_in_trade_v1": 2,
+      "phase_v1": "hold",
+      "decision_v1": "hold",
+      "confidence_01": 0.74,
+      "thesis_state_v1": "valid",
+      "risk_state_v1": "stable"
+    },
+    {
+      "schema": "lifecycle_reasoning_stage_v1",
+      "contract_version": 1,
+      "bar_index_in_packet_v1": 6,
+      "bar_index_in_trade_v1": 3,
+      "phase_v1": "hold",
+      "decision_v1": "hold",
+      "confidence_01": 0.76,
+      "thesis_state_v1": "valid",
+      "risk_state_v1": "stable"
+    },
+    {
+      "schema": "lifecycle_reasoning_stage_v1",
+      "contract_version": 1,
+      "bar_index_in_packet_v1": 7,
+      "bar_index_in_trade_v1": 4,
+      "phase_v1": "exit",
+      "decision_v1": "exit",
+      "confidence_01": 0.78,
+      "thesis_state_v1": "valid",
+      "risk_state_v1": "stable"
+    }
+  ]
+}

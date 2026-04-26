@@ -11,7 +11,7 @@ from typing import Any
 SCHEMA_STUDENT_REASONING_FAULT_MAP_V1 = "student_reasoning_fault_map_v1"
 CONTRACT_VERSION_FAULT_MAP = 1
 
-# Fixed order (026R + 026AI router visibility).
+# Fixed order (026R + 026AI router + 026B lifecycle).
 NODE_IDS_ORDER: tuple[str, ...] = (
     "market_data_loaded",
     "indicator_context_evaluated",
@@ -26,6 +26,11 @@ NODE_IDS_ORDER: tuple[str, ...] = (
     "reasoning_router_evaluated",
     "external_escalation_governed",
     "external_reasoning_review_recorded",
+    # GT_DIRECTIVE_026B — full trade lifecycle (tape participation)
+    "lifecycle_context_loaded",
+    "lifecycle_reasoning_evaluated",
+    "lifecycle_decision_made",
+    "lifecycle_exit_evaluated",
 )
 
 STATUS_PASS = "PASS"
@@ -359,6 +364,89 @@ def merge_runtime_fault_nodes_v1(
     }
 
 
+def merge_lifecycle_reasoning_fault_nodes_v1(
+    base: dict[str, Any],
+    *,
+    context_loaded_ok: bool,
+    reasoning_eval_ok: bool,
+    decision_ok: bool,
+    exit_eval_ok: bool,
+    operator_messages: dict[str, str] | None = None,
+) -> dict[str, Any]:
+    """
+    GT_DIRECTIVE_026B — set last four fault nodes (after 026AI router nodes) for a lifecycle bar or tape run.
+    """
+    import copy
+
+    msg = operator_messages if isinstance(operator_messages, dict) else {}
+    b = base if isinstance(base, dict) else {"schema": SCHEMA_STUDENT_REASONING_FAULT_MAP_V1, "nodes_v1": []}
+    nodes = [copy.deepcopy(x) for x in (b.get("nodes_v1") or []) if isinstance(x, dict)]
+    by_id: dict[str, dict[str, Any]] = {str(n.get("node_id") or ""): n for n in nodes}
+
+    by_id["lifecycle_context_loaded"] = make_fault_node_v1(
+        "lifecycle_context_loaded",
+        STATUS_PASS if context_loaded_ok else STATUS_FAIL,
+        input_summary_v1="Per-bar market + position context for in-trade reasoning.",
+        output_summary_v1="Loaded" if context_loaded_ok else "Failed to load",
+        operator_message_v1=msg.get(
+            "lifecycle_context_loaded", "Entry thesis, PnL state, and bar window are available for lifecycle evaluation."
+        )[:4000],
+    )
+    by_id["lifecycle_reasoning_evaluated"] = make_fault_node_v1(
+        "lifecycle_reasoning_evaluated",
+        STATUS_PASS if reasoning_eval_ok and context_loaded_ok else (STATUS_FAIL if not reasoning_eval_ok else STATUS_SKIPPED),
+        input_summary_v1="Thesis, indicators, memory over the open trade.",
+        output_summary_v1="Eval record produced" if reasoning_eval_ok else "Missing or failed",
+        operator_message_v1=msg.get(
+            "lifecycle_reasoning_evaluated", "Thesis and risk are compared to current tape each bar (deterministic)."
+        )[:4000],
+    )
+    by_id["lifecycle_decision_made"] = make_fault_node_v1(
+        "lifecycle_decision_made",
+        STATUS_PASS if decision_ok and reasoning_eval_ok else (STATUS_FAIL if not decision_ok else STATUS_SKIPPED),
+        input_summary_v1="Explicit hold/exit/force_exit decision.",
+        output_summary_v1="Decision recorded" if decision_ok else "Not recorded",
+        operator_message_v1=msg.get(
+            "lifecycle_decision_made", "Engine chose hold, exit, or force_exit; no silent continuation between bars."
+        )[:4000],
+    )
+    by_id["lifecycle_exit_evaluated"] = make_fault_node_v1(
+        "lifecycle_exit_evaluated",
+        STATUS_PASS if exit_eval_ok and decision_ok else (STATUS_FAIL if not exit_eval_ok else STATUS_SKIPPED),
+        input_summary_v1="When closing, reason codes and last-bar evaluation.",
+        output_summary_v1="Exit state evaluated" if exit_eval_ok else "Not evaluated",
+        operator_message_v1=msg.get(
+            "lifecycle_exit_evaluated", "Stops, targets, time cap, and thesis lines are applied in fixed order (deterministic)."
+        )[:4000],
+    )
+    if not context_loaded_ok:
+        by_id["lifecycle_reasoning_evaluated"] = make_fault_node_v1(
+            "lifecycle_reasoning_evaluated", STATUS_SKIPPED, input_summary_v1="—", output_summary_v1="—",
+            operator_message_v1="Earlier lifecycle step did not pass.",
+        )
+        by_id["lifecycle_decision_made"] = make_fault_node_v1(
+            "lifecycle_decision_made", STATUS_SKIPPED, input_summary_v1="—", output_summary_v1="—",
+            operator_message_v1="Not reached: lifecycle context did not load.",
+        )
+        by_id["lifecycle_exit_evaluated"] = make_fault_node_v1(
+            "lifecycle_exit_evaluated", STATUS_SKIPPED, input_summary_v1="—", output_summary_v1="—",
+            operator_message_v1="Not reached: lifecycle context did not load.",
+        )
+
+    ordered = [
+        by_id.get(nid)
+        or make_fault_node_v1(
+            nid, STATUS_NOT_PROVEN, input_summary_v1="—", output_summary_v1="—", operator_message_v1="Missing node."
+        )
+        for nid in NODE_IDS_ORDER
+    ]
+    return {
+        "schema": SCHEMA_STUDENT_REASONING_FAULT_MAP_V1,
+        "contract_version": CONTRACT_VERSION_FAULT_MAP,
+        "nodes_v1": ordered,
+    }
+
+
 def attach_fault_map_v1(
     target: dict[str, Any] | None,
     fault_map: dict[str, Any] | None,
@@ -389,6 +477,7 @@ __all__ = [
     "skipped_nodes_from_index_v1",
     "build_fault_map_v1",
     "merge_unified_agent_router_fault_nodes_v1",
+    "merge_lifecycle_reasoning_fault_nodes_v1",
     "validate_student_reasoning_fault_map_v1",
     "merge_runtime_fault_nodes_v1",
     "attach_fault_map_v1",
