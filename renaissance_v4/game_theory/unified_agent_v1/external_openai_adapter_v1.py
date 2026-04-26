@@ -149,6 +149,17 @@ def _get_api_key(api_key_env_var: str) -> str | None:
     return v if v else None
 
 
+def eager_load_openai_api_key_v1() -> bool:
+    """
+    Call once from the web app process (e.g. at Flask startup) so the host secrets file is applied
+    before the first /status or router call, matching ``./scripts/openai_adapter_smoke_v1.sh`` behavior
+    in a fresh shell. Returns whether a plausibly usable key is in the process after load.
+    """
+    v = _get_api_key("OPENAI_API_KEY")
+    s = (v or "").strip()
+    return bool(s and len(s) > 8 and not s.lower().startswith("sk-placeholder"))
+
+
 def call_openai_responses_v1(
     *,
     model_requested: str,

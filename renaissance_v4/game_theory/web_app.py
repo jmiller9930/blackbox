@@ -126,7 +126,7 @@ _PATTERN_BANNER_WEBP_PATH = _RV4_ROOT / "assets" / "pattern.webp"
 _PATTERN_GAME_BANNER_BOOT_JS = _GAME_THEORY / "static" / "pattern_game_banner_boot.js"
 
 # Operator-visible web UI bundle version — bump when changing PAGE_HTML (HTML/CSS/JS) so deploys are provable.
-PATTERN_GAME_WEB_UI_VERSION = "2.19.90"
+PATTERN_GAME_WEB_UI_VERSION = "2.19.91"
 
 from renaissance_v4.game_theory.reasoning_model_operator_surface_v1 import (
     get_reasoning_model_operator_snapshot_v1,
@@ -781,6 +781,16 @@ def create_app() -> Flask:
     apply_main_process_runtime_env_defaults()
     ensure_pml_runtime_dirs()
     ensure_memory_root_tree()
+    # Align web process with adapter smoke: load OPENAI from env or host file before any request
+    # (avoids a race where the first /api/reasoning-model/status could run before _get_api_key).
+    try:
+        from renaissance_v4.game_theory.unified_agent_v1.external_openai_adapter_v1 import (
+            eager_load_openai_api_key_v1,
+        )
+
+        eager_load_openai_api_key_v1()
+    except Exception:
+        pass
     app = Flask(__name__)
 
     @app.get("/")

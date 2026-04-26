@@ -233,7 +233,7 @@ def compute_pattern_game_module_board() -> dict[str, Any]:
     modules.append(
         {
             "id": "promoted_bundle",
-            "label": "groundhog_memory.py",
+            "label": "Promoted memory bundle",
             "role": "behavioral_memory",
             "ok": gh_ok,
             "signal": gh_signal,
