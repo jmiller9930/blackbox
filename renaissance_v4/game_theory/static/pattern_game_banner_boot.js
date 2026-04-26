@@ -42,6 +42,8 @@
   const det = document.getElementById('reasoningModelDetailS');
   const tile = document.getElementById('reasoningModelBannerTile');
   const gw = document.getElementById('rmExtGatewayChk');
+  const exRows = document.getElementById('reasoningModelExternalRows');
+  const addFunds = document.getElementById('rmAddFundsLink');
 
   function rmTileClass(c) {
     if (!tile) return;
@@ -62,6 +64,7 @@
       if (!j || !j.ok) {
         st.textContent = '—';
         if (det) det.textContent = 'Status unavailable';
+        if (exRows) exRows.textContent = '—';
         rmTileClass('red');
         if (tile) tile.title = 'Reasoning Model status unavailable';
         return;
@@ -69,23 +72,54 @@
       st.textContent = j.status_headline_v1 || '—';
       var f = j.fields_v1 || {};
       if (det) {
-        det.textContent =
-          (f.local_model_status || '—') +
-          ' · Router ' +
-          (f.router_026ai_status || '—') +
-          ' · Ext ' +
-          (f.external_api_health || '—');
+        if (f.tile_detail_v1) {
+          det.textContent = f.tile_detail_v1;
+        } else {
+          det.textContent =
+            (f.local_model_status || '—') +
+            ' · Router ' +
+            (f.router_026ai_status || '—') +
+            ' · ' +
+            (f.external_api_health || '—');
+        }
       }
       rmTileClass(j.tile_color_v1 || 'amber');
+      if (exRows) {
+        var acct0 = f.funding_account_balance_v1 != null ? String(f.funding_account_balance_v1) : 'Unknown';
+        var runB0 = f.external_api_balance_status_v1 != null ? String(f.external_api_balance_status_v1) : '—';
+        var cost0 = f.run_cost_display_v1 != null ? String(f.run_cost_display_v1) : '$0.00';
+        var cap0 = f.budget_cap_display_v1 != null ? String(f.budget_cap_display_v1) : '—';
+        var lastR0 = f.last_external_call_result_v1 != null ? String(f.last_external_call_result_v1) : '—';
+        var blk0 = f.operator_block_code_v1 != null ? String(f.operator_block_code_v1) : '';
+        exRows.textContent =
+          'Balance (account): ' +
+          acct0 +
+          ' · Run: ' +
+          runB0 +
+          ' | Cost ' +
+          cost0 +
+          ' | Cap ' +
+          cap0 +
+          ' | Last ' +
+          lastR0 +
+          (blk0 ? ' | Block: ' + blk0 : '');
+      }
+      if (addFunds && j.add_funds_billing_url_v1) {
+        addFunds.href = String(j.add_funds_billing_url_v1);
+      }
       if (tile) {
         var br = f.block_reasons_v1;
         var tok = f.tokens_current_run_v1 || {};
         tile.title = [
+          j.escalation_summary_v1 != null ? String(j.escalation_summary_v1) : '',
+          j.primary_escalation_code_v1 != null ? 'Code: ' + j.primary_escalation_code_v1 : '',
           'Status: ' + (f.status || '—'),
           'Local: ' + (f.local_model_status || '—'),
           'Router 026AI: ' + (f.router_026ai_status || '—'),
-          'Gateway: ' + (f.external_api_gateway || '—'),
-          'External health: ' + (f.external_api_health || '—'),
+          'Operator gateway: ' + (f.external_api_gateway || '—'),
+          'Run cost / cap: ' + (f.run_cost_display_v1 || '—') + ' / ' + (f.budget_cap_display_v1 || '—'),
+          'Run budget: ' + (f.external_api_balance_status_v1 || '—') + ' · account: ' + (f.funding_account_balance_v1 || 'Unknown'),
+          'Last: ' + (f.last_external_call_result_v1 || '—'),
           'Budget: ' + (f.api_budget_status || '—'),
           'Last ext call: ' + (f.last_external_call || '—'),
           'Tokens (this run): in=' + (tok.input != null ? tok.input : '—') + ' out=' + (tok.output != null ? tok.output : '—'),
