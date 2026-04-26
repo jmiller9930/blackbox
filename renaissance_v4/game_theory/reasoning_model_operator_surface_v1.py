@@ -115,6 +115,32 @@ def _aggregate_external_cost_from_trace_events(
     return total_in, total_out, est_usd
 
 
+def _operator_block_message_v1(
+    operator_blocks: bool,
+    ext_effective: bool,
+    key_ok: bool,
+    last_call: str,
+    primary_code: str,
+    ollama_err: Any,
+) -> str | None:
+    """One human sentence for tooltip only (not internal codes)."""
+    if ollama_err:
+        return "Local Ollama/model check failed. See local model line below."
+    if last_call == "failed":
+        return "The last OpenAI call failed. Check key, quota, and provider; see trace for the run."
+    if operator_blocks:
+        return "Allow External AI is off — escalation to OpenAI is blocked in operator settings."
+    if not ext_effective:
+        return "External API is not enabled in server configuration (reasoning router config or OPENAI_ESCALATION_ENABLED)."
+    if not key_ok and ext_effective:
+        return "OpenAI key is not configured; external API cannot be used."
+    if primary_code == "budget_blocked":
+        return "External API Blocked (Budget) — per-run cap or token limits."
+    if primary_code == "no_external_api_call_in_trace":
+        return "This run’s trace has no OpenAI call; the router may have stayed on the local model."
+    return None
+
+
 def get_reasoning_model_operator_snapshot_v1(job_id: str | None = None) -> dict[str, Any]:
     cfg = load_reasoning_router_config_v1(None)
     if not isinstance(cfg, dict):
@@ -255,58 +281,110 @@ def get_reasoning_model_operator_snapshot_v1(job_id: str | None = None) -> dict[
     if ollama_err and router_on:
         router_label = "error"
 
-    if ext_health == "operator_blocked":
-        ext_line = "Ext op off"
-    elif ext_health == "router_config_off":
-        ext_line = "Ext off in config"
-    elif ext_health == "missing_key":
-        ext_line = "Ext need key"
+    # Proof of external path (no debug: no job_id, no "config" jargon in the primary string).
+    external_api_proof_state_v1: str
+    external_api_proof_line_v1: str
+    if ollama_err:
+        external_api_proof_state_v1 = "not_connected"
+        external_api_proof_line_v1 = "External API: Unavailable (local model error)"
+    elif last_call == "success":
+        external_api_proof_state_v1 = "connected"
+        external_api_proof_line_v1 = "External API: Connected"
+    elif operator_blocks:
+        external_api_proof_state_v1 = "blocked"
+        external_api_proof_line_v1 = "External API: Blocked (operator off)"
+    elif not ext_effective:
+        external_api_proof_state_v1 = "not_connected"
+        external_api_proof_line_v1 = "External API: Not Configured"
+    elif not key_ok and ext_effective:
+        external_api_proof_state_v1 = "not_connected"
+        external_api_proof_line_v1 = "External API: Not Configured (key missing)"
+    elif budget_label == "exhausted" and ext_effective and not operator_blocks:
+        external_api_proof_state_v1 = "blocked"
+        external_api_proof_line_v1 = "External API: Blocked (Budget)"
+    elif last_call == "failed" and ext_effective and key_ok:
+        external_api_proof_state_v1 = "not_connected"
+        external_api_proof_line_v1 = "External API: Not Connected (call failed)"
+    elif not router_on:
+        external_api_proof_state_v1 = "idle"
+        external_api_proof_line_v1 = "External API: Idle"
     else:
-        ext_line = "Ext path OK"
+        external_api_proof_state_v1 = "ready_no_call"
+        external_api_proof_line_v1 = "External API: Ready (no call yet)"
 
-    trace_bits: list[str] = [local_model_label, f"Router {router_label}", ext_line]
-    if jid:
-        trace_bits.append(f"ext call: {last_call}")
+    local_display = "Error" if ollama_err else "Loaded"
+    router_display = "Disabled" if router_label == "disabled" else ("Error" if router_label == "error" else "Active")
+
+    if ollama_err:
+        external_line_core = "Unavailable"
+    elif external_api_proof_state_v1 == "connected":
+        external_line_core = "Connected"
+    elif external_api_proof_state_v1 == "ready_no_call":
+        external_line_core = "Ready (no call yet)"
+    elif external_api_proof_state_v1 == "blocked":
+        external_line_core = "Blocked"
+    elif external_api_proof_state_v1 == "not_connected":
+        if last_call == "failed":
+            external_line_core = "Not connected"
+        elif not key_ok and ext_effective:
+            external_line_core = "Not Configured (key missing)"
+        elif not ext_effective:
+            external_line_core = "Not Configured"
+        else:
+            external_line_core = "Not Configured"
     else:
-        trace_bits.append("trace: add job_id")
-    tile_detail_v1 = " · ".join(trace_bits)
+        external_line_core = "Idle"
 
-    color = "amber"
-    headline = "Idle"
+    ui_core_lines_v1 = [
+        f"Local model: {local_display}",
+        f"Router: {router_display}",
+        f"External API: {external_line_core}",
+    ]
+    tile_detail_v1 = " | ".join(ui_core_lines_v1)
+
+    operator_block_message_v1 = _operator_block_message_v1(
+        operator_blocks, ext_effective, key_ok, last_call, primary_code, ollama_err
+    )
+
+    if not router_on:
+        headline_badge_v1 = "Router off"
+    elif ollama_err:
+        headline_badge_v1 = "Fault"
+    elif ext_effective and not key_ok:
+        headline_badge_v1 = "Fault"
+    elif jid and last_call == "failed" and ext_effective and key_ok:
+        headline_badge_v1 = "Fault"
+    elif budget_label == "exhausted" and ext_effective:
+        headline_badge_v1 = "Blocked"
+    elif operator_blocks:
+        headline_badge_v1 = "Blocked"
+    elif not ext_effective:
+        headline_badge_v1 = "Local route"
+    elif not jid and ext_effective and key_ok and not ollama_err and last_call != "failed":
+        headline_badge_v1 = "Idle"
+    elif ext_effective and key_ok and not ollama_err:
+        headline_badge_v1 = "External active"
+    else:
+        headline_badge_v1 = "Degraded"
+
+    headline = headline_badge_v1
     if not router_on:
         color = "blue"
-        headline = "Router off"
-    elif ollama_err:
+    elif ollama_err or (ext_effective and not key_ok) or (jid and last_call == "failed" and ext_effective and key_ok) or (budget_label == "exhausted" and ext_effective):
         color = "red"
-        headline = "Fault"
-    elif operator_blocks:
+    elif operator_blocks or not ext_effective:
         color = "amber"
-        headline = "External off (operator)"
-    elif not ext_effective:
-        color = "amber"
-        headline = "Local route"
-    elif not key_ok:
-        color = "red"
-        headline = "Key missing"
-    elif jid and last_call == "failed" and ext_effective and key_ok:
-        color = "red"
-        headline = "Fault"
-    elif budget_label == "exhausted" and ext_effective:
-        color = "red"
-        headline = "Budget blocked"
     elif not jid and ext_effective and key_ok and not ollama_err and last_call != "failed":
         color = "blue"
-        headline = "Idle"
+    elif last_call == "success" and ext_effective and key_ok and not ollama_err and budget_label != "exhausted":
+        color = "green"
     elif ext_effective and key_ok and not ollama_err and last_call != "failed" and budget_label != "exhausted":
         if external_api_balance_status_v1 == "Available":
             color = "green"
-            headline = "Active"
         else:
             color = "amber"
-            headline = "Active"
     else:
         color = "amber"
-        headline = "Degraded"
 
     return {
         "ok": True,
@@ -315,14 +393,22 @@ def get_reasoning_model_operator_snapshot_v1(job_id: str | None = None) -> dict[
         "job_id_scoped": jid or None,
         "tile_color_v1": color,
         "status_headline_v1": headline,
+        "headline_badge_v1": headline_badge_v1,
+        "external_api_proof_line_v1": external_api_proof_line_v1,
         "operator_external_api_gateway_allows_v1": not operator_blocks,
         "escalation_summary_v1": escalation_summary_v1,
         "primary_escalation_code_v1": primary_code,
         "add_funds_billing_url_v1": ADD_FUNDS_BILLING_URL_V1,
         "fields_v1": {
             "status": headline,
+            "headline_badge_v1": headline_badge_v1,
+            "ui_core_lines_v1": ui_core_lines_v1,
+            "external_api_proof_state_v1": external_api_proof_state_v1,
+            "external_api_proof_line_v1": external_api_proof_line_v1,
             "local_model_status": "error" if ollama_err else "loaded",
+            "local_model_label_display_v1": local_display,
             "router_026ai_status": router_label,
+            "router_label_display_v1": router_display,
             "external_api_gateway": "disabled" if operator_blocks else "enabled",
             "external_api_health": ext_health,
             "external_api_enabled_effective_v1": ext_effective,
@@ -336,9 +422,9 @@ def get_reasoning_model_operator_snapshot_v1(job_id: str | None = None) -> dict[
             "last_external_call": last_call,
             "last_external_call_result_v1": last_external_call_result_v1,
             "operator_block_code_v1": operator_block_code_v1,
+            "operator_block_message_v1": operator_block_message_v1,
             "funding_note_v1": (
-                "OpenAI account balance is not queried by this server (use Add funds link). "
-                "Run cost and cap are from trace + router config."
+                "OpenAI account balance is not queried on the server. Run cost and cap come from trace + config."
             ),
             "tile_detail_v1": tile_detail_v1,
             "tokens_current_run_v1": {"input": total_in, "output": total_out, "estimated_cost_usd_v1": round(est_usd, 6)},

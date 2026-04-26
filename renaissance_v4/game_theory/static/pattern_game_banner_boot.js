@@ -38,11 +38,11 @@
       if (bf) bf.textContent = '—';
     });
 
-  const st = document.getElementById('reasoningModelStatusV');
-  const det = document.getElementById('reasoningModelDetailS');
+  const st = document.getElementById('reasoningModelHeadV');
+  const core = document.getElementById('reasoningModelCoreS');
+  const cost = document.getElementById('reasoningModelCostS');
   const tile = document.getElementById('reasoningModelBannerTile');
   const gw = document.getElementById('rmExtGatewayChk');
-  const exRows = document.getElementById('reasoningModelExternalRows');
   const addFunds = document.getElementById('rmAddFundsLink');
 
   function rmTileClass(c) {
@@ -63,69 +63,50 @@
       if (!st) return;
       if (!j || !j.ok) {
         st.textContent = '—';
-        if (det) det.textContent = 'Status unavailable';
-        if (exRows) exRows.textContent = '—';
+        if (core) core.textContent = 'Status unavailable';
+        if (cost) cost.textContent = '';
         rmTileClass('red');
         if (tile) tile.title = 'Reasoning Model status unavailable';
         return;
       }
-      st.textContent = j.status_headline_v1 || '—';
       var f = j.fields_v1 || {};
-      if (det) {
-        if (f.tile_detail_v1) {
-          det.textContent = f.tile_detail_v1;
+      st.textContent = f.headline_badge_v1 != null ? String(f.headline_badge_v1) : (j.status_headline_v1 || '—');
+      if (j.external_api_proof_line_v1) st.setAttribute('data-external-line', String(j.external_api_proof_line_v1));
+      else st.removeAttribute('data-external-line');
+      if (core) {
+        if (f.ui_core_lines_v1 && f.ui_core_lines_v1.length) {
+          core.style.whiteSpace = 'pre-line';
+          core.textContent = f.ui_core_lines_v1.map(function (l) { return String(l); }).join('\n');
         } else {
-          det.textContent =
-            (f.local_model_status || '—') +
-            ' · Router ' +
-            (f.router_026ai_status || '—') +
-            ' · ' +
-            (f.external_api_health || '—');
+          core.textContent = f.external_api_proof_line_v1 != null ? String(f.external_api_proof_line_v1) : '—';
         }
       }
-      rmTileClass(j.tile_color_v1 || 'amber');
-      if (exRows) {
-        var acct0 = f.funding_account_balance_v1 != null ? String(f.funding_account_balance_v1) : 'Unknown';
-        var runB0 = f.external_api_balance_status_v1 != null ? String(f.external_api_balance_status_v1) : '—';
+      if (cost) {
         var cost0 = f.run_cost_display_v1 != null ? String(f.run_cost_display_v1) : '$0.00';
         var cap0 = f.budget_cap_display_v1 != null ? String(f.budget_cap_display_v1) : '—';
         var lastR0 = f.last_external_call_result_v1 != null ? String(f.last_external_call_result_v1) : '—';
-        var blk0 = f.operator_block_code_v1 != null ? String(f.operator_block_code_v1) : '';
-        exRows.textContent =
-          'Balance (account): ' +
-          acct0 +
-          ' · Run: ' +
-          runB0 +
-          ' | Cost ' +
-          cost0 +
-          ' | Cap ' +
-          cap0 +
-          ' | Last ' +
-          lastR0 +
-          (blk0 ? ' | Block: ' + blk0 : '');
+        var runB0 = f.external_api_balance_status_v1 != null ? String(f.external_api_balance_status_v1) : '—';
+        cost.textContent =
+          'Run cost: ' + cost0 + ' · Budget cap: ' + cap0 + ' · Run headroom: ' + runB0 + ' · Last call: ' + lastR0;
       }
       if (addFunds && j.add_funds_billing_url_v1) {
         addFunds.href = String(j.add_funds_billing_url_v1);
       }
+      rmTileClass(j.tile_color_v1 || 'amber');
       if (tile) {
         var br = f.block_reasons_v1;
         var tok = f.tokens_current_run_v1 || {};
+        var msg0 = f.operator_block_message_v1 && String(f.operator_block_message_v1).trim() ? f.operator_block_message_v1 : '';
         tile.title = [
-          j.escalation_summary_v1 != null ? String(j.escalation_summary_v1) : '',
-          j.primary_escalation_code_v1 != null ? 'Code: ' + j.primary_escalation_code_v1 : '',
-          'Status: ' + (f.status || '—'),
-          'Local: ' + (f.local_model_status || '—'),
-          'Router 026AI: ' + (f.router_026ai_status || '—'),
-          'Operator gateway: ' + (f.external_api_gateway || '—'),
-          'Run cost / cap: ' + (f.run_cost_display_v1 || '—') + ' / ' + (f.budget_cap_display_v1 || '—'),
-          'Run budget: ' + (f.external_api_balance_status_v1 || '—') + ' · account: ' + (f.funding_account_balance_v1 || 'Unknown'),
-          'Last: ' + (f.last_external_call_result_v1 || '—'),
-          'Budget: ' + (f.api_budget_status || '—'),
-          'Last ext call: ' + (f.last_external_call || '—'),
-          'Tokens (this run): in=' + (tok.input != null ? tok.input : '—') + ' out=' + (tok.output != null ? tok.output : '—'),
-          br && br.length ? 'Block: ' + br.join(', ') : '',
+          j.external_api_proof_line_v1 != null ? String(j.external_api_proof_line_v1) : '',
+          msg0 || (j.escalation_summary_v1 != null ? String(j.escalation_summary_v1) : ''),
+          (j.job_id_scoped != null) ? 'job_id (scope): ' + j.job_id_scoped : 'No ?job_id= in URL — add to scope a run for trace',
+          f.funding_note_v1 != null ? String(f.funding_note_v1) : '',
+          j.primary_escalation_code_v1 != null ? 'Debug code: ' + j.primary_escalation_code_v1 : '',
+          'Tokens: ' + (tok && tok.input != null ? tok.input : '—') + ' in, ' + (tok && tok.output != null ? tok.output : '—') + ' out',
+          br && br.length ? 'Blockers: ' + br.join(', ') : '',
         ]
-          .filter(Boolean)
+          .filter(function (x) { return x; })
           .join('\n');
       }
       if (gw && j.operator_external_api_gateway_allows_v1 != null) {
@@ -134,7 +115,8 @@
     })
     .catch(function (e) {
       if (st) st.textContent = '—';
-      if (det) det.textContent = e && e.message ? e.message : String(e);
+      if (core) core.textContent = e && e.message ? e.message : String(e);
+      if (cost) cost.textContent = '';
       rmTileClass('red');
       if (tile) tile.title = e && e.message ? e.message : String(e);
     });

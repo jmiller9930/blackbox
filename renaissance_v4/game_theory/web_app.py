@@ -126,7 +126,7 @@ _PATTERN_BANNER_WEBP_PATH = _RV4_ROOT / "assets" / "pattern.webp"
 _PATTERN_GAME_BANNER_BOOT_JS = _GAME_THEORY / "static" / "pattern_game_banner_boot.js"
 
 # Operator-visible web UI bundle version — bump when changing PAGE_HTML (HTML/CSS/JS) so deploys are provable.
-PATTERN_GAME_WEB_UI_VERSION = "2.19.86"
+PATTERN_GAME_WEB_UI_VERSION = "2.19.87"
 
 from renaissance_v4.game_theory.reasoning_model_operator_surface_v1 import (
     get_reasoning_model_operator_snapshot_v1,
@@ -3282,17 +3282,24 @@ PAGE_HTML = """<!DOCTYPE html>
     .pg-banner-stat .status-dot.ok { background: #2fa46a; box-shadow: 0 0 8px rgba(47,164,106,0.45); }
     .pg-banner-stat .status-dot.warn { background: #b7772c; box-shadow: 0 0 8px rgba(183,119,44,0.35); }
     .pg-banner-stat .status-dot.bad { background: #d15959; box-shadow: 0 0 8px rgba(209,89,89,0.35); }
-    #reasoningModelBannerTile { cursor: help; min-width: 14rem; }
-    #reasoningModelBannerTile.rm-sig-green .pg-v { color: #2fa46a; }
-    #reasoningModelBannerTile.rm-sig-amber .pg-v { color: #b7772c; }
-    #reasoningModelBannerTile.rm-sig-red .pg-v { color: #d15959; }
-    #reasoningModelBannerTile.rm-sig-blue .pg-v { color: #4a7bb4; }
-    .pg-rm-api { font-size: 0.7rem; line-height: 1.35; margin-top: 4px; color: rgba(247, 241, 230, 0.88); }
-    .pg-rm-api .pg-rm-dim { color: rgba(247, 241, 230, 0.55); }
-    .pg-rm-billing { display: inline-block; margin-top: 4px; font-size: 0.7rem; font-weight: 700; color: #6eb5f9; text-decoration: underline; }
+    #reasoningModelBannerTile { cursor: help; min-width: 16rem; max-width: 20rem; }
+    #reasoningModelBannerTile.rm-sig-green .pg-rm-head { color: #2fa46a; }
+    #reasoningModelBannerTile.rm-sig-amber .pg-rm-head { color: #b7772c; }
+    #reasoningModelBannerTile.rm-sig-red .pg-rm-head { color: #d15959; }
+    #reasoningModelBannerTile.rm-sig-blue .pg-rm-head { color: #4a7bb4; }
+    .pg-banner-stat--reasoningmodel .pg-rm-head {
+      font-size: 1.2rem; font-weight: 800; line-height: 1.2; margin-top: 2px; letter-spacing: 0.02em;
+    }
+    .pg-banner-stat--reasoningmodel .pg-rm-core {
+      font-size: 0.9rem; font-weight: 600; line-height: 1.45; margin-top: 6px; color: rgba(247, 241, 230, 0.94);
+    }
+    .pg-banner-stat--reasoningmodel .pg-rm-cost {
+      font-size: 0.8rem; line-height: 1.4; margin-top: 6px; color: rgba(247, 241, 230, 0.88);
+    }
+    .pg-rm-billing { display: inline-block; margin-top: 6px; font-size: 0.8rem; font-weight: 700; color: #6eb5f9; text-decoration: underline; }
     .pg-rm-billing:hover { color: #9dcbf9; }
-    .pg-rm-gw { font-size: 0.72rem; display: flex; align-items: center; gap: 6px; margin-top: 4px; cursor: pointer; }
-    .pg-rm-gw input { margin: 0; }
+    .pg-rm-gw { font-size: 0.8rem; display: flex; align-items: flex-start; gap: 6px; margin-top: 8px; cursor: pointer; line-height: 1.3; }
+    .pg-rm-gw input { margin: 0; margin-top: 2px; flex-shrink: 0; }
     /* D10.1 — compact Paper P&L in banner strip (with other status cards; not in sidebar Controls) */
     .pg-banner-stat.pg-banner-stat--pnl {
       cursor: default;
@@ -5517,15 +5524,13 @@ PAGE_HTML = """<!DOCTYPE html>
         </div>
         <div class="pg-banner-stat pg-banner-stat--reasoningmodel" id="reasoningModelBannerTile" title="">
           <div class="pg-k">Reasoning Model</div>
-          <div class="pg-v" id="reasoningModelStatusV">—</div>
-          <div class="pg-s pg-s-tall" id="reasoningModelDetailS">Loading…</div>
-          <div class="pg-rm-api" id="reasoningModelApiBlock" aria-label="External API cost and run budget">
-            <div class="pg-rm-api-row" id="reasoningModelExternalRows">—</div>
-            <a class="pg-rm-billing" id="rmAddFundsLink" href="https://platform.openai.com/settings/organization/billing" target="_blank" rel="noopener noreferrer" title="Open OpenAI billing (add funds; no key in URL)">Add funds</a>
-          </div>
-          <label class="pg-rm-gw" title="Allow or block external API escalation (026AI). Local Ollama + memory are unchanged.">
+          <div class="pg-rm-head" id="reasoningModelHeadV">—</div>
+          <div class="pg-rm-core" id="reasoningModelCoreS">—</div>
+          <div class="pg-rm-cost" id="reasoningModelCostS">—</div>
+          <a class="pg-rm-billing" id="rmAddFundsLink" href="https://platform.openai.com/settings/organization/billing" target="_blank" rel="noopener noreferrer" title="Open OpenAI billing in a new tab (no key in URL)">Add funds</a>
+          <label class="pg-rm-gw" title="When enabled, the router may escalate to OpenAI if configuration and your key allow it. It does not force a call on every run.">
             <input type="checkbox" id="rmExtGatewayChk" checked />
-            <span>External API gateway</span>
+            <span>Allow External AI (OpenAI)</span>
           </label>
         </div>
         <div class="pg-banner-stat">
@@ -10053,11 +10058,11 @@ PAGE_HTML = """<!DOCTYPE html>
       else tile.classList.add('rm-sig-amber');
     }
     async function refreshReasoningModelBanner() {
-      const st = document.getElementById('reasoningModelStatusV');
-      const det = document.getElementById('reasoningModelDetailS');
+      const st = document.getElementById('reasoningModelHeadV');
+      const core = document.getElementById('reasoningModelCoreS');
+      const cost = document.getElementById('reasoningModelCostS');
       const tile = document.getElementById('reasoningModelBannerTile');
       const gw = document.getElementById('rmExtGatewayChk');
-      const exRows = document.getElementById('reasoningModelExternalRows');
       const addFunds = document.getElementById('rmAddFundsLink');
       if (!st) return;
       var q = '';
@@ -10072,69 +10077,64 @@ PAGE_HTML = """<!DOCTYPE html>
         const j = await r.json();
         if (!r.ok || !j.ok) {
           st.textContent = '—';
-          if (det) det.textContent = 'Status unavailable';
-          if (exRows) exRows.textContent = '—';
+          if (core) core.textContent = 'Status unavailable';
+          if (cost) cost.textContent = '';
           refreshReasoningModelTileClass(tile, 'red');
           return;
         }
-        st.textContent = j.status_headline_v1 || '—';
         var f = j.fields_v1 || {};
-        if (det) {
-          if (f.tile_detail_v1) {
-            det.textContent = f.tile_detail_v1;
+        st.textContent = (f.headline_badge_v1 != null) ? String(f.headline_badge_v1) : (j.status_headline_v1 || '—');
+        if (j.external_api_proof_line_v1) {
+          st.setAttribute('data-external-line', String(j.external_api_proof_line_v1));
+        } else {
+          st.removeAttribute('data-external-line');
+        }
+        if (core) {
+          var lines = f.ui_core_lines_v1;
+          if (Array.isArray(lines) && lines.length) {
+            core.innerHTML = lines.map(function (l) { return escapeHtml(String(l)); }).join('<br/>');
           } else {
-            det.textContent =
-              (f.local_model_status || '—') + ' · Router ' + (f.router_026ai_status || '—') + ' · ' + (f.external_api_health || '—');
+            var extPl = f.external_api_proof_line_v1 != null ? String(f.external_api_proof_line_v1) : '—';
+            core.textContent = extPl;
           }
         }
-        refreshReasoningModelTileClass(tile, j.tile_color_v1 || 'amber');
-        if (exRows) {
-          var acct = (f.funding_account_balance_v1 != null) ? String(f.funding_account_balance_v1) : 'Unknown';
-          var runB = (f.external_api_balance_status_v1 != null) ? String(f.external_api_balance_status_v1) : '—';
-          var cost = (f.run_cost_display_v1 != null) ? String(f.run_cost_display_v1) : '$0.00';
-          var cap = (f.budget_cap_display_v1 != null) ? String(f.budget_cap_display_v1) : '—';
+        if (cost) {
+          var costS = (f.run_cost_display_v1 != null) ? String(f.run_cost_display_v1) : '$0.00';
+          var capS = (f.budget_cap_display_v1 != null) ? String(f.budget_cap_display_v1) : '—';
           var lastR = (f.last_external_call_result_v1 != null) ? String(f.last_external_call_result_v1) : '—';
-          var blk = f.operator_block_code_v1 != null && String(f.operator_block_code_v1).trim()
-            ? '<br/><span class="pg-rm-dim">Block: ' + escapeHtml(String(f.operator_block_code_v1)) + '</span>' : '';
-          exRows.innerHTML =
-            'Balance (account): ' + escapeHtml(acct) + ' · Run budget: ' + escapeHtml(runB) + '<br/>' +
-            'Run cost ' + escapeHtml(cost) + ' · Cap ' + escapeHtml(cap) + ' · Last ' + escapeHtml(lastR) +
-            blk;
+          var runBal = f.external_api_balance_status_v1 != null ? String(f.external_api_balance_status_v1) : '—';
+          cost.textContent = 'Run cost: ' + costS + ' · Budget cap: ' + capS + ' · Run headroom: ' + runBal + ' · Last call: ' + lastR;
         }
         if (addFunds && j.add_funds_billing_url_v1) {
           addFunds.href = String(j.add_funds_billing_url_v1);
         }
+        refreshReasoningModelTileClass(tile, j.tile_color_v1 || 'amber');
         if (tile) {
           var br = f.block_reasons_v1;
           var tok = f.tokens_current_run_v1 || {};
           var sum1 = (j.escalation_summary_v1 != null) ? String(j.escalation_summary_v1) : '';
           var code1 = (j.primary_escalation_code_v1 != null) ? String(j.primary_escalation_code_v1) : '';
+          var dbg = (j.job_id_scoped != null) ? 'job_id (trace scope): ' + j.job_id_scoped : 'No job in URL — add ?job_id= to scope a run.';
+          var msg = (f.operator_block_message_v1 != null && String(f.operator_block_message_v1).trim()) ? f.operator_block_message_v1 : '';
           tile.title = [
-            sum1,
-            (code1 ? 'Code: ' + code1 : ''),
-            'Status: ' + (f.status || '—'),
-            'Local: ' + (f.local_model_status || '—'),
-            'Router 026AI: ' + (f.router_026ai_status || '—'),
-            'Operator gateway: ' + (f.external_api_gateway || '—'),
-            'External in config: ' + (f.external_api_enabled_effective_v1 != null ? String(f.external_api_enabled_effective_v1) : '—'),
-            'External path: ' + (f.external_api_health || '—'),
-            'Account balance (not queried): ' + (f.funding_account_balance_v1 || 'Unknown'),
-            'Run budget headroom: ' + (f.external_api_balance_status_v1 || '—'),
-            'Run cost: ' + (f.run_cost_display_v1 || '—') + ' · Cap: ' + (f.budget_cap_display_v1 || '—'),
-            'Budget: ' + (f.api_budget_status || '—'),
-            'Last ext call: ' + (f.last_external_call || '—') + ' (' + (f.last_external_call_result_v1 || '—') + ')',
-            'Tokens (this run): in=' + (tok.input != null ? tok.input : '—') + ' out=' + (tok.output != null ? tok.output : '—'),
-            (f.operator_block_code_v1 != null ? 'Block: ' + f.operator_block_code_v1 : ''),
-            (br && br.length) ? 'Raw blockers: ' + br.join(', ') : '',
-          ].filter(Boolean).join(String.fromCharCode(10));
+            (j.external_api_proof_line_v1 != null) ? String(j.external_api_proof_line_v1) : '',
+            f.headline_badge_v1 != null ? 'Banner: ' + f.headline_badge_v1 : '',
+            (msg || sum1) ? (msg || sum1) : '',
+            (code1 ? 'Internal code (debug): ' + code1 : ''),
+            dbg,
+            f.funding_note_v1 != null ? String(f.funding_note_v1) : '',
+            'Account balance (not queried on server): ' + (f.funding_account_balance_v1 || 'Unknown'),
+            'Raw last_external_call: ' + (f.last_external_call || '—') + ' · tokens: ' + (tok && tok.input != null ? tok.input : '—') + ' in, ' + (tok && tok.output != null ? tok.output : '—') + ' out',
+            (br && br.length) ? 'Blockers: ' + br.join(', ') : '',
+          ].filter(function (x) { return x; }).join(String.fromCharCode(10));
         }
         if (gw && j.operator_external_api_gateway_allows_v1 != null) {
           gw.checked = !!j.operator_external_api_gateway_allows_v1;
         }
       } catch (e) {
         st.textContent = '—';
-        if (det) det.textContent = friendlyFetchError(e);
-        if (exRows) exRows.textContent = friendlyFetchError(e);
+        if (core) core.textContent = friendlyFetchError(e);
+        if (cost) cost.textContent = '';
         refreshReasoningModelTileClass(tile, 'red');
       }
     }
