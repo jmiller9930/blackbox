@@ -1,9 +1,10 @@
 """
 GT_DIRECTIVE_015 — exam run contract: **Student brain profile**, nested LLM metadata, scorecard fields.
 
-**Student brain profile** (primary): ``baseline_no_memory_no_llm`` | ``memory_context_student`` |
-``memory_context_llm_student``. Legacy ``student_reasoning_mode`` **input** strings (cold baseline,
-repeat Anna, Qwen/DeepSeek lane labels) are still accepted and normalized to a profile.
+**Student brain profile** (primary, persisted on scorecard): ``baseline_no_memory_no_llm`` (operator **Baseline**)
+| ``memory_context_llm_student`` (operator **Student**). The internal profile ``memory_context_student``
+(stub / no Ollama) remains for tests and the Advanced legacy override, not the primary two-value selector.
+Legacy ``student_reasoning_mode`` **input** strings are still accepted and normalized to a profile.
 
 **LLM** is metadata under the ``memory_context_llm_student`` profile: ``student_llm_v1`` with
 ``llm_provider``, ``llm_model``, ``llm_role``. The Student Ollama model is **fixed** to

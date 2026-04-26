@@ -1,7 +1,7 @@
 """
 learning_run_audit_v1 — operator-visible proof of what replay + learning mechanisms did.
 
-Structured audit answers: execution-only vs learning-engaged, bars/windows, memory, Groundhog,
+Structured audit answers: execution-only vs learning-engaged, bars/windows, memory, promoted bundle lane,
 recall/bias counts, optional candidate-search outcome, and outcome-quality economics.
 """
 
@@ -65,11 +65,11 @@ def _groundhog_lane(
     mb_proof: dict[str, Any],
 ) -> tuple[str, str]:
     """
-    Canonical Groundhog path only (explicit ``memory_bundle_path`` → lane **inactive** here).
+    Canonical promoted-bundle path only (explicit ``memory_bundle_path`` → lane **inactive** here).
 
     * **committed** — auto-merge used the canonical file and merged whitelisted keys.
     * **candidate_only** — auto-merge allowed but missing file, or file read without apply.
-    * **inactive** — auto-merge opt-out (``PATTERN_GAME_GROUNDHOG_BUNDLE=0``), skipped, or an explicit bundle path on the scenario.
+    * **inactive** — auto-merge opt-out, skipped, or an explicit bundle path on the scenario.
     """
     skip = bool(scenario.get("skip_groundhog_bundle"))
     env = groundhog_auto_merge_enabled()
@@ -91,30 +91,30 @@ def _groundhog_lane(
     if explicit:
         return (
             "inactive",
-            "Groundhog lane n/a: scenario set memory_bundle_path — resolution is explicit, not canonical auto-merge.",
+            "Promoted bundle lane n/a: scenario set memory_bundle_path — resolution is explicit, not canonical auto-merge.",
         )
     if skip:
-        return "inactive", "Groundhog: skip_groundhog_bundle=true — canonical auto-merge suppressed."
+        return "inactive", "Promoted bundle: skip_groundhog_bundle=true — canonical auto-merge suppressed."
     if not env:
         return (
             "inactive",
-            "Groundhog: PATTERN_GAME_GROUNDHOG_BUNDLE=0 — canonical auto-merge explicitly disabled for this process.",
+            "Promoted bundle: auto-merge explicitly disabled for this process.",
         )
     if not canon_exists:
         return (
             "candidate_only",
-            "Groundhog: auto-merge enabled but canonical groundhog_memory_bundle.json is missing.",
+            "Promoted bundle: auto-merge enabled but canonical container JSON is missing on disk.",
         )
     if applied and resolved_is_gh:
-        return "committed", "Groundhog: canonical bundle merged into manifest."
+        return "committed", "Promoted bundle: canonical file merged into manifest."
     if loaded and not applied and resolved_is_gh:
         return (
             "candidate_only",
-            "Groundhog: canonical file read but no whitelisted keys applied (empty apply).",
+            "Promoted bundle: canonical file read but no whitelisted keys applied (empty apply).",
         )
     return (
         "candidate_only",
-        "Groundhog: auto-merge allowed and file may exist, but this replay did not apply the canonical bundle.",
+        "Promoted bundle: auto-merge allowed and file may exist, but this replay did not apply the canonical bundle.",
     )
 
 

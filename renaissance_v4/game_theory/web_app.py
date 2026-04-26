@@ -126,8 +126,12 @@ _PATTERN_BANNER_WEBP_PATH = _RV4_ROOT / "assets" / "pattern.webp"
 _PATTERN_GAME_BANNER_BOOT_JS = _GAME_THEORY / "static" / "pattern_game_banner_boot.js"
 
 # Operator-visible web UI bundle version — bump when changing PAGE_HTML (HTML/CSS/JS) so deploys are provable.
-PATTERN_GAME_WEB_UI_VERSION = "2.19.81"
+PATTERN_GAME_WEB_UI_VERSION = "2.19.84"
 
+from renaissance_v4.game_theory.reasoning_model_operator_surface_v1 import (
+    get_reasoning_model_operator_snapshot_v1,
+    write_operator_external_api_gateway_enabled_v1,
+)
 from renaissance_v4.game_theory.context_signature_memory import truncate_context_signature_memory_store
 from renaissance_v4.game_theory.groundhog_memory import (
     clear_groundhog_bundle_file,
@@ -146,7 +150,10 @@ from renaissance_v4.game_theory.batch_scorecard import (
     utc_timestamp_iso,
 )
 from renaissance_v4.game_theory.exam_run_contract_v1 import (
+    STUDENT_BRAIN_PROFILE_BASELINE_NO_MEMORY_NO_LLM_V1,
+    STUDENT_BRAIN_PROFILE_MEMORY_CONTEXT_LLM_STUDENT_V1,
     build_exam_run_line_meta_v1,
+    normalize_student_reasoning_mode_v1,
     parse_exam_run_contract_request_v1,
     preview_run_config_fingerprint_sha256_40_v1,
 )
@@ -626,6 +633,17 @@ def _prepare_parallel_payload(data: dict[str, Any]) -> dict[str, Any]:
                     f"does not match operator trade window ({op_tf})"
                 ),
             }
+        _prof = normalize_student_reasoning_mode_v1(
+            str(ex_req.get("student_brain_profile_v1") or ex_req.get("student_reasoning_mode") or "")
+        )
+        if _prof == STUDENT_BRAIN_PROFILE_BASELINE_NO_MEMORY_NO_LLM_V1:
+            cmem_in = "off"
+            operator_batch_audit["context_signature_memory_mode"] = "off"
+            operator_batch_audit["operator_run_mode_surface_v1"] = "baseline"
+            for s in scenarios:
+                s["context_signature_memory_mode"] = "off"
+        elif _prof == STUDENT_BRAIN_PROFILE_MEMORY_CONTEXT_LLM_STUDENT_V1:
+            operator_batch_audit["operator_run_mode_surface_v1"] = "student"
     fp_prev = preview_run_config_fingerprint_sha256_40_v1(scenarios, operator_batch_audit)
     operator_batch_audit["exam_run_contract_request_v1"] = ex_req
     operator_batch_audit["exam_run_fingerprint_preview_sha256_40_v1"] = fp_prev
@@ -812,9 +830,24 @@ def create_app() -> Flask:
             }
         )
 
+    @app.get("/api/reasoning-model/status")
+    def api_reasoning_model_status() -> Any:
+        """Live unified reasoning stack: router config merge, Ollama probe, optional ``job_id`` trace slice."""
+        jid = (request.args.get("job_id") or "").strip() or None
+        return jsonify(get_reasoning_model_operator_snapshot_v1(jid))
+
+    @app.post("/api/reasoning-model/external-gateway")
+    def api_reasoning_model_external_gateway() -> Any:
+        """Operator toggle — blocks external escalation only (local reasoning unchanged). JSON: ``external_api_gateway_enabled`` bool."""
+        data = request.get_json(force=True, silent=True) or {}
+        if "external_api_gateway_enabled" not in data:
+            return jsonify({"ok": False, "error": 'JSON must include "external_api_gateway_enabled" (boolean)'}), 400
+        return jsonify(write_operator_external_api_gateway_enabled_v1(bool(data.get("external_api_gateway_enabled"))))
+
     @app.get("/api/groundhog-memory")
+    @app.get("/api/promoted-bundle")
     def api_groundhog_memory_get() -> Any:
-        """Canonical Groundhog bundle status — same tape, smarter execution when bundle + env enabled."""
+        """Promoted memory bundle on disk: wiring signal, path, and optional ATR apply block (legacy route: ``/api/groundhog-memory``)."""
         p = groundhog_bundle_path()
         wiring_signal, wiring_detail = groundhog_wiring_signal()
         bundle: dict[str, Any] | None = None
@@ -837,8 +870,9 @@ def create_app() -> Flask:
         )
 
     @app.post("/api/groundhog-memory")
+    @app.post("/api/promoted-bundle")
     def api_groundhog_memory_post() -> Any:
-        """Write promoted ATR geometry to the canonical bundle (``pattern_game_memory_bundle_v1``)."""
+        """Write promoted ATR geometry to the canonical bundle (``pattern_game_memory_bundle_v1``). Legacy path: ``/api/groundhog-memory``."""
         data = request.get_json(force=True, silent=True) or {}
         try:
             a = float(data["atr_stop_mult"])
@@ -856,8 +890,9 @@ def create_app() -> Flask:
         return jsonify({"ok": True, "path": str(path), "bundle": read_groundhog_bundle()})
 
     @app.post("/api/groundhog-memory/clear")
+    @app.post("/api/promoted-bundle/clear")
     def api_groundhog_memory_clear() -> Any:
-        """Delete only the canonical Groundhog bundle file (promoted container start-over)."""
+        """Delete only the promoted memory bundle file (ATR container start-over). Legacy path: ``/api/groundhog-memory/clear``."""
         data = request.get_json(force=True, silent=True) or {}
         if not data.get("confirm"):
             return jsonify({"ok": False, "error": 'Request JSON must include "confirm": true'}), 400
@@ -868,7 +903,7 @@ def create_app() -> Flask:
             "student_proctor_learning_store_unchanged": True,
             "student_proctor_learning_store": {"path": st.get("path"), "line_count": st.get("line_count")},
             "note": (
-                "Removed canonical Groundhog bundle only when it existed. "
+                "Removed promoted memory bundle file only when it existed. "
                 "Experience log, run memory, context signature memory, and batch scorecard were not modified."
             ),
         }
@@ -876,7 +911,7 @@ def create_app() -> Flask:
 
     @app.post("/api/context-signature-memory/clear")
     def api_context_signature_memory_clear() -> Any:
-        """Truncate only the context signature / DCR recall JSONL (granular parity with Groundhog clear)."""
+        """Truncate only the context signature / DCR recall JSONL (granular parity with promoted-bundle clear)."""
         data = request.get_json(force=True, silent=True) or {}
         if not data.get("confirm"):
             return jsonify({"ok": False, "error": 'Request JSON must include "confirm": true'}), 400
@@ -888,7 +923,7 @@ def create_app() -> Flask:
             "student_proctor_learning_store": {"path": st.get("path"), "line_count": st.get("line_count")},
             "note": (
                 "Truncated context signature memory JSONL only. "
-                "Groundhog bundle, experience/run logs, and batch scorecard were not modified."
+                "Promoted memory bundle, experience/run logs, and batch scorecard were not modified."
             ),
         }
         return jsonify(body), (200 if out.get("ok") else 500)
@@ -900,7 +935,7 @@ def create_app() -> Flask:
 
     @app.get("/api/module-board")
     def api_module_board() -> Any:
-        """Subsystem wiring truth (DEF-001): each row green/red (or yellow for Groundhog) + modal copy."""
+        """Subsystem wiring truth (DEF-001): each row green/red (or yellow for promoted bundle wiring) + modal copy."""
         return jsonify(compute_pattern_game_module_board())
 
     @app.get("/api/search-space-estimate")
@@ -1915,7 +1950,7 @@ def create_app() -> Flask:
         """
         Truncate ``batch_scorecard.jsonl`` only (batch audit / UI / hunter rotation input).
 
-        Does **not** modify experience log, run memory, Groundhog bundle, context signature memory,
+        Does **not** modify experience log, run memory, promoted memory bundle, context signature memory,
         the Student Proctor learning store JSONL, retrospective, or session batch folders on disk.
         """
         data = request.get_json(force=True, silent=True) or {}
@@ -1943,7 +1978,7 @@ def create_app() -> Flask:
     @app.delete("/api/batch-scorecard/run/<job_id>")
     def api_batch_scorecard_delete_run(job_id: str) -> Any:
         """
-        D14-6 — remove scorecard line(s) for one ``job_id`` only. Does **not** modify Groundhog bundles
+        D14-6 — remove scorecard line(s) for one ``job_id`` only. Does **not** modify promoted memory bundles
         or engine learning (use ``POST /api/pattern-game/reset-learning`` separately).
         """
         data = request.get_json(force=True, silent=True) or {}
@@ -1963,7 +1998,7 @@ def create_app() -> Flask:
     @app.post("/api/pattern-game/reset-learning")
     def api_pattern_game_reset_learning() -> Any:
         """
-        Destructive: truncate experience + run memory JSONL, context-signature memory, delete Groundhog bundle.
+        Destructive: truncate experience + run memory JSONL, context-signature memory, delete promoted memory bundle.
 
         Does **not** truncate ``batch_scorecard.jsonl``, ``retrospective_log.jsonl``, or the Student Proctor
         learning store (use ``POST /api/student-proctor/learning-store/clear``).
@@ -3247,10 +3282,13 @@ PAGE_HTML = """<!DOCTYPE html>
     .pg-banner-stat .status-dot.ok { background: #2fa46a; box-shadow: 0 0 8px rgba(47,164,106,0.45); }
     .pg-banner-stat .status-dot.warn { background: #b7772c; box-shadow: 0 0 8px rgba(183,119,44,0.35); }
     .pg-banner-stat .status-dot.bad { background: #d15959; box-shadow: 0 0 8px rgba(209,89,89,0.35); }
-    #groundhogBannerTile { cursor: help; }
-    #groundhogBannerTile.gh-sig-green .pg-v { color: #2fa46a; }
-    #groundhogBannerTile.gh-sig-yellow .pg-v { color: #b7772c; }
-    #groundhogBannerTile.gh-sig-red .pg-v { color: #d15959; }
+    #reasoningModelBannerTile { cursor: help; min-width: 11.5rem; }
+    #reasoningModelBannerTile.rm-sig-green .pg-v { color: #2fa46a; }
+    #reasoningModelBannerTile.rm-sig-amber .pg-v { color: #b7772c; }
+    #reasoningModelBannerTile.rm-sig-red .pg-v { color: #d15959; }
+    #reasoningModelBannerTile.rm-sig-blue .pg-v { color: #4a7bb4; }
+    .pg-rm-gw { font-size: 0.72rem; display: flex; align-items: center; gap: 6px; margin-top: 4px; cursor: pointer; }
+    .pg-rm-gw input { margin: 0; }
     /* D10.1 — compact Paper P&L in banner strip (with other status cards; not in sidebar Controls) */
     .pg-banner-stat.pg-banner-stat--pnl {
       cursor: default;
@@ -5473,10 +5511,14 @@ PAGE_HTML = """<!DOCTYPE html>
             <span id="paperBaselineLabel">$1,000</span>
           </div>
         </div>
-        <div class="pg-banner-stat pg-banner-stat--groundhog" id="groundhogBannerTile" title="">
-          <div class="pg-k">Groundhog</div>
-          <div class="pg-v" id="groundhogV">—</div>
-          <div class="pg-s"><span id="groundhogText">—</span></div>
+        <div class="pg-banner-stat pg-banner-stat--reasoningmodel" id="reasoningModelBannerTile" title="">
+          <div class="pg-k">Reasoning Model</div>
+          <div class="pg-v" id="reasoningModelStatusV">—</div>
+          <div class="pg-s pg-s-tall" id="reasoningModelDetailS">Loading…</div>
+          <label class="pg-rm-gw" title="Allow or block external API escalation (026AI). Local Ollama + memory are unchanged.">
+            <input type="checkbox" id="rmExtGatewayChk" checked />
+            <span>External API gateway</span>
+          </label>
         </div>
         <div class="pg-banner-stat">
           <div class="pg-k">Search space</div>
@@ -5587,30 +5629,20 @@ PAGE_HTML = """<!DOCTYPE html>
             </div>
             <div class="pg-controls-span-2" style="margin-top:8px;padding-top:10px;border-top:1px solid var(--pg-line)">
               <div class="pg-controls-min-grid" style="grid-template-columns:minmax(9.5rem,36%) 1fr;align-items:start">
-                <label for="examStudentReasoningModePick">Student brain profile (GT-015)</label>
+                <label for="examStudentReasoningModePick">Run mode</label>
                 <select id="examStudentReasoningModePick" aria-describedby="examContractHelp">
-                  <option value="memory_context_student" selected>Memory + context — stub Student (no LLM)</option>
-                  <option value="baseline_no_memory_no_llm">Baseline — no memory / no LLM (system cold path)</option>
-                  <option value="memory_context_llm_student">Memory + context + LLM component (Ollama)</option>
+                  <option value="baseline_no_memory_no_llm">Baseline</option>
+                  <option value="memory_context_llm_student" selected>Student</option>
                 </select>
-                <div id="examStudentExecutionModeWrap" class="pg-controls-span-2" style="margin-top:8px">
-                  <div class="pg-controls-min-grid" style="grid-template-columns:minmax(11.5rem,40%) 1fr;align-items:start">
-                    <label for="examStudentExecutionModePick">Student execution mode (GT-024)</label>
-                    <select id="examStudentExecutionModePick" aria-describedby="examContractHelp">
-                      <option value="baseline_gated" selected>Baseline-gated (024C)</option>
-                      <option value="student_full_control">Full control (024D)</option>
-                    </select>
-                  </div>
-                </div>
                 <div id="examLlmModelWrap" class="pg-controls-span-2" style="margin-top:8px;display:none">
                   <div class="pg-controls-min-grid" style="grid-template-columns:minmax(10rem,38%) 1fr;align-items:center">
-                    <label for="examLlmModelPick">Ollama model</label>
-                    <select id="examLlmModelPick" aria-label="Ollama model for Student LLM profile">
+                    <label for="examLlmModelPick">Ollama model (metadata)</label>
+                    <select id="examLlmModelPick" aria-label="Ollama model for Student path">
                       <option value="qwen2.5:7b">qwen2.5:7b</option>
                       <option value="deepseek-r1:14b">deepseek-r1:14b</option>
                     </select>
                   </div>
-                  <p class="caps" style="margin:6px 0 0;font-size:0.72rem;color:#5a6570">Model choice is <strong>metadata</strong> under the LLM profile (secondary to whether memory + context + governed LLM improve under the Referee).</p>
+                  <p class="caps" style="margin:6px 0 0;font-size:0.72rem;color:#5a6570">The live Student stack resolves the approved model on the server (<code>exam_run_contract_v1</code>); this pick is stored as contract metadata for audits.</p>
                 </div>
                 <div class="pg-controls-span-2" style="margin-top:8px">
                   <label style="display:flex;align-items:flex-start;gap:8px;font-size:0.82rem;line-height:1.38;cursor:pointer;margin:0">
@@ -5621,7 +5653,7 @@ PAGE_HTML = """<!DOCTYPE html>
                 <label for="examPromptVersion" style="margin-top:8px">Prompt version</label>
                 <input type="text" id="examPromptVersion" maxlength="256" autocomplete="off" placeholder="pattern_game_web_ui_v__PATTERN_GAME_WEB_UI_VERSION__" style="width:100%;max-width:100%"/>
               </div>
-              <p id="examContractHelp" class="caps" style="margin:8px 0 0;font-size:0.72rem;line-height:1.42;color:#5a6570">Every <strong>Run exam</strong> sends <code>exam_run_contract_v1</code> with <code>student_brain_profile_v1</code>, <code>student_controlled_execution_v1</code>, <code>student_execution_mode_v1</code> (<code>baseline_gated</code> = 024C, <code>student_full_control</code> = 024D; hidden for cold baseline), and optional <code>student_llm_v1</code>. 024C only overrides on bars where fusion is directional. 024D can open when fusion is <code>no_trade</code> if a directional signal matches intent (risk/flat gating still apply). <code>student_full_control_v1: enabled</code> on the scorecard when 024D is selected.</p>
+              <p id="examContractHelp" class="caps" style="margin:8px 0 0;font-size:0.72rem;line-height:1.42;color:#5a6570"><strong>Baseline</strong> = control run: deterministic Referee replay only (no Student seam, no cross-run memory, no context-signature memory, no LLM, no unified-agent router on this run). <strong>Student</strong> = full unified agent path: memory, entry and lifecycle reasoning, 026C promoted-learning retrieval, 026AI router evaluation, governed local model, and external APIs only where internal escalation rules allow. <strong>Workflow:</strong> run Baseline, then run Student, then compare; repeat Student as needed — only <em>promoted</em> prior 026C records can influence a later Student run. Advanced → internal legacy profile override for tests only.</p>
             </div>
           </div>
           <div class="pg-controls-run-row">
@@ -5669,6 +5701,28 @@ PAGE_HTML = """<!DOCTYPE html>
             <p id="workerCpuHint" style="margin:4px 0 0;font-size:0.8rem"></p>
             <div id="workerEffectiveLine" aria-live="polite" style="font-size:0.8rem"></div>
             <label style="margin-top:8px;font-size:0.85rem;display:block"><input type="checkbox" id="doLog" checked/> Append to experience JSONL</label>
+            <div id="examStudentExecutionModeWrap" class="pg-controls-span-2" style="margin-top:12px;padding-top:10px;border-top:1px solid var(--pg-line)">
+              <div class="pg-block-title" style="margin:0 0 6px">Student execution (Advanced)</div>
+              <div class="pg-controls-min-grid" style="grid-template-columns:minmax(11.5rem,40%) 1fr;align-items:start">
+                <label for="examStudentExecutionModePick">Student execution mode (GT-024)</label>
+                <select id="examStudentExecutionModePick" aria-describedby="examContractHelpAdvanced">
+                  <option value="baseline_gated" selected>Baseline-gated (024C)</option>
+                  <option value="student_full_control">Full control (024D)</option>
+                </select>
+              </div>
+              <p id="examContractHelpAdvanced" class="caps" style="margin:6px 0 0;font-size:0.72rem;color:#5a6570">Applies to <strong>Student</strong> and internal stub profile runs — not to Baseline control.</p>
+            </div>
+            <details class="inline-details" style="margin-top:10px">
+              <summary>Internal — legacy brain profile (debug)</summary>
+              <p class="caps" style="margin:6px 0 8px">Leave blank for operator runs. Overrides the Run mode control for API/tests only (e.g. <code>memory_context_student</code> stub path).</p>
+              <label for="pgExamLegacyBrainProfileOverride">Override profile</label>
+              <select id="pgExamLegacyBrainProfileOverride" style="margin-top:4px;max-width:100%">
+                <option value="" selected>— use Run mode (Baseline / Student) —</option>
+                <option value="memory_context_student">memory_context_student (stub, no Ollama)</option>
+                <option value="baseline_no_memory_no_llm">baseline_no_memory_no_llm (force Baseline contract)</option>
+                <option value="memory_context_llm_student">memory_context_llm_student (force Student contract)</option>
+              </select>
+            </details>
           </div>
 
           <div class="run-actions">
@@ -5691,11 +5745,11 @@ PAGE_HTML = """<!DOCTYPE html>
               <p style="margin:0">Same inputs + same code → reproducible Referee stats. <strong>No</strong> automatic policy training in the replay loop. “Memory” in logs is evidence or promoted bundle — not silent learning. Full contract: <code>docs/architect/pattern_game_operator_deficiencies_work_record.md</code> (DEF-001).</p>
             </div>
             <details class="help-details pg-help">
-              <summary>Setup, PYTHONPATH, Groundhog</summary>
+              <summary>Setup, PYTHONPATH, promoted bundle</summary>
               <div class="help-details-body">
                 <p>Run from repo root with <code>PYTHONPATH</code> including the repo. Example files load from <code>game_theory/examples/</code> (Advanced only).</p>
-                <p>The canonical Groundhog container (<code>game_theory/state/groundhog_memory_bundle.json</code>) is merged before replay when it exists and the scenario has no <code>memory_bundle_path</code> — <strong>auto-merge is on by default</strong>. Set <code>PATTERN_GAME_GROUNDHOG_BUNDLE=0</code> to opt out for tests or isolation. POST <code>/api/groundhog-memory</code> with <code>atr_stop_mult</code> and <code>atr_target_mult</code> to write the canonical bundle. POST <code>/api/groundhog-memory/clear</code> with <code>{"confirm": true}</code> deletes only that file (same as the scorecard toolbar &ldquo;Clear Groundhog container&rdquo; button). POST <code>/api/context-signature-memory/clear</code> with <code>{"confirm": true}</code> truncates only <code>game_theory/state/context_signature_memory.jsonl</code>.</p>
-                <p><strong>Modules row / banner</strong> — Groundhog uses green / amber / red: <strong>Ready</strong> when auto-merge is allowed and the container has promoted ATR values (after a successful batch, or manual POST); <strong>Wait</strong> when the file is missing or apply block incomplete; <strong>Opt-out</strong> when <code>PATTERN_GAME_GROUNDHOG_BUNDLE=0</code>; <strong>Fault</strong> when the file is unreadable or invalid JSON. Hover the Groundhog banner tile for the full line.</p>
+                <p>The <strong>Reasoning Model</strong> banner shows live stack health (local Ollama, 026AI router, external gateway, operator API preference). The optional <strong>promoted-parameter bundle</strong> (JSON in <code>game_theory/state/</code>) may still merge into replay when the file is present and auto-merge is on; to opt out, set the bundle auto-merge environment flag to <code>0</code> (default is on). <code>POST /api/promoted-bundle</code> writes ATR geometry; <code>POST /api/promoted-bundle/clear</code> with <code>{"confirm": true}</code> removes that file only. <code>POST /api/context-signature-memory/clear</code> truncates context-signature recall JSONL. Older absolute paths for the same bundle handlers remain wired for API compatibility.</p>
+                <p><strong>Modules row</strong> — use <strong>GET /api/module-board</strong> for subsystem wiring; the header <strong>Reasoning Model</strong> tile reflects <code>GET /api/reasoning-model/status</code>.</p>
               </div>
             </details>
             <p class="caps" id="presetHelp">The server builds scenarios for curated patterns — no JSON required. <strong>Evaluation window</strong> is calendar months of tape from the end of the series. <strong>Trade window</strong> is candle rollup (5m / 15m / 1h / 4h): replay rolls up <code>market_bars_5m</code> into wider OHLCV bars before the Referee loop. Presets longer than your tape span are disabled automatically (see Data health).</p>
@@ -5887,9 +5941,9 @@ PAGE_HTML = """<!DOCTYPE html>
                         <a id="scorecardCsvLink" href="/api/batch-scorecard.csv?limit=50">Download scorecard history (CSV)</a>
                         <div class="scorecard-toolbar-actions">
                           <button type="button" class="btn-scorecard-clear pg-op-btn" id="clearScorecardBtn" data-label-idle="Clear Card — Run New Experiment" title="Truncates batch_scorecard.jsonl (table history) only. Does not clear engine memory, bundles, or the Student Proctor learning store.">Clear Card — Run New Experiment</button>
-                          <button type="button" class="btn-secondary pg-op-btn" id="clearGroundhogBundleBtn" data-label-idle="Clear Groundhog container…" title="Deletes game_theory/state/groundhog_memory_bundle.json if present. Does not clear scorecard rows, experience log, run memory, or context signature memory.">Clear Groundhog container…</button>
-                          <button type="button" class="btn-secondary pg-op-btn" id="clearContextSignatureMemoryBtn" data-label-idle="Clear context signature memory…" title="Truncates game_theory/state/context_signature_memory.jsonl. Does not delete the Groundhog file or scorecard history.">Clear context signature memory…</button>
-                          <button type="button" class="btn-learning-reset-danger pg-op-btn" id="resetLearningStateBtn" data-label-idle="Reset Learning State" title="Destructive: engine experience logs, signature/DCR recall store, Groundhog bundle. Does not clear the scorecard file, retrospective log, or Student Proctor learning store.">Reset Learning State</button>
+                          <button type="button" class="btn-secondary pg-op-btn" id="clearPromotedBundleBtn" data-label-idle="Clear promoted parameter bundle…" title="Deletes the promoted bundle JSON in game_theory/state/ if present. Does not clear scorecard rows, experience log, run memory, or context signature memory.">Clear promoted parameter bundle…</button>
+                          <button type="button" class="btn-secondary pg-op-btn" id="clearContextSignatureMemoryBtn" data-label-idle="Clear context signature memory…" title="Truncates game_theory/state/context_signature_memory.jsonl. Does not delete the promoted bundle file or scorecard history.">Clear context signature memory…</button>
+                          <button type="button" class="btn-learning-reset-danger pg-op-btn" id="resetLearningStateBtn" data-label-idle="Reset Learning State" title="Destructive: engine experience logs, signature/DCR recall store, promoted bundle file. Does not clear the scorecard file, retrospective log, or Student Proctor learning store.">Reset Learning State</button>
                         </div>
                         <span style="font-size:0.72rem;color:var(--pg-muted)">Click a row to open batch detail, scenarios, and per-scenario report links (GT_DIRECTIVE_001).</span>
                       </div>
@@ -5917,7 +5971,7 @@ PAGE_HTML = """<!DOCTYPE html>
                               <th title="WΔ: winner vs control delta (search quality signal)">WΔ</th>
                               <th title="Mem: whether memory bundle was used this batch">Mem</th>
                               <th title="MRec: memory records loaded from store">MRec</th>
-                              <th title="GH: Groundhog promoted-memory bundle status">GH</th>
+                              <th title="PM: Promoted memory / bundle lane (ATR)">PM</th>
                               <th title="RAtt: Decision Context Recall lookup attempts">RAtt</th>
                               <th title="RMt: recall signature matches">RMt</th>
                               <th title="RBias: times recall bias was applied to candidates">RBias</th>
@@ -6103,8 +6157,22 @@ PAGE_HTML = """<!DOCTYPE html>
         return '';
       }
     }
-    /** Product default: Decision Context Recall (context signature memory) is always READ+WRITE — not operator-toggleable in this UI. */
+    /** Fallback when Run mode fields are missing (e.g. early init). */
     const CONTEXT_SIGNATURE_MEMORY_MODE_PRODUCT = 'read_write';
+
+    function resolveExamBrainProfileV1ForStart() {
+      const leg = document.getElementById('pgExamLegacyBrainProfileOverride');
+      if (leg && String(leg.value || '').trim()) {
+        return String(leg.value).trim();
+      }
+      const profEl = document.getElementById('examStudentReasoningModePick');
+      if (profEl && profEl.value) return String(profEl.value).trim();
+      return 'memory_context_llm_student';
+    }
+
+    function contextSignatureMemoryModeForExamRunV1() {
+      return resolveExamBrainProfileV1ForStart() === 'baseline_no_memory_no_llm' ? 'off' : 'read_write';
+    }
 
     const rangeEl = document.getElementById('workersRange');
     const workersVal = document.getElementById('workersVal');
@@ -6538,7 +6606,7 @@ PAGE_HTML = """<!DOCTYPE html>
           'Expectancy per trade: edge per trade from batch math; exam-pack E when denormalized on scorecard.',
         'behavior_Δ': 'Behavior changed: YES/NO if harness or Student handoff signals changed vs prior.',
         'outcome_Δ': 'Outcome improved: YES/NO if L1 economic scalar improved vs prior same-fingerprint run.',
-        GH: 'GH: Groundhog memory tier / harness state for this run.',
+        PM: 'PM: Promoted memory / bundle lane for this run.',
         ctx: 'Ctx: context bundle used flag from run summary.',
         mem: 'Mem: memory bundle used flag from run summary.',
         'E (exam)':
@@ -6586,7 +6654,7 @@ PAGE_HTML = """<!DOCTYPE html>
         cell('expectancy/tr', rs.expectancy_per_trade),
         cell('behavior_Δ', rs.behavior_changed_flag),
         cell('outcome_Δ', rs.outcome_improved_flag),
-        cell('GH', rs.groundhog_state),
+        cell('PM', rs.groundhog_state),
         cell('ctx', rs.context_used_flag),
         cell('mem', rs.memory_used_flag),
         cell('E (exam)', rs.exam_e_score_v1 != null ? fmtD11MaybeNum(rs.exam_e_score_v1, 4) : '—'),
@@ -6879,7 +6947,7 @@ PAGE_HTML = """<!DOCTYPE html>
           'conf ' +
           confDisp +
           '</div>' +
-          '<div class="pg-student-d11-slice-gh" title="GH: Groundhog memory usage label for this trade slice">' +
+          '<div class="pg-student-d11-slice-gh" title="PM: promoted memory usage for this trade slice">' +
           'GH ' +
           escapeHtml(String(s.groundhog_usage || '—')) +
           '</div>' +
@@ -7126,7 +7194,7 @@ PAGE_HTML = """<!DOCTYPE html>
           '</li>'
       );
       lines.push(
-        '<li><span class="pg-student-d11-k">groundhog</span> used ' +
+        '<li><span class="pg-student-d11-k">promoted memory</span> used ' +
           escapeHtml(String((flat ? rec.groundhog_used_flag : gh.used) != null ? String(flat ? rec.groundhog_used_flag : gh.used) : '—')) +
           ' · ctx ' +
           escapeHtml(String((flat ? rec.context_used_flag : gh.context_used_flag) != null ? String(flat ? rec.context_used_flag : gh.context_used_flag) : '—')) +
@@ -7447,7 +7515,7 @@ PAGE_HTML = """<!DOCTYPE html>
         '<th title="HB: harness behavior changed — YES if memory impact, recall, or signal bias changed replay path">HB</th>' +
         '<th title="SH: student handoff — YES if learning rows were appended or retrieval matched this run">SH</th>' +
         '<th title="outΔ: outcome improved — YES/NO if L1 economic scalar (exam E or batch expectancy) vs prior same-fingerprint run">outΔ</th>' +
-        '<th title="GH: Groundhog state — memory / recall tier label for attribution">GH</th>' +
+        '<th title="PM: memory / recall tier for attribution">PM</th>' +
         '<th class="pg-student-d11-sticky-actions" title="Remove run from scorecard only (D14)">×</th>' +
         '</tr></thead><tbody>';
       for (let i = 0; i < rows.length; i++) {
@@ -7586,7 +7654,7 @@ PAGE_HTML = """<!DOCTYPE html>
           escapeHtml(String(row.outcome_improved || '—')) +
           '</td>';
         scroll +=
-          '<td title="Groundhog: promoted memory / harness tier for this run">' +
+          '<td title="Promoted memory / harness tier for this run">' +
           escapeHtml(String(row.groundhog_state || '—')) +
           '</td>';
         scroll +=
@@ -7595,7 +7663,7 @@ PAGE_HTML = """<!DOCTYPE html>
             ? '<button type="button" class="pg-student-d11-row-del" disabled title="Cannot delete until this exam completes">×</button>'
             : '<button type="button" class="pg-student-d11-row-del" data-run-id="' +
               escapeHtml(rid) +
-              '" title="Remove run from scorecard only (Groundhog unchanged)">×</button>') +
+              '" title="Remove run from scorecard only (promoted bundle file unchanged)">×</button>') +
           '</td>';
         scroll += '</tr>';
       }
@@ -7637,7 +7705,7 @@ PAGE_HTML = """<!DOCTYPE html>
           if (!rid) return;
           if (
             !confirm(
-              'Remove this run from scorecard history only?\\n\\nGroundhog bundles and engine learning are NOT changed.\\n\\nConfirm to delete.'
+              'Remove this run from scorecard history only?\\n\\nPromoted bundle file and engine learning are NOT changed.\\n\\nConfirm to delete.'
             )
           ) {
             return;
@@ -8447,7 +8515,7 @@ PAGE_HTML = """<!DOCTYPE html>
         operator_recipe_id: rid || undefined,
         evaluation_window_mode: wmv || undefined,
         evaluation_window_custom_months: customM != null ? customM : undefined,
-        context_signature_memory_mode: CONTEXT_SIGNATURE_MEMORY_MODE_PRODUCT,
+        context_signature_memory_mode: contextSignatureMemoryModeForExamRunV1(),
         use_operator_uploaded_strategy: !!(useUp && useUp.checked),
         scenarios_source: scenariosSource,
         recipe_label: recipeLabelFromDom(),
@@ -8635,7 +8703,7 @@ PAGE_HTML = """<!DOCTYPE html>
           '<th title="Scenario id within this batch">scenario</th>' +
           '<th title="Referee session: WIN, LOSS, or other judged outcome">session</th>' +
           '<th title="Memory applied: whether engine memory influenced this scenario">memory</th>' +
-          '<th title="Groundhog: promoted-memory bundle active or inactive">Groundhog</th>' +
+          '<th title="Promoted memory bundle lane">Promoted</th>' +
           '<th title="Report links: HUMAN readable log vs machine JSON">reports</th>' +
           '</tr></thead><tbody>';
         for (const s of scenarios) {
@@ -8827,18 +8895,18 @@ PAGE_HTML = """<!DOCTYPE html>
         }
       };
     }
-    const clearGroundhogBundleBtn = document.getElementById('clearGroundhogBundleBtn');
-    if (clearGroundhogBundleBtn) {
-      clearGroundhogBundleBtn.onclick = async () => {
+    const clearPromotedBundleBtn = document.getElementById('clearPromotedBundleBtn');
+    if (clearPromotedBundleBtn) {
+      clearPromotedBundleBtn.onclick = async () => {
         if (!window.confirm(
-          'Delete the canonical Groundhog bundle file (promoted ATR container) if it exists?\\n\\n' +
+          'Delete the promoted parameter bundle file (ATR container) if it exists?\\n\\n' +
             'Scorecard rows, experience log, run memory, and context signature memory are not changed.'
         )) {
           return;
         }
-        setOpButtonBusy(clearGroundhogBundleBtn, true, 'Clearing…', true);
+        setOpButtonBusy(clearPromotedBundleBtn, true, 'Clearing…', true);
         try {
-          const r = await fetch('/api/groundhog-memory/clear', {
+          const r = await fetch('/api/promoted-bundle/clear', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ confirm: true }),
@@ -8848,11 +8916,11 @@ PAGE_HTML = """<!DOCTYPE html>
             await show(null, null, j.error || ('Clear failed: ' + r.status));
             return;
           }
-          if (typeof refreshGroundhog === 'function') refreshGroundhog();
+          if (typeof refreshReasoningModelBanner === 'function') refreshReasoningModelBanner();
         } catch (e) {
           await show(null, null, friendlyFetchError(e));
         } finally {
-          setOpButtonBusy(clearGroundhogBundleBtn, false);
+          setOpButtonBusy(clearPromotedBundleBtn, false);
         }
       };
     }
@@ -8861,7 +8929,7 @@ PAGE_HTML = """<!DOCTYPE html>
       clearContextSignatureMemoryBtn.onclick = async () => {
         if (!window.confirm(
           'Truncate context signature memory (DCR / recall JSONL) to empty?\\n\\n' +
-            'Groundhog bundle, scorecard history, experience log, and run memory are not changed.'
+            'Promoted bundle file, scorecard history, experience log, and run memory are not changed.'
         )) {
           return;
         }
@@ -8889,7 +8957,7 @@ PAGE_HTML = """<!DOCTYPE html>
       resetLearningStateBtn.onclick = async () => {
         if (!window.confirm(
           'DANGER: Reset Learning State will truncate the experience log and run memory JSONL, ' +
-            'truncate context signature memory (recall / signature store), and delete the Groundhog bundle file if present.\\n\\n' +
+            'truncate context signature memory (recall / signature store), and delete the promoted parameter bundle file if present.\\n\\n' +
             'It does NOT clear the scorecard table file, retrospective notes, or the Student Proctor learning store.\\n\\nContinue?'
         )) {
           return;
@@ -8914,7 +8982,7 @@ PAGE_HTML = """<!DOCTYPE html>
             return;
           }
           await show(null, j, null);
-          if (typeof refreshGroundhog === 'function') refreshGroundhog();
+          if (typeof refreshReasoningModelBanner === 'function') refreshReasoningModelBanner();
           if (typeof refreshStudentProctorStoreLine === 'function') void refreshStudentProctorStoreLine();
         } catch (e) {
           await show(null, null, friendlyFetchError(e));
@@ -9418,15 +9486,13 @@ PAGE_HTML = """<!DOCTYPE html>
     })();
 
     function buildExamRunContractV1ForStart() {
-      const profEl = document.getElementById('examStudentReasoningModePick');
       const skipEl = document.getElementById('examSkipColdBaselineIfAnchor');
       const pvEl = document.getElementById('examPromptVersion');
       const llmModelEl = document.getElementById('examLlmModelPick');
       const PROFILE_LLM = 'memory_context_llm_student';
       const PROFILE_COLD = 'baseline_no_memory_no_llm';
       const MODE_GATED = 'baseline_gated';
-      const profile =
-        profEl && profEl.value ? String(profEl.value).trim() : 'memory_context_student';
+      const profile = resolveExamBrainProfileV1ForStart();
       const modeEl = document.getElementById('examStudentExecutionModePick');
       const skipCold = !!(skipEl && skipEl.checked);
       const pv =
@@ -9462,24 +9528,32 @@ PAGE_HTML = """<!DOCTYPE html>
 
     (function wireExamBrainProfileUi() {
       const pick = document.getElementById('examStudentReasoningModePick');
+      const leg = document.getElementById('pgExamLegacyBrainProfileOverride');
       const wrap = document.getElementById('examLlmModelWrap');
       const modeRow = document.getElementById('examStudentExecutionModeWrap');
+      function effProfile() {
+        if (leg && String(leg.value || '').trim()) return String(leg.value).trim();
+        return pick && pick.value ? String(pick.value).trim() : 'memory_context_llm_student';
+      }
       function syncExamLlmWrap() {
-        if (!wrap || !pick) return;
-        wrap.style.display = pick.value === 'memory_context_llm_student' ? 'block' : 'none';
+        if (!wrap) return;
+        wrap.style.display = effProfile() === 'memory_context_llm_student' ? 'block' : 'none';
       }
       function syncStudentExecutionModeRow() {
-        if (!modeRow || !pick) return;
-        modeRow.style.display = pick.value === 'baseline_no_memory_no_llm' ? 'none' : 'block';
+        if (!modeRow) return;
+        modeRow.style.display = effProfile() === 'baseline_no_memory_no_llm' ? 'none' : 'block';
       }
-      if (pick) {
-        pick.addEventListener('change', function () {
-          syncExamLlmWrap();
-          syncStudentExecutionModeRow();
-        });
+      function syncAll() {
         syncExamLlmWrap();
         syncStudentExecutionModeRow();
       }
+      if (pick) {
+        pick.addEventListener('change', syncAll);
+      }
+      if (leg) {
+        leg.addEventListener('change', syncAll);
+      }
+      syncAll();
     })();
 
     function friendlyParallelBackendError(msg) {
@@ -9573,7 +9647,7 @@ PAGE_HTML = """<!DOCTYPE html>
           }
         }
         const doLogEl = document.getElementById('doLog');
-        const cmem = CONTEXT_SIGNATURE_MEMORY_MODE_PRODUCT;
+        const cmem = contextSignatureMemoryModeForExamRunV1();
         const ltpPrep = document.getElementById('liveTelemetryPanel');
         if (ltpPrep) {
           ltpPrep.textContent = 'Live telemetry — preparing exam…';
@@ -9961,58 +10035,92 @@ PAGE_HTML = """<!DOCTYPE html>
     refreshDataHealth();
     setInterval(refreshDataHealth, 45000);
 
-    function groundhogBannerHeadline(j) {
-      var sig = j.wiring_signal;
-      if (sig === 'green') return 'Ready';
-      if (sig === 'yellow') return j.env_enabled ? 'Wait' : 'Opt-out';
-      if (sig === 'red') return 'Fault';
-      return j.env_enabled ? 'Wait' : 'Opt-out';
-    }
-    function refreshGroundhogTileClass(tile, sig) {
+    function refreshReasoningModelTileClass(tile, color) {
       if (!tile) return;
-      tile.classList.remove('gh-sig-green', 'gh-sig-yellow', 'gh-sig-red');
-      if (sig === 'green') tile.classList.add('gh-sig-green');
-      else if (sig === 'yellow') tile.classList.add('gh-sig-yellow');
-      else if (sig === 'red') tile.classList.add('gh-sig-red');
+      tile.classList.remove('rm-sig-green', 'rm-sig-amber', 'rm-sig-red', 'rm-sig-blue');
+      var c = String(color || 'amber');
+      if (c === 'green') tile.classList.add('rm-sig-green');
+      else if (c === 'red') tile.classList.add('rm-sig-red');
+      else if (c === 'blue') tile.classList.add('rm-sig-blue');
+      else tile.classList.add('rm-sig-amber');
     }
-    async function refreshGroundhog() {
-      const el = document.getElementById('groundhogText');
-      const gv = document.getElementById('groundhogV');
-      const tile = document.getElementById('groundhogBannerTile');
-      if (!el) return;
+    async function refreshReasoningModelBanner() {
+      const st = document.getElementById('reasoningModelStatusV');
+      const det = document.getElementById('reasoningModelDetailS');
+      const tile = document.getElementById('reasoningModelBannerTile');
+      const gw = document.getElementById('rmExtGatewayChk');
+      if (!st) return;
+      var q = '';
       try {
-        const r = await fetch('/api/groundhog-memory');
+        if (typeof askDataPreferredJobId === 'function') {
+          var jid0 = askDataPreferredJobId();
+          if (jid0 && String(jid0).trim()) q = '?job_id=' + encodeURIComponent(String(jid0).trim());
+        }
+      } catch (_e) { /* */ }
+      try {
+        const r = await fetch('/api/reasoning-model/status' + q);
         const j = await r.json();
         if (!r.ok || !j.ok) {
-          el.textContent = '—';
-          if (gv) gv.textContent = '—';
-          refreshGroundhogTileClass(tile, 'red');
-          if (tile) tile.title = 'Groundhog status unavailable';
+          st.textContent = '—';
+          if (det) det.textContent = 'Status unavailable';
+          refreshReasoningModelTileClass(tile, 'red');
           return;
         }
-        const sig = j.wiring_signal || 'yellow';
-        refreshGroundhogTileClass(tile, sig);
-        if (gv) gv.textContent = groundhogBannerHeadline(j);
-        var ap = j.bundle && j.bundle.apply
-          ? (String(j.bundle.apply.atr_stop_mult) + ' / ' + String(j.bundle.apply.atr_target_mult))
-          : '—';
-        el.textContent = (sig === 'green' && ap !== '—') ? ap : '—';
+        st.textContent = j.status_headline_v1 || '—';
+        var f = j.fields_v1 || {};
+        if (det) {
+          det.textContent =
+            (f.local_model_status || '—') + ' · Router ' + (f.router_026ai_status || '—') + ' · Ext ' + (f.external_api_health || '—');
+        }
+        refreshReasoningModelTileClass(tile, j.tile_color_v1 || 'amber');
         if (tile) {
-          var tip = (j.wiring_detail || '') + '\\n\\n' + 'Canonical: ' + (j.path || '—');
-          if (j.env_enabled !== undefined) {
-            tip += '\\nAuto-merge: ' + (j.env_enabled ? 'active (default)' : 'opt-out (PATTERN_GAME_GROUNDHOG_BUNDLE=0)');
-          }
-          tile.title = tip.trim();
+          var br = f.block_reasons_v1;
+          var tok = f.tokens_current_run_v1 || {};
+          tile.title = [
+            'Status: ' + (f.status || '—'),
+            'Local: ' + (f.local_model_status || '—'),
+            'Router 026AI: ' + (f.router_026ai_status || '—'),
+            'Gateway: ' + (f.external_api_gateway || '—'),
+            'External health: ' + (f.external_api_health || '—'),
+            'Budget: ' + (f.api_budget_status || '—'),
+            'Last ext call: ' + (f.last_external_call || '—'),
+            'Tokens (this run): in=' + (tok.input != null ? tok.input : '—') + ' out=' + (tok.output != null ? tok.output : '—'),
+            (br && br.length) ? 'Block: ' + br.join(', ') : '',
+          ].filter(Boolean).join(String.fromCharCode(10));
+        }
+        if (gw && j.operator_external_api_gateway_allows_v1 != null) {
+          gw.checked = !!j.operator_external_api_gateway_allows_v1;
         }
       } catch (e) {
-        el.textContent = '—';
-        if (gv) gv.textContent = '—';
-        refreshGroundhogTileClass(tile, 'red');
-        if (tile) tile.title = friendlyFetchError(e);
+        st.textContent = '—';
+        if (det) det.textContent = friendlyFetchError(e);
+        refreshReasoningModelTileClass(tile, 'red');
       }
     }
-    refreshGroundhog();
-    setInterval(refreshGroundhog, 60000);
+    (function wireReasoningModelGatewayToggle() {
+      const gw = document.getElementById('rmExtGatewayChk');
+      if (!gw) return;
+      gw.addEventListener('change', async function () {
+        const want = !!gw.checked;
+        try {
+          const r = await fetch('/api/reasoning-model/external-gateway', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ external_api_gateway_enabled: want }),
+          });
+          const j = await r.json();
+          if (!r.ok || !j.ok) {
+            gw.checked = !want;
+            return;
+          }
+          void refreshReasoningModelBanner();
+        } catch (_e) {
+          gw.checked = !want;
+        }
+      });
+    })();
+    refreshReasoningModelBanner();
+    setInterval(refreshReasoningModelBanner, 45000);
 
     function openModuleModal(m) {
       const d = document.getElementById('moduleDetailDialog');
@@ -10150,7 +10258,7 @@ PAGE_HTML = """<!DOCTYPE html>
           const faults = mods.length - okCount;
           sub = okCount + ' ok · ' + faults + ' fault(s)';
         } else if (anyWarn) {
-          sub = 'No faults · amber = idle/waiting (see Groundhog)';
+          sub = 'No faults · amber = idle/waiting (see Reasoning Model banner)';
         }
         setModuleBanner(okCount, mods.length, sub, bannerCls);
       } catch (e) {
@@ -10321,11 +10429,11 @@ PAGE_HTML = """<!DOCTYPE html>
         },
         {
           k: 'Prior memory',
-          v: 'Only if your JSON sets memory_bundle_path, or Groundhog auto-merge is on and the bundle file exists. Otherwise replays use manifest defaults only.',
+          v: 'Only if your JSON sets memory_bundle_path, or promoted-bundle auto-merge is on and the file exists. Otherwise replays use manifest defaults only.',
         },
         {
           k: 'Writes new memory',
-          v: 'Not automatically. Optional experience log lines are audit only. Run does not promote parameters into Groundhog or change bundles by itself.',
+          v: 'Not automatically. Optional experience log lines are audit only. Run does not promote parameters into the bundle file by itself.',
         },
         {
           k: 'Winner',
@@ -10333,7 +10441,7 @@ PAGE_HTML = """<!DOCTYPE html>
         },
         {
           k: 'Carries forward',
-          v: 'Nothing automatic. Persistence requires explicit operator actions (for example Groundhog promote), not Run alone.',
+          v: 'Nothing automatic. Persistence requires explicit operator actions (for example POST promoted bundle or tools), not Run alone.',
         },
         {
           k: 'Use this when',

@@ -147,7 +147,7 @@ def render_human_readable_markdown(record: dict[str, Any]) -> str:
             f"**{ol.get('memory_in_use', '—')}** |"
         )
         lines.append(
-            "| Groundhog mode (canonical bundle) | "
+            "| Promoted memory (canonical bundle) | "
             f"**{ol.get('groundhog_mode', '—')}** (active / inactive) |"
         )
         lines.append(
@@ -177,7 +177,7 @@ def render_human_readable_markdown(record: dict[str, Any]) -> str:
         lines.append("")
         gh_note = lme.get("groundhog_note")
         if gh_note:
-            lines.append(f"- **Groundhog note:** {gh_note}")
+            lines.append(f"- **Promoted bundle note:** {gh_note}")
             lines.append("")
         abl = lme.get("ablation") or {}
         lines.append(

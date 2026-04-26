@@ -745,6 +745,9 @@ def _finalize_debug_trace_from_base_v1(
             "**lifecycle_tape_summary_v1** from the same job’s trace lines (see evidence_payload)."
         ),
     }
+    from renaissance_v4.game_theory.learning_effect_closure_026c_v1 import cumulative_026c_job_surface_v1
+
+    out["cumulative_026c_learning_job_surface_v1"] = cumulative_026c_job_surface_v1(entry, events)
     try:
         from renaissance_v4.game_theory.learning_effect_closure_026c_v1 import build_learning_effect_closure_026c_v1
 

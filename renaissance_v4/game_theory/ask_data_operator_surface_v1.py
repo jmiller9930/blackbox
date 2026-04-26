@@ -171,12 +171,14 @@ def build_operator_surface_catalog_for_ask_v1() -> dict[str, Any]:
             "operator_strategy_upload_state": "Separate bundle section — validation/path state from server.",
         },
         "exam_controls_primary": {
+            "run_mode_dom_id": "examStudentReasoningModePick",
+            "legacy_brain_profile_override_dom_id": "pgExamLegacyBrainProfileOverride",
             "student_brain_profile_dom_id": "examStudentReasoningModePick",
             "ollama_model_dom_id": "examLlmModelPick",
             "skip_cold_baseline_dom_id": "examSkipColdBaselineIfAnchor",
             "prompt_version_dom_id": "examPromptVersion",
             "run_button_dom_id": "runBtn",
-            "note": "Exam contract fields are sent on Run exam; not all are echoed in Ask DATA ui_context today.",
+            "note": "Primary operator selector is **Baseline** vs **Student**; `pgExamLegacyBrainProfileOverride` in Advanced is internal-only. Exam contract is sent on Run exam.",
         },
         "bar_tape": {
             "sqlite_table": "market_bars_5m",

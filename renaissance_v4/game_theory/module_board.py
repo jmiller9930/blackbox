@@ -232,17 +232,17 @@ def compute_pattern_game_module_board() -> dict[str, Any]:
     gh_ok = gh_signal != "red"
     modules.append(
         {
-            "id": "groundhog",
+            "id": "promoted_bundle",
             "label": "groundhog_memory.py",
             "role": "behavioral_memory",
             "ok": gh_ok,
             "signal": gh_signal,
             "detail": gh_detail[:220],
-            "title": "Groundhog (promoted bundle → next run)",
+            "title": "Promoted memory bundle (next-run merge)",
             "body": (
                 "The **only** default path that merges whitelisted parameters into the manifest before replay.\n"
                 "**Green** — auto-merge active (default) and the canonical container has promoted ``atr_stop_mult`` / ``atr_target_mult``.\n"
-                "**Yellow** — auto-merge opt-out (``PATTERN_GAME_GROUNDHOG_BUNDLE=0``), container not created yet, not yet promoted, or wrong schema.\n"
+                "**Yellow** — auto-merge opt-out (env; see ``pml_runtime_layout.py``), container not created yet, not yet promoted, or wrong schema.\n"
                 "**Red** (fault) — container file is unreadable, not parseable JSON, or not a JSON object.\n"
                 f"Bundle path: {ghb}"
             ),
@@ -303,7 +303,7 @@ def compute_pattern_game_module_board() -> dict[str, Any]:
         "ok": True,
         "modules": modules,
         "def001_note": (
-            "Green/red/yellow (Groundhog) = wiring truth; Groundhog green = promoted bundle ready; "
+            "Green/red/yellow (promoted bundle) = wiring truth; green = promoted bundle ready; "
             "yellow = idle / waiting for bundle or promote; red = bundle present but broken on disk."
         ),
     }

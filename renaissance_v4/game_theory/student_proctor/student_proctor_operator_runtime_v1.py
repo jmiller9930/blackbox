@@ -22,6 +22,7 @@ from renaissance_v4.game_theory.student_proctor.reveal_layer_v1 import (
     build_reveal_v1_from_outcome_and_student,
 )
 from renaissance_v4.game_theory.exam_run_contract_v1 import (
+    STUDENT_BRAIN_PROFILE_BASELINE_NO_MEMORY_NO_LLM_V1,
     STUDENT_BRAIN_PROFILE_MEMORY_CONTEXT_LLM_STUDENT_V1,
     STUDENT_BRAIN_PROFILE_MEMORY_CONTEXT_STUDENT_V1,
     normalize_student_reasoning_mode_v1,
@@ -316,6 +317,36 @@ def student_loop_seam_after_parallel_batch_v1(
             "schema": "student_loop_seam_audit_v1",
             "skipped": True,
             "reason": "PATTERN_GAME_STUDENT_LOOP_SEAM disabled",
+            "student_learning_rows_appended": 0,
+            "student_retrieval_matches": 0,
+            "student_output_fingerprint": None,
+            "shadow_student_enabled": False,
+            "phased_honesty_annotation_v1": _phased_honesty_annotation_v1(
+                seam_attempted=False, student_emit_occurred=False
+            ),
+            "wiring_honesty_annotation_v1": _wiring_honesty_annotation_v1(
+                seam_attempted=False,
+                trades_seen=0,
+                first_packet_annex_present=None,
+                retrieval_matches_total=0,
+            ),
+            "memory_semantics_annotation_v1": _memory_semantics_annotation_v1(seam_attempted=False),
+            "deliverable_vocabulary_annotation_v1": _deliverable_vocabulary_annotation_v1(
+                seam_attempted=False
+            ),
+            "llm_student_output_rejections_v1": 0,
+        }
+
+    ex_req_skip = exam_run_contract_request_v1 if isinstance(exam_run_contract_request_v1, dict) else None
+    _prof_skip = normalize_student_reasoning_mode_v1(
+        str((ex_req_skip or {}).get("student_brain_profile_v1") or (ex_req_skip or {}).get("student_reasoning_mode") or "")
+    )
+    if _prof_skip == STUDENT_BRAIN_PROFILE_BASELINE_NO_MEMORY_NO_LLM_V1:
+        return {
+            "schema": "student_loop_seam_audit_v1",
+            "skipped": True,
+            "reason": "operator_run_mode_baseline_no_student_seam",
+            "baseline_control_operator_mode_v1": True,
             "student_learning_rows_appended": 0,
             "student_retrieval_matches": 0,
             "student_output_fingerprint": None,

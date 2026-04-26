@@ -111,6 +111,37 @@ def load_reasoning_router_config_v1(
     if isinstance(extra_dict, dict):
         c.update({k: v for k, v in extra_dict.items() if v is not None})
     c = apply_environment_overrides_v1(c)
+    c = apply_operator_external_api_gateway_merge_v1(c)
+    return c
+
+
+def operator_reasoning_model_preferences_path_v1() -> Path:
+    """Persisted operator UI toggle (``game_theory/state/``)."""
+    return Path(__file__).resolve().parent.parent / "state" / "operator_reasoning_model_preferences_v1.json"
+
+
+def read_operator_reasoning_model_preferences_v1() -> dict[str, Any]:
+    p = operator_reasoning_model_preferences_path_v1()
+    if not p.is_file():
+        return {}
+    try:
+        raw = json.loads(p.read_text(encoding="utf-8"))
+        return raw if isinstance(raw, dict) else {}
+    except (OSError, UnicodeDecodeError, json.JSONDecodeError, TypeError):
+        return {}
+
+
+def apply_operator_external_api_gateway_merge_v1(c: dict[str, Any]) -> dict[str, Any]:
+    """
+    When the operator has turned **off** the external API gateway in the UI, force
+    ``external_api_enabled`` to false for this process. Does not elevate permissions.
+    """
+    pref = read_operator_reasoning_model_preferences_v1()
+    if pref.get("external_api_gateway_enabled") is False:
+        out = deepcopy(c)
+        out["external_api_enabled"] = False
+        out["operator_external_api_gateway_merge_v1"] = "blocked_by_operator_ui"
+        return out
     return c
 
 

@@ -108,6 +108,14 @@ def operator_recipe_catalog() -> list[dict[str, Any]]:
                 "title": "Pattern Machine Learning (PML)",
                 "sections": [
                     {
+                        "k": "Run mode (operator control)",
+                        "v": (
+                            "Choose **Baseline** for a control run (deterministic replay only) or **Student** for the "
+                            "full unified agent. Baseline does not run the Student seam or use cumulative 026C learning. "
+                            "Student can learn across runs, but only **promoted** prior records may influence a later run."
+                        ),
+                    },
+                    {
                         "k": "What this does",
                         "v": (
                             "This run is trying to find a better version of your strategy.\n\n"

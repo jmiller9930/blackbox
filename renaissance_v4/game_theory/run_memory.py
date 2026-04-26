@@ -308,15 +308,15 @@ def build_learning_memory_evidence(
         "memory_applied": memory_applied,
         "groundhog_mode": groundhog_mode,
         "groundhog_note": (
-            "Canonical Groundhog bundle path was merged for this replay."
+            "Canonical promoted bundle path was merged for this replay."
             if gh_active
             else (
-                "Groundhog auto-merge was skipped for this scenario."
+                "Promoted bundle auto-merge was skipped for this scenario."
                 if skip_gh
                 else (
-                    "A memory bundle was merged from a non-canonical path (or Groundhog file was not used)."
+                    "A memory bundle was merged from a non-canonical path (or the canonical file was not used)."
                     if memory_applied
-                    else "No bundle merge — Groundhog file was not in effect for this run."
+                    else "No bundle merge — promoted bundle was not in effect for this run."
                 )
             )
         ),

@@ -28,6 +28,7 @@ from renaissance_v4.game_theory.student_proctor.lifecycle_deterministic_learning
 from renaissance_v4.game_theory.learning_trace_events_v1 import read_learning_trace_events_for_job_v1
 
 SCHEMA_LEARNING_EFFECT_CLOSURE_026C = "learning_effect_closure_026c_v1"
+SCHEMA_CUMULATIVE_026C_JOB_SURFACE = "cumulative_026c_learning_job_surface_v1"
 CONTRACT_VERSION = 1
 
 RESULT_LEARNING_CHANGED_BEHAVIOR = "LEARNING_CHANGED_BEHAVIOR"
@@ -68,6 +69,57 @@ def _last_event_by_stage(
         if str(ev.get("stage") or "").strip() == stage:
             return ev
     return None
+
+
+def cumulative_026c_job_surface_v1(
+    entry: dict[str, Any] | None,
+    events: list[dict[str, Any]],
+) -> dict[str, Any]:
+    """
+    Operator-facing: whether prior 026C learning was N/A, retrieved, applied, etc. (from trace + scorecard).
+    """
+    from renaissance_v4.game_theory.exam_run_contract_v1 import (
+        STUDENT_BRAIN_PROFILE_BASELINE_NO_MEMORY_NO_LLM_V1,
+        normalize_student_reasoning_mode_v1,
+    )
+
+    ent = entry if isinstance(entry, dict) else {}
+    oba = ent.get("operator_batch_audit")
+    _prof = normalize_student_reasoning_mode_v1(
+        str(ent.get("student_brain_profile_v1") or ent.get("student_reasoning_mode") or "")
+    )
+    if _prof == STUDENT_BRAIN_PROFILE_BASELINE_NO_MEMORY_NO_LLM_V1 or (
+        isinstance(oba, dict) and str(oba.get("operator_run_mode_surface_v1") or "") == "baseline"
+    ):
+        return {
+            "schema": SCHEMA_CUMULATIVE_026C_JOB_SURFACE,
+            "outcome_v1": "NOT_APPLICABLE",
+            "plain_english_v1": "Baseline control run — cumulative Student 026C learning is not applied.",
+        }
+    for ev in reversed(events or []):
+        if str(ev.get("stage") or "") != "lifecycle_tape_summary_v1":
+            continue
+        ep = ev.get("evidence_payload")
+        if not isinstance(ep, dict):
+            break
+        ltr = ep.get("lifecycle_tape_result_v1")
+        if not isinstance(ltr, dict):
+            break
+        surf = ltr.get("cumulative_026c_learning_operator_surface_v1")
+        if isinstance(surf, dict):
+            return {
+                "schema": SCHEMA_CUMULATIVE_026C_JOB_SURFACE,
+                "from_lifecycle_tape_summary_v1": True,
+                "operator_surface_v1": surf,
+                "outcome_v1": surf.get("outcome_v1"),
+                "plain_english_v1": surf.get("plain_english_v1"),
+            }
+        break
+    return {
+        "schema": SCHEMA_CUMULATIVE_026C_JOB_SURFACE,
+        "outcome_v1": "UNKNOWN",
+        "plain_english_v1": "No lifecycle tape summary with cumulative 026C surface in learning_trace for this job.",
+    }
 
 
 def _load_026c_records_from_store() -> list[dict[str, Any]]:
@@ -420,11 +472,14 @@ def build_learning_effect_closure_026c_v1(
             "026C + router are evidenced; treatment vs control snapshots match on compared fields (no behavior difference detected)."
         )
 
+    out["cumulative_026c_learning_job_surface_v1"] = cumulative_026c_job_surface_v1(entry_b, ev_b)
+
     return out
 
 
 __all__ = [
     "SCHEMA_LEARNING_EFFECT_CLOSURE_026C",
+    "cumulative_026c_job_surface_v1",
     "build_learning_effect_closure_026c_v1",
     "RESULT_LEARNING_CHANGED_BEHAVIOR",
     "RESULT_LEARNING_RETRIEVED_NO_CHANGE",

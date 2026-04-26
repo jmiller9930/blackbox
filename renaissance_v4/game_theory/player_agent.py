@@ -247,7 +247,7 @@ def markdown_operator_report(results: list[dict[str, Any]]) -> str:
             lines.append("")
             lines.append(f"- **Training evidence:** {ol.get('training_evidence', '—')}")
             lines.append(f"- **Memory in use:** {ol.get('memory_in_use', '—')}")
-            lines.append(f"- **Groundhog mode:** {ol.get('groundhog_mode', '—')}")
+            lines.append(f"- **Promoted memory (bundle) mode:** {ol.get('groundhog_mode', '—')}")
             lines.append(f"- **Training claim:** `{lev.get('training_claim', '—')}`")
             lines.append(f"- **Proof type:** {ol.get('proof_type', '—')}")
             lines.append("")
@@ -264,7 +264,7 @@ def markdown_operator_report(results: list[dict[str, Any]]) -> str:
         lines.append("")
         lines.append(f"- **Training evidence:** {ol.get('training_evidence', '—')}")
         lines.append(f"- **Memory in use:** {ol.get('memory_in_use', '—')}")
-        lines.append(f"- **Groundhog mode:** {ol.get('groundhog_mode', '—')}")
+        lines.append(f"- **Promoted memory (bundle) mode:** {ol.get('groundhog_mode', '—')}")
         lines.append(f"- **Learned from:** bundle `{lev.get('learned_from', {}).get('bundle_path') or '—'}`; "
                        f"bundle `from_run_id` `{lev.get('learned_from', {}).get('bundle_from_run_id') or '—'}`")
         lines.append(f"- **Changed this run:** {lev.get('behavior_change', '—')}")

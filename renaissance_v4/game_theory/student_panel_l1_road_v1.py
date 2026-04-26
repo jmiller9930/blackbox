@@ -188,14 +188,16 @@ def l1_road_legend_v1() -> dict[str, Any]:
         "schema": "student_panel_l1_road_legend_v1",
         "brain_profiles": {
             STUDENT_BRAIN_PROFILE_BASELINE_NO_MEMORY_NO_LLM_V1: (
-                "Cold system path: no cross-run Student memory emphasis; no Student LLM component."
+                "Operator **Baseline** (control): deterministic Referee replay; Student seam off; "
+                "no cross-run memory or 026C cumulative learning on this run."
             ),
             STUDENT_BRAIN_PROFILE_MEMORY_CONTEXT_STUDENT_V1: (
-                "Memory + context plumbing with stub / deterministic Student emitter (no Ollama)."
+                "Internal profile (debug): memory + context with stub / deterministic Student emitter — "
+                "not the primary operator Run mode; use **Student** for the full unified path."
             ),
             STUDENT_BRAIN_PROFILE_MEMORY_CONTEXT_LLM_STUDENT_V1: (
-                "Memory + context + governed LLM on approved Ollama (``qwen3-coder:30b``; "
-                "``STUDENT_OLLAMA_BASE_URL`` / ``172.20.1.66:11434``)."
+                "Operator **Student**: unified path — entry/lifecycle reasoning, 026C retrieval, 026AI router, "
+                "governed Ollama (``qwen3-coder:30b``; ``STUDENT_OLLAMA_BASE_URL``)."
             ),
         },
         "band_a": (

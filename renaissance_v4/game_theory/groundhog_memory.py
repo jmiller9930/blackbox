@@ -199,14 +199,14 @@ def groundhog_wiring_signal() -> tuple[Literal["green", "yellow", "red"], str]:
     if not env:
         return (
             "yellow",
-            "Groundhog auto-merge **opt-out** (PATTERN_GAME_GROUNDHOG_BUNDLE=0) — canonical container not merged.",
+            "Promoted bundle auto-merge **opt-out** — canonical container not merged.",
         )
 
     if not p.is_file():
         return (
             "yellow",
-            f"Canonical Groundhog container not created yet at {p}. "
-            "A successful parallel batch auto-writes ATR from the first scenario, or POST /api/groundhog-memory.",
+            f"Canonical bundle container not created yet at {p}. "
+            "A successful parallel batch auto-writes ATR from the first scenario, or POST /api/promoted-bundle.",
         )
 
     try:
@@ -223,17 +223,17 @@ def groundhog_wiring_signal() -> tuple[Literal["green", "yellow", "red"], str]:
     if doc.get("schema") != MEMORY_BUNDLE_SCHEMA:
         return (
             "yellow",
-            "Container exists but schema is not pattern_game_memory_bundle_v1 — republish via POST /api/groundhog-memory.",
+            "Container exists but schema is not pattern_game_memory_bundle_v1 — republish via POST /api/promoted-bundle.",
         )
 
     if not _groundhog_apply_has_promoted_atr(doc):
         return (
             "yellow",
             "Container on disk — waiting for finite atr_stop_mult / atr_target_mult in apply "
-            "(POST /api/groundhog-memory or complete a successful batch).",
+            "(POST /api/promoted-bundle or complete a successful batch).",
         )
 
     return (
         "green",
-        "Groundhog ready: canonical container has promoted ATR multipliers (auto-merge active).",
+        "Promoted bundle ready: canonical container has ATR multipliers (auto-merge active).",
     )

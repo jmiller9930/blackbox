@@ -536,6 +536,22 @@ def emit_lifecycle_tape_summary_v1(
     dctx = (le0 or {}).get("deterministic_learning_context_026c_v1") if isinstance(le0, dict) else None
     if isinstance(dctx, dict) and dctx:
         ltr["deterministic_learning_context_026c_v1"] = dctx
+    _rlist = r026 if isinstance(r026, list) else []
+    _d_slices = int((dctx or {}).get("slice_count_v1") or 0) if isinstance(dctx, dict) else 0
+    if _d_slices > 0:
+        _outcome = "APPLIED"
+        _plain = "Prior promoted 026C learning matched this context and was applied at the lifecycle entry bar."
+    elif _rlist:
+        _outcome = "RETRIEVED"
+        _plain = "026C rows were retrieved for this tape; see governance and lifecycle for whether they changed behavior."
+    else:
+        _outcome = "NOT_APPLICABLE_OR_NONE_MATCHED"
+        _plain = "No promoted 026C slices on this tape (no match, first run, or governance blocked retrieval)."
+    ltr["cumulative_026c_learning_operator_surface_v1"] = {
+        "schema": "cumulative_026c_learning_operator_surface_v1",
+        "outcome_v1": _outcome,
+        "plain_english_v1": _plain,
+    }
     _emit(
         job_id=job_id,
         fingerprint=fingerprint,

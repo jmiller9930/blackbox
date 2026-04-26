@@ -38,57 +38,71 @@
       if (bf) bf.textContent = '—';
     });
 
-  var gt = document.getElementById('groundhogText');
-  var gv = document.getElementById('groundhogV');
-  var ghTile = document.getElementById('groundhogBannerTile');
-  function ghHeadline(j) {
-    var sig = j.wiring_signal;
-    if (sig === 'green') return 'Ready';
-    if (sig === 'yellow') return j.env_enabled ? 'Wait' : 'Opt-out';
-    if (sig === 'red') return 'Fault';
-    return j.env_enabled ? 'Wait' : 'Opt-out';
+  const st = document.getElementById('reasoningModelStatusV');
+  const det = document.getElementById('reasoningModelDetailS');
+  const tile = document.getElementById('reasoningModelBannerTile');
+  const gw = document.getElementById('rmExtGatewayChk');
+
+  function rmTileClass(c) {
+    if (!tile) return;
+    tile.classList.remove('rm-sig-green', 'rm-sig-amber', 'rm-sig-red', 'rm-sig-blue');
+    const x = String(c || 'amber');
+    if (x === 'green') tile.classList.add('rm-sig-green');
+    else if (x === 'red') tile.classList.add('rm-sig-red');
+    else if (x === 'blue') tile.classList.add('rm-sig-blue');
+    else tile.classList.add('rm-sig-amber');
   }
-  function ghTileClass(sig) {
-    if (!ghTile) return;
-    ghTile.classList.remove('gh-sig-green', 'gh-sig-yellow', 'gh-sig-red');
-    if (sig === 'green') ghTile.classList.add('gh-sig-green');
-    else if (sig === 'yellow') ghTile.classList.add('gh-sig-yellow');
-    else if (sig === 'red') ghTile.classList.add('gh-sig-red');
-  }
-  fetch('/api/groundhog-memory')
+
+  fetch('/api/reasoning-model/status')
     .then(function (r) {
       return r.json();
     })
     .then(function (j) {
-      if (!gt) return;
+      if (!st) return;
       if (!j || !j.ok) {
-        gt.textContent = '—';
-        if (gv) gv.textContent = '—';
-        ghTileClass('red');
-        if (ghTile) ghTile.title = 'Groundhog status unavailable';
+        st.textContent = '—';
+        if (det) det.textContent = 'Status unavailable';
+        rmTileClass('red');
+        if (tile) tile.title = 'Reasoning Model status unavailable';
         return;
       }
-      var sig = j.wiring_signal || 'yellow';
-      ghTileClass(sig);
-      if (gv) gv.textContent = ghHeadline(j);
-      var ap =
-        j.bundle && j.bundle.apply
-          ? String(j.bundle.apply.atr_stop_mult) + ' / ' + String(j.bundle.apply.atr_target_mult)
-          : '—';
-      gt.textContent = sig === 'green' && ap !== '—' ? ap : '—';
-      if (ghTile) {
-        var tip = (j.wiring_detail || '') + '\n\n' + 'Canonical: ' + (j.path || '—');
-        if (j.env_enabled !== undefined) {
-          tip += '\nAuto-merge: ' + (j.env_enabled ? 'active (default)' : 'opt-out (PATTERN_GAME_GROUNDHOG_BUNDLE=0)');
-        }
-        ghTile.title = tip.trim();
+      st.textContent = j.status_headline_v1 || '—';
+      var f = j.fields_v1 || {};
+      if (det) {
+        det.textContent =
+          (f.local_model_status || '—') +
+          ' · Router ' +
+          (f.router_026ai_status || '—') +
+          ' · Ext ' +
+          (f.external_api_health || '—');
+      }
+      rmTileClass(j.tile_color_v1 || 'amber');
+      if (tile) {
+        var br = f.block_reasons_v1;
+        var tok = f.tokens_current_run_v1 || {};
+        tile.title = [
+          'Status: ' + (f.status || '—'),
+          'Local: ' + (f.local_model_status || '—'),
+          'Router 026AI: ' + (f.router_026ai_status || '—'),
+          'Gateway: ' + (f.external_api_gateway || '—'),
+          'External health: ' + (f.external_api_health || '—'),
+          'Budget: ' + (f.api_budget_status || '—'),
+          'Last ext call: ' + (f.last_external_call || '—'),
+          'Tokens (this run): in=' + (tok.input != null ? tok.input : '—') + ' out=' + (tok.output != null ? tok.output : '—'),
+          br && br.length ? 'Block: ' + br.join(', ') : '',
+        ]
+          .filter(Boolean)
+          .join('\n');
+      }
+      if (gw && j.operator_external_api_gateway_allows_v1 != null) {
+        gw.checked = !!j.operator_external_api_gateway_allows_v1;
       }
     })
     .catch(function (e) {
-      if (gt) gt.textContent = '—';
-      if (gv) gv.textContent = '—';
-      ghTileClass('red');
-      if (ghTile) ghTile.title = e && e.message ? e.message : String(e);
+      if (st) st.textContent = '—';
+      if (det) det.textContent = e && e.message ? e.message : String(e);
+      rmTileClass('red');
+      if (tile) tile.title = e && e.message ? e.message : String(e);
     });
 
   var ss = document.getElementById('searchSpaceStrip');
@@ -180,18 +194,18 @@
           row.className = 'pg-status-item';
           row.setAttribute('role', 'button');
           row.setAttribute('tabindex', '0');
-          var det = m.detail != null ? String(m.detail) : '';
+          var det2 = m.detail != null ? String(m.detail) : '';
           row.innerHTML =
             '<span class="status-dot ' +
             (m.ok ? 'ok' : 'bad') +
             '" title="' +
-            esc(det.slice(0, 500)) +
+            esc(det2.slice(0, 500)) +
             '"></span>' +
             '<div><div class="pg-status-name">' +
             esc(m.label || m.id || '—') +
             '</div>' +
             '<div class="pg-status-meta">' +
-            esc(det.slice(0, 280)) +
+            esc(det2.slice(0, 280)) +
             '</div></div>';
           list.appendChild(row);
         }
