@@ -2,7 +2,7 @@
   "schema": "gt_directive_026ai_scenario_proof_bundle_v1",
   "proof_version": 1,
   "scenario_id": "02_missing_openai_api_key",
-  "generated_at_utc": "2026-04-26T00:27:12Z",
+  "generated_at_utc": "2026-04-26T18:27:49Z",
   "narrative": "OPENAI_API_KEY unset; blocked before HTTP",
   "python": "3.11.0",
   "entry_reasoning_excerpt_v1": {
