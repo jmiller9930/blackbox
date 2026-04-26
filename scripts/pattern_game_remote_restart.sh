@@ -64,7 +64,10 @@ if [ -f "${RUNTIME_ROOT}/secrets/openai.env" ]; then
   set +a
 fi
 # Proof only (value never printed; length 0 = key not in service env — add a file above and restart)
-echo "gsync: OPENAI_API_KEY set for Flask launch: length ${#OPENAI_API_KEY} (0 = no key file in env chain yet)"
+# With set -u, ${#OPENAI_API_KEY} is invalid when unset; use a temp to get length 0.
+_OPENAI_KEY_LEN="${OPENAI_API_KEY-}"
+echo "gsync: OPENAI_API_KEY set for Flask launch: length ${#_OPENAI_KEY_LEN} (0 = no key file in env chain yet)"
+unset _OPENAI_KEY_LEN
 
 # Do not shell-redirect stdout/stderr to /tmp — RotatingFileHandler in web_app consumes logs.
 nohup python3 -m renaissance_v4.game_theory.web_app --host 0.0.0.0 --port 8765 </dev/null >/dev/null 2>&1 &
