@@ -54,13 +54,17 @@ def write_operator_external_api_gateway_enabled_v1(allowed: bool) -> dict[str, A
 
 
 def _openai_key_configured_v1(cfg: dict[str, Any]) -> bool:
-    for k in ("OPENAI_API_KEY",):
-        v = (os.environ.get(k) or "").strip()
-        if len(v) > 8 and not v.lower().startswith("sk-placeholder"):
-            return True
-    ev = str(cfg.get("api_key_env_var") or "OPENAI_API_KEY").strip()
-    v2 = (os.environ.get(ev) or "").strip()
-    return len(v2) > 8 and not v2.lower().startswith("sk-placeholder")
+    """
+    Must match :func:`_get_api_key` / OpenAI call path: process env first, then one-time read from
+    ``BLACKBOX_OPENAI_ENV_FILE`` or default ``~/.blackbox_secrets/openai.env`` (see
+    ``external_openai_adapter_v1``). The status tile must not show “missing key” when runtime calls
+    would resolve a key.
+    """
+    from renaissance_v4.game_theory.unified_agent_v1.external_openai_adapter_v1 import _get_api_key
+
+    ev = str(cfg.get("api_key_env_var") or "OPENAI_API_KEY").strip() or "OPENAI_API_KEY"
+    v = (_get_api_key(ev) or "").strip()
+    return len(v) > 8 and not v.lower().startswith("sk-placeholder")
 
 
 def _last_router_and_governor_from_events(
