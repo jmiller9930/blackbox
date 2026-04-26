@@ -11,6 +11,8 @@ import urllib.error
 import urllib.request
 from typing import Any
 
+from renaissance_v4.game_theory.unified_agent_v1.reasoning_router_config_v1 import DEFAULTS
+
 # ``OPENAI_API_KEY`` comes from the process environment first. If unset, a **one-time** optional read of a
 # host-only file (default ``~/.blackbox_secrets/openai.env``) may set it — never in the repo; override path with
 # ``BLACKBOX_OPENAI_ENV_FILE``. No logging of the key.
@@ -290,11 +292,13 @@ def run_smoke_test_strict_json_v1(
 ) -> dict[str, Any]:
     """
     Minimal /v1/responses call; returns structured result (no key printed by caller).
-    ``OPENAI_REASONING_MODEL`` overrides default; default ``gpt-4o-mini`` for wide gateway availability.
+    ``OPENAI_REASONING_MODEL`` env overrides. Otherwise uses ``reasoning_router_config_v1`` default
+    ``external_model`` (``gpt-5.5``), same as the unified reasoning router.
 
     For CLI: ``python -m renaissance_v4.game_theory.unified_agent_v1.external_openai_adapter_v1 smoke``.
     """
-    m = model or str(os.environ.get("OPENAI_REASONING_MODEL", "") or "").strip() or "gpt-4o-mini"
+    default_m = str(DEFAULTS.get("external_model") or "gpt-5.5")
+    m = model or str(os.environ.get("OPENAI_REASONING_MODEL", "") or "").strip() or default_m
     out = call_openai_responses_v1(
         model_requested=m,
         system_instruction="Return only a JSON object with one key 'ok' true",
