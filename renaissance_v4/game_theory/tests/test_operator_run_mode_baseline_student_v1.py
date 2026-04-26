@@ -2,7 +2,10 @@
 
 from __future__ import annotations
 
-from renaissance_v4.game_theory.exam_run_contract_v1 import STUDENT_BRAIN_PROFILE_BASELINE_NO_MEMORY_NO_LLM_V1
+from renaissance_v4.game_theory.exam_run_contract_v1 import (
+    STUDENT_BRAIN_PROFILE_BASELINE_NO_MEMORY_NO_LLM_V1,
+    STUDENT_LLM_APPROVED_MODEL_V1,
+)
 from renaissance_v4.game_theory.student_proctor.student_proctor_operator_runtime_v1 import (
     student_loop_seam_after_parallel_batch_v1,
 )
@@ -42,6 +45,19 @@ def test_embedded_page_has_only_baseline_and_student_options() -> None:
     assert "value=\"baseline_no_memory_no_llm\">Baseline</option>" in seg
     assert "value=\"memory_context_llm_student\"" in seg and ">Student</option>" in seg
     assert "memory_context_student" not in seg or "pgExamLegacyBrainProfileOverride" in html
+
+
+def test_rendered_page_fixes_student_llm_to_approved_in_js_with_debug_gated() -> None:
+    """Primary Student runs must not default to a legacy tag; see exam_run_contract_v1 (GT-015)."""
+    from renaissance_v4.game_theory import web_app as wa
+
+    html = wa._render_page_html()
+    assert STUDENT_LLM_APPROVED_MODEL_V1 in html
+    assert f"const STUDENT_LLM_APPROVED_MODEL_V1 = '{STUDENT_LLM_APPROVED_MODEL_V1}'" in html
+    assert "id=\"examStudentApprovedModelNote\"" in html
+    assert "id=\"examLlmModelDebugOverride\"" in html
+    # Legacy options live only in Advanced — debug, not the default contract line.
+    assert "let model = STUDENT_LLM_APPROVED_MODEL_V1" in html
 
 
 def test_baseline_brain_profile_skips_student_seam() -> None:

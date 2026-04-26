@@ -126,7 +126,7 @@ _PATTERN_BANNER_WEBP_PATH = _RV4_ROOT / "assets" / "pattern.webp"
 _PATTERN_GAME_BANNER_BOOT_JS = _GAME_THEORY / "static" / "pattern_game_banner_boot.js"
 
 # Operator-visible web UI bundle version — bump when changing PAGE_HTML (HTML/CSS/JS) so deploys are provable.
-PATTERN_GAME_WEB_UI_VERSION = "2.19.93"
+PATTERN_GAME_WEB_UI_VERSION = "2.19.94"
 
 from renaissance_v4.game_theory.reasoning_model_operator_surface_v1 import (
     get_reasoning_model_operator_snapshot_v1,
@@ -152,6 +152,7 @@ from renaissance_v4.game_theory.batch_scorecard import (
 from renaissance_v4.game_theory.exam_run_contract_v1 import (
     STUDENT_BRAIN_PROFILE_BASELINE_NO_MEMORY_NO_LLM_V1,
     STUDENT_BRAIN_PROFILE_MEMORY_CONTEXT_LLM_STUDENT_V1,
+    STUDENT_LLM_APPROVED_MODEL_V1,
     build_exam_run_line_meta_v1,
     normalize_student_reasoning_mode_v1,
     parse_exam_run_contract_request_v1,
@@ -774,6 +775,7 @@ def _render_page_html() -> str:
         PAGE_HTML.replace("__LIMITS_JSON__", json.dumps(lim))
         .replace("__STARTING_EQUITY__", str(float(PATTERN_GAME_STARTING_EQUITY_USD_SPEC)))
         .replace("__PATTERN_GAME_WEB_UI_VERSION__", PATTERN_GAME_WEB_UI_VERSION)
+        .replace("__STUDENT_LLM_APPROVED_MODEL_V1__", STUDENT_LLM_APPROVED_MODEL_V1)
     )
 
 
@@ -5657,15 +5659,12 @@ PAGE_HTML = """<!DOCTYPE html>
                   <option value="baseline_no_memory_no_llm">Baseline</option>
                   <option value="memory_context_llm_student" selected>Student</option>
                 </select>
-                <div id="examLlmModelWrap" class="pg-controls-span-2" style="margin-top:8px;display:none">
-                  <div class="pg-controls-min-grid" style="grid-template-columns:minmax(10rem,38%) 1fr;align-items:center">
-                    <label for="examLlmModelPick">Ollama model (metadata)</label>
-                    <select id="examLlmModelPick" aria-label="Ollama model for Student path">
-                      <option value="qwen2.5:7b">qwen2.5:7b</option>
-                      <option value="deepseek-r1:14b">deepseek-r1:14b</option>
-                    </select>
-                  </div>
-                  <p class="caps" style="margin:6px 0 0;font-size:0.72rem;color:#5a6570">The live Student stack resolves the approved model on the server (<code>exam_run_contract_v1</code>); this pick is stored as contract metadata for audits.</p>
+                <div id="examStudentApprovedModelNote" class="pg-controls-span-2" style="margin-top:8px;display:none" role="status">
+                  <p class="caps" style="margin:0;font-size:0.78rem;line-height:1.42;color:#5a6570">
+                    <strong>Student Ollama</strong> — model tag is fixed to
+                    <code>__STUDENT_LLM_APPROVED_MODEL_V1__</code> per <code>exam_run_contract_v1</code> (not chosen in Controls).
+                    Host URL is resolved on the server (approved Student host; see <code>STUDENT_OLLAMA_BASE_URL</code> / lab default).
+                  </p>
                 </div>
                 <div class="pg-controls-span-2" style="margin-top:8px">
                   <label style="display:flex;align-items:flex-start;gap:8px;font-size:0.82rem;line-height:1.38;cursor:pointer;margin:0">
@@ -5745,6 +5744,25 @@ PAGE_HTML = """<!DOCTYPE html>
                 <option value="baseline_no_memory_no_llm">baseline_no_memory_no_llm (force Baseline contract)</option>
                 <option value="memory_context_llm_student">memory_context_llm_student (force Student contract)</option>
               </select>
+            </details>
+            <details class="inline-details" style="margin-top:10px">
+              <summary>Internal — debug: legacy <code>student_llm_v1.llm_model</code> (non-production)</summary>
+              <p class="caps" style="margin:6px 0 8px">
+                Normal <strong>Student</strong> runs always submit <code>__STUDENT_LLM_APPROVED_MODEL_V1__</code>.
+                Use only for API/scripts that must send a different tag; Referee <strong>rejects</strong> non-approved values.
+              </p>
+              <label style="display:flex;align-items:flex-start;gap:8px;font-size:0.82rem;cursor:pointer;margin:0 0 8px">
+                <input type="checkbox" id="examLlmModelDebugOverride" style="margin-top:3px" />
+                <span>Override <code>llm_model</code> in the run contract using the pick below (expect contract failure if not <code>__STUDENT_LLM_APPROVED_MODEL_V1__</code>)</span>
+              </label>
+              <div class="pg-controls-min-grid" style="grid-template-columns:minmax(10rem,38%) 1fr;align-items:center">
+                <label for="examLlmModelPick">Legacy model (debug pick)</label>
+                <select id="examLlmModelPick" aria-label="Legacy llm_model for debug override only">
+                  <option value="qwen3-coder:30b" selected>__STUDENT_LLM_APPROVED_MODEL_V1__ (production)</option>
+                  <option value="qwen2.5:7b">qwen2.5:7b (legacy — fails contract)</option>
+                  <option value="deepseek-r1:14b">deepseek-r1:14b (legacy — fails contract)</option>
+                </select>
+              </div>
             </details>
           </div>
 
@@ -6164,6 +6182,7 @@ PAGE_HTML = """<!DOCTYPE html>
     const STARTING_EQUITY = __STARTING_EQUITY__;
     const RUN_TIMEOUT_MS = 7200000;
     const PATTERN_GAME_UI_VERSION_STR = '__PATTERN_GAME_WEB_UI_VERSION__';
+    const STUDENT_LLM_APPROVED_MODEL_V1 = '__STUDENT_LLM_APPROVED_MODEL_V1__';
     /** Persisted while a parallel batch is in flight so refresh restores running state until completion. */
     const PG_PARALLEL_INFLIGHT_JOB_LS = 'patternGame.parallelInflightJobId';
 
@@ -9536,8 +9555,11 @@ PAGE_HTML = """<!DOCTYPE html>
         out.student_execution_mode_v1 = studentExecMode;
       }
       if (profile === PROFILE_LLM) {
-        const model =
-          llmModelEl && llmModelEl.value ? String(llmModelEl.value).trim() : 'qwen2.5:7b';
+        const dbg = document.getElementById('examLlmModelDebugOverride');
+        let model = STUDENT_LLM_APPROVED_MODEL_V1;
+        if (dbg && dbg.checked && llmModelEl && llmModelEl.value) {
+          model = String(llmModelEl.value).trim();
+        }
         out.student_llm_v1 = {
           llm_provider: 'ollama',
           llm_model: model,
@@ -9552,15 +9574,15 @@ PAGE_HTML = """<!DOCTYPE html>
     (function wireExamBrainProfileUi() {
       const pick = document.getElementById('examStudentReasoningModePick');
       const leg = document.getElementById('pgExamLegacyBrainProfileOverride');
-      const wrap = document.getElementById('examLlmModelWrap');
+      const approvedNote = document.getElementById('examStudentApprovedModelNote');
       const modeRow = document.getElementById('examStudentExecutionModeWrap');
       function effProfile() {
         if (leg && String(leg.value || '').trim()) return String(leg.value).trim();
         return pick && pick.value ? String(pick.value).trim() : 'memory_context_llm_student';
       }
       function syncExamLlmWrap() {
-        if (!wrap) return;
-        wrap.style.display = effProfile() === 'memory_context_llm_student' ? 'block' : 'none';
+        if (!approvedNote) return;
+        approvedNote.style.display = effProfile() === 'memory_context_llm_student' ? 'block' : 'none';
       }
       function syncStudentExecutionModeRow() {
         if (!modeRow) return;
