@@ -1,5 +1,5 @@
 {
-  "_read_me": "No API keys in this file. GT_DIRECTIVE_026AI lab: set OPENAI_API_KEY in the process environment (export) only. The adapter does not read Gitignored local JSON; see reasoning_router_secrets.local.json.example.",
+  "_read_me": "No API keys in this file. Set OPENAI_API_KEY in the process environment. Optional on clawbot: host-only ``~/.blackbox_secrets/openai.env`` (``chmod 600``) — ``source`` it before runs, or use systemd ``EnvironmentFile=``. See reasoning_router_secrets.local.json.example.",
   "schema": "reasoning_router_config_v1",
   "contract_version": 1,
   "router_enabled": true,
