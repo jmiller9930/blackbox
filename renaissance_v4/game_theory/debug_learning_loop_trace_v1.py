@@ -102,6 +102,29 @@ def _row_snapshot_v1(line: dict[str, Any]) -> dict[str, Any]:
     }
 
 
+def _lifecycle_trace_overlay_v1(events: list[dict[str, Any]]) -> dict[str, Any]:
+    """GT_DIRECTIVE_026B — surface lifecycle events from learning_trace for debug/L3 (no proof-file hunt)."""
+    stages: list[dict[str, Any]] = []
+    summary: dict[str, Any] | None = None
+    for ev in events or []:
+        st = str(ev.get("stage") or "").strip()
+        ep = ev.get("evidence_payload") if isinstance(ev.get("evidence_payload"), dict) else {}
+        if st == "lifecycle_reasoning_stage_v1":
+            s = ep.get("lifecycle_reasoning_stage_v1")
+            if isinstance(s, dict):
+                stages.append(s)
+        elif st == "lifecycle_tape_summary_v1":
+            s2 = ep.get("lifecycle_tape_result_v1")
+            summary = s2 if isinstance(s2, dict) else (ep or None)
+    return {
+        "schema": "lifecycle_debug_overlay_v1",
+        "contract_version": 1,
+        "lifecycle_stage_events_count_v1": len(stages),
+        "lifecycle_stages_v1": stages[-500:],
+        "lifecycle_tape_summary_v1": summary,
+    }
+
+
 def _fingerprint_profile_compare_v1(entry: dict[str, Any]) -> dict[str, Any]:
     fp = scorecard_line_fingerprint_sha256_40_v1(entry)
     if not fp:
@@ -631,6 +654,7 @@ def _finalize_debug_trace_from_base_v1(base: dict[str, Any], entry: dict[str, An
     out["trace_build_timings_ms_v1"] = {"fingerprint_profile_compare_v1": fp_ms}
     out["learning_trace_events_v1"] = events
     out["learning_trace_events_count_v1"] = len(events)
+    out["lifecycle_trace_overlay_v1"] = _lifecycle_trace_overlay_v1(events)
     out["learning_trace_events_path_v1"] = str(
         default_learning_trace_events_jsonl().expanduser().resolve()
     )
@@ -670,6 +694,14 @@ def _finalize_debug_trace_from_base_v1(base: dict[str, Any], entry: dict[str, An
                 _fault_map = _fm
             break
     out["student_reasoning_fault_map_v1"] = _fault_map
+    has_life = any(str(x.get("stage") or "").strip() == "lifecycle_tape_summary_v1" for x in events)
+    out["gt_directive_026b_lifecycle_v1"] = {
+        "lifecycle_in_learning_trace_v1": has_life,
+        "unified_agent_router_lifecycle_v1": (
+            "On-demand when the operator runtime packet includes ``unified_agent_router_lifecycle_v1`` and "
+            "``bars_trade_lifecycle_inclusive_v1``; otherwise hybrid router in lifecycle remains optional."
+        ),
+    }
     out["operator_notes_v1"] = {
         "referee_vs_student_metric_v1": (
             "L1 Run TW % and Sys BL % are Referee batch trade-win rollups — they can match across "
@@ -679,6 +711,10 @@ def _finalize_debug_trace_from_base_v1(base: dict[str, Any], entry: dict[str, An
             "Primary graph is **reconstructed** from persisted artifacts. "
             "``learning_trace_events_v1`` is appended from the **batch / seam / scorecard** threads "
             "(single-writer); those lines merge as runtime proof — not from pool worker processes."
+        ),
+        "lifecycle_026B_v1": (
+            "``lifecycle_trace_overlay_v1`` aggregates **lifecycle_reasoning_stage_v1** and "
+            "**lifecycle_tape_summary_v1** from the same job’s trace lines (see evidence_payload)."
         ),
     }
     return out

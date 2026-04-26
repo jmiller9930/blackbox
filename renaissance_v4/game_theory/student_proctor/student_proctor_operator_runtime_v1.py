@@ -532,6 +532,45 @@ def student_loop_seam_after_parallel_batch_v1(
                     continue
                 if isinstance(ere, dict) and isinstance(pfm, dict):
                     ere["student_reasoning_fault_map_v1"] = pfm
+                # GT_DIRECTIVE_026B — optional full in-trade tape: ``bars_trade_lifecycle_inclusive_v1`` on packet
+                if isinstance(ere, dict):
+                    _lcy = pkt.get("bars_trade_lifecycle_inclusive_v1")
+                    if isinstance(_lcy, list) and len(_lcy) >= 2:
+                        _act0 = str((ere.get("decision_synthesis_v1") or {}).get("action") or "")
+                        if _act0 in ("enter_long", "enter_short"):
+                            _eb = pkt.get("bars_inclusive_up_to_t")
+                            _dflt_e = (len(_eb) - 1) if isinstance(_eb, list) and _eb else 0
+                            _eidx = int(pkt.get("entry_bar_index_for_lifecycle_v1", _dflt_e) or 0)
+                            _eidx = max(0, min(_eidx, len(_lcy) - 1))
+                            _side = "long" if _act0 == "enter_long" else "short"
+                            _ur = bool(
+                                pkt.get("unified_agent_router_lifecycle_v1", unified_router)
+                            )
+                            from renaissance_v4.game_theory.student_proctor.lifecycle_reasoning_engine_v1 import (
+                                run_lifecycle_tape_v1,
+                            )
+                            from renaissance_v4.game_theory.unified_agent_v1.reasoning_router_config_v1 import (
+                                load_reasoning_router_config_v1,
+                            )
+
+                            _tape = run_lifecycle_tape_v1(
+                                all_bars=[dict(b) for b in _lcy if isinstance(b, dict)],
+                                entry_bar_index=_eidx,
+                                side=_side,
+                                entry_reasoning_eval_v1=ere,
+                                run_candle_timeframe_minutes=int(c_tf),
+                                symbol=str(pkt.get("symbol") or ""),
+                                retrieved_student_experience=rxx,
+                                max_hold_bars=int(pkt.get("max_hold_bars_lifecycle_v1") or 100),
+                                unified_agent_router=_ur,
+                                router_config=load_reasoning_router_config_v1(None) if _ur else None,
+                                job_id=str(run_id).strip(),
+                                fingerprint=fp_emit,
+                                emit_lifecycle_traces=True,
+                                trade_id=str(o.trade_id),
+                                scenario_id=sid,
+                            )
+                            ere["lifecycle_tape_result_v1"] = _tape
                 allowed_mids = frozenset(
                     str(z.get("record_id") or "").strip()
                     for z in rxx

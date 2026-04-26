@@ -3,7 +3,10 @@
 from __future__ import annotations
 
 import json
+import os
+import uuid
 from pathlib import Path
+import tempfile
 
 from renaissance_v4.game_theory.student_proctor.entry_reasoning_engine_v1 import (
     build_indicator_context_eval_v1,
@@ -54,6 +57,48 @@ def _mono_bars(
 
 def _packet(bars, sym="X"):
     return {"symbol": sym, "bars_inclusive_up_to_t": bars}
+
+
+def test_lifecycle_emits_stages_to_learning_trace_jsonl():
+    """Closure: per-bar and tape summary are persisted and reloadable for job_id."""
+    from renaissance_v4.game_theory.learning_trace_events_v1 import read_learning_trace_events_for_job_v1
+
+    bars = _mono_bars(18, o=100.0, step=0.3)
+    ere, _, _, _ = run_entry_reasoning_pipeline_v1(
+        student_decision_packet=_packet(bars[:5]),
+        retrieved_student_experience=[],
+        run_candle_timeframe_minutes=5,
+        job_id="",
+        emit_traces=False,
+    )
+    assert ere
+    job = f"gt026b_test_{uuid.uuid4().hex[:10]}"
+    with tempfile.TemporaryDirectory() as td:
+        os.environ["PATTERN_GAME_MEMORY_ROOT"] = td
+        try:
+            res = run_lifecycle_tape_v1(
+                all_bars=bars,
+                entry_bar_index=3,
+                side="long",
+                entry_reasoning_eval_v1=ere,
+                run_candle_timeframe_minutes=5,
+                symbol="J",
+                max_hold_bars=40,
+                job_id=job,
+                fingerprint="fp026b",
+                emit_lifecycle_traces=True,
+                trade_id="T1",
+                scenario_id="S1",
+            )
+            assert res.get("closed_v1")
+            evs = read_learning_trace_events_for_job_v1(job)
+            stg = [e for e in evs if e.get("stage") == "lifecycle_reasoning_stage_v1"]
+            one = [e for e in evs if e.get("stage") == "lifecycle_tape_summary_v1"]
+            assert len(stg) >= 2
+            assert len(one) == 1
+            assert (one[0].get("evidence_payload") or {}).get("lifecycle_tape_result_v1", {}).get("per_bar_slim_v1")
+        finally:
+            os.environ.pop("PATTERN_GAME_MEMORY_ROOT", None)
 
 
 def test_lifecycle_node_ids_in_fault_map_order():

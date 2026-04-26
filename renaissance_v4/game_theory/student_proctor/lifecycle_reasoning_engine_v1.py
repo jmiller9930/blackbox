@@ -443,9 +443,14 @@ def run_lifecycle_tape_v1(
     router_config_path: str | None = None,
     job_id: str = "",
     fingerprint: str | None = None,
+    emit_lifecycle_traces: bool = False,
+    trade_id: str | None = None,
+    scenario_id: str | None = None,
 ) -> dict[str, Any]:
     """
     Walks forward from entry bar, one evaluation per bar, until exit or data end.
+    If ``emit_lifecycle_traces`` and ``job_id`` are set, appends **lifecycle_reasoning_stage_v1** and
+    **lifecycle_tape_summary_v1** to the learning-trace JSONL (same path as 026A/026R).
     """
     w = _bars_up_to(all_bars, entry_bar_index)
     if not w:
@@ -460,6 +465,38 @@ def run_lifecycle_tape_v1(
     prev_c: float | None = None
     out_rows: list[dict[str, Any]] = []
     last_fm: dict[str, Any] = {}
+
+    def _emit_stage_row(row: dict[str, Any]) -> None:
+        if not emit_lifecycle_traces or not str(job_id or "").strip():
+            return
+        stg = row.get("lifecycle_reasoning_stage_v1")
+        if not isinstance(stg, dict):
+            return
+        from renaissance_v4.game_theory.learning_trace_instrumentation_v1 import (
+            emit_lifecycle_reasoning_stage_v1,
+        )
+
+        emit_lifecycle_reasoning_stage_v1(
+            job_id=str(job_id).strip(),
+            fingerprint=fingerprint,
+            lifecycle_reasoning_stage_v1=stg,
+            trade_id=trade_id,
+            scenario_id=scenario_id,
+        )
+
+    def _emit_tape_done(res: dict[str, Any]) -> None:
+        if not emit_lifecycle_traces or not str(job_id or "").strip():
+            return
+        from renaissance_v4.game_theory.learning_trace_instrumentation_v1 import emit_lifecycle_tape_summary_v1
+
+        emit_lifecycle_tape_summary_v1(
+            job_id=str(job_id).strip(),
+            fingerprint=fingerprint,
+            lifecycle_tape_result_v1=res,
+            trade_id=trade_id,
+            scenario_id=scenario_id,
+        )
+
     for i in range(entry_bar_index, len(all_bars)):
         r = evaluate_lifecycle_bar_v1(
             all_bars=all_bars,
@@ -508,24 +545,29 @@ def run_lifecycle_tape_v1(
             if u.get("student_reasoning_fault_map_v1"):
                 last_fm = u["student_reasoning_fault_map_v1"]  # type: ignore[assignment]
         out_rows.append(row)
-        d = (ev or {}).get("decision_v1")
+        _emit_stage_row(row)
+        d = (row.get("lifecycle_reasoning_eval_v1") or ev or {}).get("decision_v1")
         if d in (DEC_EXIT, DEC_FORCE):
-            return {
+            res = {
                 "schema": "lifecycle_tape_result_v1",
                 "contract_version": CONTRACT_LIFECYCLE,
                 "closed_v1": True,
                 "exit_at_bar_index_v1": i,
-                "exit_reason_code_v1": (ev or {}).get("exit_reason_code_v1"),
+                "exit_reason_code_v1": (row.get("lifecycle_reasoning_eval_v1") or ev or {}).get("exit_reason_code_v1"),
                 "per_bar_v1": out_rows,
                 "final_fault_map_v1": last_fm,
             }
-    return {
+            _emit_tape_done(res)
+            return res
+    res = {
         "schema": "lifecycle_tape_result_v1",
         "contract_version": CONTRACT_LIFECYCLE,
         "closed_v1": False,
         "per_bar_v1": out_rows,
         "final_fault_map_v1": last_fm,
     }
+    _emit_tape_done(res)
+    return res
 
 
 __all__ = [

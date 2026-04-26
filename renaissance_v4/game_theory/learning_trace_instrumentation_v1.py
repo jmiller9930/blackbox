@@ -472,6 +472,76 @@ def emit_student_reasoning_fault_map_v1(
     )
 
 
+def emit_lifecycle_reasoning_stage_v1(
+    *,
+    job_id: str,
+    fingerprint: str | None,
+    lifecycle_reasoning_stage_v1: dict[str, Any] | None = None,
+    trade_id: str | None = None,
+    scenario_id: str | None = None,
+) -> None:
+    """GT_DIRECTIVE_026B — one bar of in-trade lifecycle (deterministic; observable in learning_trace JSONL)."""
+    st = lifecycle_reasoning_stage_v1 if isinstance(lifecycle_reasoning_stage_v1, dict) else {}
+    _emit(
+        job_id=job_id,
+        fingerprint=fingerprint,
+        stage="lifecycle_reasoning_stage_v1",
+        status="pass" if st else "partial",
+        summary="lifecycle_reasoning_engine_v1: one bar (phase, decision, thesis/risk).",
+        producer="lifecycle_reasoning_engine_v1",
+        trade_id=trade_id,
+        scenario_id=scenario_id,
+        evidence_payload={"lifecycle_reasoning_stage_v1": st},
+    )
+
+
+def emit_lifecycle_tape_summary_v1(
+    *,
+    job_id: str,
+    fingerprint: str | None,
+    lifecycle_tape_result_v1: dict[str, Any] | None = None,
+    trade_id: str | None = None,
+    scenario_id: str | None = None,
+) -> None:
+    """026B — end-of-tape roll-up (per_bar rows bounded in payload)."""
+    tr = lifecycle_tape_result_v1 if isinstance(lifecycle_tape_result_v1, dict) else {}
+    per = tr.get("per_bar_v1") or []
+    slim = []
+    for row in per[:256]:
+        if not isinstance(row, dict):
+            continue
+        le = row.get("lifecycle_reasoning_eval_v1")
+        stg = row.get("lifecycle_reasoning_stage_v1")
+        slim.append(
+            {
+                "bar_index": row.get("bar_index"),
+                "decision_v1": (le or {}).get("decision_v1"),
+                "phase_v1": (le or {}).get("phase_v1"),
+                "exit_reason_code_v1": (le or {}).get("exit_reason_code_v1"),
+                "lifecycle_reasoning_stage_v1": stg if isinstance(stg, dict) else None,
+            }
+        )
+    _emit(
+        job_id=job_id,
+        fingerprint=fingerprint,
+        stage="lifecycle_tape_summary_v1",
+        status="pass" if tr else "partial",
+        summary="Lifecycle tape completed (or partial); see per_bar_slim_v1 in evidence.",
+        producer="lifecycle_reasoning_engine_v1",
+        trade_id=trade_id,
+        scenario_id=scenario_id,
+        evidence_payload={
+            "lifecycle_tape_result_v1": {
+                "schema": tr.get("schema"),
+                "closed_v1": tr.get("closed_v1"),
+                "exit_at_bar_index_v1": tr.get("exit_at_bar_index_v1"),
+                "exit_reason_code_v1": tr.get("exit_reason_code_v1"),
+                "per_bar_slim_v1": slim,
+            }
+        },
+    )
+
+
 def emit_entry_reasoning_pipeline_stage_v1(
     *,
     job_id: str,
@@ -505,6 +575,8 @@ def emit_entry_reasoning_pipeline_stage_v1(
 __all__ = [
     "emit_candle_timeframe_nexus_v1",
     "emit_entry_reasoning_pipeline_stage_v1",
+    "emit_lifecycle_reasoning_stage_v1",
+    "emit_lifecycle_tape_summary_v1",
     "emit_reasoning_cost_governor_v1",
     "emit_reasoning_router_decision_v1",
     "emit_external_reasoning_review_v1",

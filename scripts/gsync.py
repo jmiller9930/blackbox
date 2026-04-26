@@ -126,6 +126,7 @@ PATTERN_GAME_STAGING_PATHS = (
     "scripts/pattern_game_agent_reflect.py",
     "scripts/agent_context_bundle.py",
     "scripts/openai_adapter_smoke_v1.sh",
+    "scripts/gt_026b_lifecycle_trace_proof_v1.py",
     "scripts/sync_pattern_game.sh",
     "scripts/deploy_pattern_game.sh",
     "scripts/gsync.py",
