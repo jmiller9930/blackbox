@@ -248,7 +248,7 @@ def _model_provenance_chain_v1(entry: dict[str, Any], events: list[dict[str, Any
     contract_model: str | None = None
     contract_url: str | None = None
     if ex_req:
-        m, u, _slm = resolved_llm_for_exam_contract_v1(ex_req)
+        m, u, _slm, _llm_errs = resolved_llm_for_exam_contract_v1(ex_req)
         contract_model = m
         contract_url = u or None
     raw_llm_block = entry.get("student_llm_v1") if isinstance(entry.get("student_llm_v1"), dict) else {}
