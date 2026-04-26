@@ -385,6 +385,21 @@ def test_write_proof_artifact_lifecycle_tape_v1():
     assert out.is_file() and out.stat().st_size > 100
 
 
+def test_debug_overlay_prefers_closed_tape_summary_when_multiple_v1() -> None:
+    """Many lifecycle_tape_summary_v1 lines: overlay picks closed + exit when present (026B review)."""
+    from renaissance_v4.game_theory.debug_learning_loop_trace_v1 import _best_lifecycle_tape_summary_v1
+
+    open_ = {"schema": "lifecycle_tape_result_v1", "closed_v1": False, "per_bar_slim_v1": []}
+    done = {
+        "schema": "lifecycle_tape_result_v1",
+        "closed_v1": True,
+        "exit_reason_code_v1": "target_hit_v1",
+        "per_bar_slim_v1": [],
+    }
+    assert _best_lifecycle_tape_summary_v1([open_, done]) == done
+    assert _best_lifecycle_tape_summary_v1([done, open_]) == done
+
+
 def test_parse_exam_run_contract_passthrough_026b_lifecycle_bars_v1() -> None:
     from renaissance_v4.game_theory.exam_run_contract_v1 import (
         STUDENT_BRAIN_PROFILE_MEMORY_CONTEXT_STUDENT_V1,

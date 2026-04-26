@@ -102,10 +102,29 @@ def _row_snapshot_v1(line: dict[str, Any]) -> dict[str, Any]:
     }
 
 
+def _best_lifecycle_tape_summary_v1(candidates: list[dict[str, Any]]) -> dict[str, Any] | None:
+    """
+    When many ``lifecycle_tape_summary_v1`` lines exist (multi-trade or repeated emits), pick the
+    most informative summary for review: prefer **closed** tape with a concrete **exit** code,
+    then any **closed**, then any with **exit** code, else the last line (same as v1).
+    """
+    if not candidates:
+        return None
+    for pred in (
+        lambda c: bool(c.get("closed_v1")) and bool(c.get("exit_reason_code_v1")),
+        lambda c: bool(c.get("closed_v1")),
+        lambda c: bool(c.get("exit_reason_code_v1")),
+    ):
+        for c in reversed(candidates):
+            if pred(c):
+                return c
+    return candidates[-1]
+
+
 def _lifecycle_trace_overlay_v1(events: list[dict[str, Any]]) -> dict[str, Any]:
     """GT_DIRECTIVE_026B — surface lifecycle events from learning_trace for debug/L3 (no proof-file hunt)."""
     stages: list[dict[str, Any]] = []
-    summary: dict[str, Any] | None = None
+    summary_cands: list[dict[str, Any]] = []
     for ev in events or []:
         st = str(ev.get("stage") or "").strip()
         ep = ev.get("evidence_payload") if isinstance(ev.get("evidence_payload"), dict) else {}
@@ -115,7 +134,10 @@ def _lifecycle_trace_overlay_v1(events: list[dict[str, Any]]) -> dict[str, Any]:
                 stages.append(s)
         elif st == "lifecycle_tape_summary_v1":
             s2 = ep.get("lifecycle_tape_result_v1")
-            summary = s2 if isinstance(s2, dict) else (ep or None)
+            cand = s2 if isinstance(s2, dict) else (ep if isinstance(ep, dict) else None)
+            if isinstance(cand, dict):
+                summary_cands.append(cand)
+    summary = _best_lifecycle_tape_summary_v1(summary_cands)
     return {
         "schema": "lifecycle_debug_overlay_v1",
         "contract_version": 1,
