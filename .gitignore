@@ -106,3 +106,6 @@ runtime/student_learning/
 # Learning-loop runtime trace JSONL (append-only; host-local under memory root or game_theory)
 renaissance_v4/game_theory/learning_trace_events_v1.jsonl
 **/learning_trace_events_v1.jsonl
+
+# Loose UI screenshots in game_theory root (avoid accidental gsync commit)
+renaissance_v4/game_theory/Screenshot*.png
