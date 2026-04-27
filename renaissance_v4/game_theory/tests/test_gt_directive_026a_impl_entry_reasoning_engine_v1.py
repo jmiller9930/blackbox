@@ -6,9 +6,13 @@ from __future__ import annotations
 
 from typing import Any
 
+import pytest
+
+from renaissance_v4.game_theory.student_proctor import entry_reasoning_engine_v1 as ere_mod
 from renaissance_v4.game_theory.student_proctor.entry_reasoning_engine_v1 import (
     _rsi_state,
     build_indicator_context_eval_v1,
+    run_entry_reasoning_pipeline_preflight_v1,
     run_entry_reasoning_pipeline_v1,
     validate_entry_reasoning_eval_v1,
     validate_llm_explanation_against_entry_reasoning_v1,
@@ -79,6 +83,65 @@ def test_ema_trend_bull_bear() -> None:
     ctx2, e2, _ = build_indicator_context_eval_v1(_bars_downtrend_n(100))
     assert not e2
     assert (ctx2 or {}).get("ema_trend") == "bearish_trend"
+
+
+def test_preflight_pipeline_matches_full_on_small_packet() -> None:
+    pkt = _packet(_bars_uptrend_n(40))
+    pf, e_pf, _, _ = run_entry_reasoning_pipeline_preflight_v1(
+        student_decision_packet=pkt,
+        retrieved_student_experience=[],
+        run_candle_timeframe_minutes=5,
+        emit_traces=False,
+        unified_agent_router=False,
+    )
+    full, e_f, _, _ = run_entry_reasoning_pipeline_v1(
+        student_decision_packet=pkt,
+        retrieved_student_experience=[],
+        run_candle_timeframe_minutes=5,
+        emit_traces=False,
+        unified_agent_router=False,
+    )
+    assert not e_pf and not e_f and pf and full
+    assert (pf.get("decision_synthesis_v1") or {}).get("action") == (full.get("decision_synthesis_v1") or {}).get(
+        "action"
+    )
+
+
+def test_preflight_completes_on_large_bar_history_without_mutating_packet() -> None:
+    pkt = _packet(_bars_uptrend_n(200))
+    pf, errs, _, _ = run_entry_reasoning_pipeline_preflight_v1(
+        student_decision_packet=pkt,
+        retrieved_student_experience=[],
+        run_candle_timeframe_minutes=5,
+        emit_traces=False,
+        unified_agent_router=False,
+    )
+    assert not errs and pf and pf.get("schema") == SCHEMA_ENTRY_REASONING_EVAL_V1
+    assert len(pkt["bars_inclusive_up_to_t"]) == 200
+
+
+def test_preflight_pipeline_sla_triggers_on_slow_inner(monkeypatch: pytest.MonkeyPatch) -> None:
+    import time as time_mod
+
+    monkeypatch.setenv("PATTERN_GAME_RM_PREFLIGHT_PIPELINE_MAX_S", "0.02")
+    real_inner = ere_mod.run_entry_reasoning_pipeline_v1
+
+    def _slow(**kwargs: Any) -> Any:
+        time_mod.sleep(0.07)
+        return real_inner(**kwargs)
+
+    monkeypatch.setattr(ere_mod, "run_entry_reasoning_pipeline_v1", _slow)
+    pkt = _packet(_bars_uptrend_n(30))
+    ere, errs, _, pfm = run_entry_reasoning_pipeline_preflight_v1(
+        student_decision_packet=pkt,
+        retrieved_student_experience=[],
+        run_candle_timeframe_minutes=5,
+        emit_traces=False,
+        unified_agent_router=False,
+    )
+    assert ere is None
+    assert "preflight_timeout_preflight_pipeline_v1" in errs
+    assert isinstance(pfm, dict)
 
 
 def test_pipeline_digest_stable() -> None:

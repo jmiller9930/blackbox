@@ -5,6 +5,10 @@ The LLM (when used) may only propose ``llm_explanation_proposal_v1`` text; **aut
 ``decision_synthesis_v1`` computed here. ``run_entry_reasoning_pipeline_v1`` is the **mandatory**
 ordered pipeline: market data → indicators → memory → prior outcomes → risk → decision →
 validation → digest.
+
+``run_entry_reasoning_pipeline_preflight_v1`` is **preflight-only**: tail-slices bars for bounded
+indicator work, forces the unified router to **never** call external HTTP, then delegates to
+``run_entry_reasoning_pipeline_v1``. It does **not** replace the full pipeline for exams.
 """
 
 from __future__ import annotations
@@ -13,6 +17,8 @@ import copy
 import hashlib
 import json
 import math
+import os
+import time
 from typing import Any
 
 from renaissance_v4.game_theory.student_proctor.contracts_v1 import (
@@ -799,6 +805,129 @@ def run_entry_reasoning_pipeline_v1(
         out["student_reasoning_fault_map_v1"] = _pfm
 
     return out, [], trace, _pfm
+
+
+def _preflight_pipeline_max_s_v1() -> float:
+    """Wall-clock SLA for RM preflight entry-reasoning only (default 2s; clamp 0.5–5)."""
+    raw = (os.environ.get("PATTERN_GAME_RM_PREFLIGHT_PIPELINE_MAX_S") or "2").strip()
+    try:
+        t = float(raw)
+    except (TypeError, ValueError):
+        t = 2.0
+    # Floor 0.01s so tests / diagnostics can set a tight cap; production default remains 2s.
+    return max(0.01, min(t, 5.0))
+
+
+def _preflight_entry_max_bars_v1() -> int:
+    """Tail cap for indicator work inside preflight entry pipeline (default 64; clamp 8–512)."""
+    raw = (os.environ.get("PATTERN_GAME_RM_PREFLIGHT_ENTRY_MAX_BARS") or "64").strip()
+    try:
+        n = int(raw)
+    except (TypeError, ValueError):
+        n = 64
+    return max(8, min(n, 512))
+
+
+def _student_decision_packet_tail_slice_for_preflight_v1(
+    student_decision_packet: dict[str, Any],
+    *,
+    max_bars: int,
+) -> dict[str, Any]:
+    """
+    Shallow copy with ``bars_inclusive_up_to_t`` replaced by the last ``max_bars`` rows only.
+    Preflight-only; avoids O(full history) indicator passes without mutating the caller's packet.
+    """
+    bars = student_decision_packet.get("bars_inclusive_up_to_t")
+    if not isinstance(bars, list) or len(bars) <= max_bars:
+        return dict(student_decision_packet)
+    out = dict(student_decision_packet)
+    out["bars_inclusive_up_to_t"] = list(bars[-max_bars:])
+    out["rm_preflight_bar_tail_slice_v1"] = {
+        "preflight_only_v1": True,
+        "prior_bar_count_v1": len(bars),
+        "used_bar_count_v1": max_bars,
+    }
+    return out
+
+
+def _router_config_preflight_local_only_v1(
+    *,
+    router_config: dict[str, Any] | None,
+    router_config_path: str | None,
+) -> dict[str, Any]:
+    """Merge YAML/file config with caller overlay, then force ``external_api_enabled`` false."""
+    from renaissance_v4.game_theory.unified_agent_v1.reasoning_router_config_v1 import (
+        load_reasoning_router_config_v1,
+    )
+
+    base = dict(load_reasoning_router_config_v1(router_config_path))
+    if isinstance(router_config, dict):
+        base.update(router_config)
+    base["external_api_enabled"] = False
+    return base
+
+
+def run_entry_reasoning_pipeline_preflight_v1(
+    *,
+    student_decision_packet: dict[str, Any],
+    retrieved_student_experience: list[dict[str, Any]] | None,
+    run_candle_timeframe_minutes: int,
+    job_id: str = "",
+    fingerprint: str | None = None,
+    scenario_id: str | None = None,
+    trade_id: str | None = None,
+    long_threshold: float = _LONG_THRESHOLD,
+    short_threshold: float = _SHORT_THRESHOLD,
+    emit_traces: bool = True,
+    unified_agent_router: bool = False,
+    router_config: dict[str, Any] | None = None,
+    router_config_path: str | None = None,
+    router_operator_forced_audit: bool = False,
+    router_baseline_action: str | None = None,
+    router_trade_notional_usd: float | None = None,
+    router_seed: int | None = None,
+) -> tuple[dict[str, Any] | None, list[str], list[dict[str, Any]], dict[str, Any]]:
+    """
+    RM preflight-only lightweight path: tail-sliced bars + router never calls external services.
+
+    Proves decision capability (same schema / traces as the full pipeline on the sliced packet)
+    within ``PATTERN_GAME_RM_PREFLIGHT_PIPELINE_MAX_S`` (default **2**). On SLA breach returns
+    ``(None, ["preflight_timeout_preflight_pipeline_v1"], trace, fault_map)`` even if the inner
+    pipeline would have succeeded — use a smaller tail or raise the cap only for diagnostics.
+
+    Full exams must keep using ``run_entry_reasoning_pipeline_v1`` on the unsliced packet.
+    """
+    t_wall0 = time.perf_counter()
+    max_s = float(_preflight_pipeline_max_s_v1())
+    mx = int(_preflight_entry_max_bars_v1())
+    pkt = _student_decision_packet_tail_slice_for_preflight_v1(student_decision_packet, max_bars=mx)
+    rcfg = _router_config_preflight_local_only_v1(
+        router_config=router_config,
+        router_config_path=router_config_path,
+    )
+    ere, errs, trace, pfm = run_entry_reasoning_pipeline_v1(
+        student_decision_packet=pkt,
+        retrieved_student_experience=retrieved_student_experience,
+        run_candle_timeframe_minutes=int(run_candle_timeframe_minutes),
+        job_id=job_id,
+        fingerprint=fingerprint,
+        scenario_id=scenario_id,
+        trade_id=trade_id,
+        long_threshold=long_threshold,
+        short_threshold=short_threshold,
+        emit_traces=emit_traces,
+        unified_agent_router=unified_agent_router,
+        router_config=rcfg,
+        router_config_path=None,
+        router_operator_forced_audit=router_operator_forced_audit,
+        router_baseline_action=router_baseline_action,
+        router_trade_notional_usd=router_trade_notional_usd,
+        router_seed=router_seed,
+    )
+    elapsed = time.perf_counter() - t_wall0
+    if ere is not None and not errs and elapsed > max_s:
+        return None, ["preflight_timeout_preflight_pipeline_v1"], trace, pfm
+    return ere, errs, trace, pfm
 
 
 def apply_decision_overrides_llm_stated_action_v1(

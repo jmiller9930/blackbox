@@ -3,9 +3,13 @@ RM preflight — in-memory wiring validation before parallel batch (Directive: r
 
 * Shrinks the evaluation calendar window (default **1** month; ``PATTERN_GAME_RM_PREFLIGHT_MAX_CALENDAR_MONTHS``).
 * **Decision-snapshot path (non-baseline Student):** builds ``student_decision_packet_v1`` from SQLite + manifest,
-  runs ``run_entry_reasoning_pipeline_v1`` → authority → deterministic stub seal — **no** Referee replay worker
+  runs ``run_entry_reasoning_pipeline_preflight_v1`` (tail-capped bars, router local-only) → authority →
+  deterministic stub seal — **no** Referee replay worker
   and **no** wait for closed trades. Wall clock capped by ``PATTERN_GAME_RM_PREFLIGHT_DECISION_SNAPSHOT_TIMEOUT_S``
-  (default **5**; fail ``preflight_timeout_decision_snapshot_v1``).
+  (default **5**; fail ``preflight_timeout_decision_snapshot_v1``). Preflight entry-reasoning wall time is
+  additionally capped by ``PATTERN_GAME_RM_PREFLIGHT_PIPELINE_MAX_S`` (default **2**;
+  fail ``preflight_timeout_preflight_pipeline_v1``) with ``PATTERN_GAME_RM_PREFLIGHT_ENTRY_MAX_BARS`` (default **64**)
+  tail slice for indicator work.
 * Bounded replay + ``_worker_run_one`` remain available for full exam / grading flows elsewhere; preflight does
   not depend on them.
 * Validates required RM trace stages in the sink — **no** ``learning_trace_events_v1.jsonl`` writes.
@@ -54,7 +58,7 @@ from renaissance_v4.game_theory.student_proctor.contracts_v1 import (
 )
 from renaissance_v4.game_theory.student_proctor.entry_reasoning_engine_v1 import (
     apply_engine_authority_to_student_output_v1,
-    run_entry_reasoning_pipeline_v1,
+    run_entry_reasoning_pipeline_preflight_v1,
 )
 from renaissance_v4.game_theory.student_proctor.shadow_student_v1 import emit_shadow_stub_student_output_v1
 from renaissance_v4.game_theory.student_proctor.student_context_builder_v1 import build_student_decision_packet_v1
@@ -452,6 +456,11 @@ def map_rm_preflight_missing_to_operator_display_v1(missing: list[str]) -> list[
             out.append(
                 "RM preflight decision-snapshot timeout — exceeded "
                 "PATTERN_GAME_RM_PREFLIGHT_DECISION_SNAPSHOT_TIMEOUT_S"
+            )
+        elif s == "preflight_timeout_preflight_pipeline_v1":
+            out.append(
+                "RM preflight entry-reasoning SLA exceeded — exceeded "
+                "PATTERN_GAME_RM_PREFLIGHT_PIPELINE_MAX_S (preflight pipeline only)"
             )
         else:
             out.append(s)
@@ -893,7 +902,7 @@ def run_rm_preflight_decision_snapshot_v1(
             _emit_rm_preflight_panel_v1(panel, progress_cb)
 
             audit.enter("rm_entry_reasoning_v1")
-            ere, ere_err, _trace, pfm = run_entry_reasoning_pipeline_v1(
+            ere, ere_err, _trace, pfm = run_entry_reasoning_pipeline_preflight_v1(
                 student_decision_packet=pkt,
                 retrieved_student_experience=rxx,
                 run_candle_timeframe_minutes=int(c_tf),
@@ -906,6 +915,12 @@ def run_rm_preflight_decision_snapshot_v1(
             )
             if ere is None:
                 audit.end(error="; ".join(ere_err) if ere_err else "entry_reasoning_none")
+                miss = list(ere_err or [])
+                if "preflight_timeout_preflight_pipeline_v1" in miss:
+                    return _fail(
+                        missing=["preflight_timeout_preflight_pipeline_v1"],
+                        human="preflight_timeout_preflight_pipeline_v1",
+                    )
                 return _fail(
                     missing=["preflight_entry_reasoning_failed_v1"],
                     human="; ".join(ere_err) if ere_err else "entry_reasoning_none",
