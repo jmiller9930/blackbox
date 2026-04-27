@@ -14,6 +14,7 @@ from renaissance_v4.game_theory.learning_trace_events_v1 import (
 )
 from renaissance_v4.game_theory.rm_preflight_wiring_v1 import (
     FAILED_PREFLIGHT_STATUS_V1,
+    PREFLIGHT_DECISION_SNAPSHOT_TRADE_ID_V1,
     REQUIRED_RM_PREFLIGHT_STAGES_V1,
     _shrink_scenario_for_rm_preflight_v1,
     rm_preflight_enabled_v1,
@@ -328,16 +329,16 @@ def test_json_roundtrip_sink_event():
     assert "reasoning_cost_governor_v1" in s
 
 
-@patch("renaissance_v4.game_theory.rm_preflight_wiring_v1._worker_run_one")
-def test_run_rm_preflight_worker_timeout_v1(mock_worker, monkeypatch: pytest.MonkeyPatch) -> None:
-    import time
-
-    def _slow(_scenario: dict) -> dict:
-        time.sleep(60.0)
-        return {"ok": True, "scenario_id": "x", "replay_outcomes_json": []}
-
-    mock_worker.side_effect = _slow
-    monkeypatch.setenv("PATTERN_GAME_RM_PREFLIGHT_WORKER_TIMEOUT_S", "1")
+@patch("renaissance_v4.game_theory.rm_preflight_wiring_v1.run_rm_preflight_decision_snapshot_v1")
+def test_run_rm_preflight_decision_snapshot_timeout_surfaces_v1(mock_snap) -> None:
+    mock_snap.return_value = {
+        "ok_v1": False,
+        "scenario_id": "x",
+        "trade_id": PREFLIGHT_DECISION_SNAPSHOT_TRADE_ID_V1,
+        "seam_audit": None,
+        "missing_stages_v1": ["preflight_timeout_decision_snapshot_v1"],
+        "human_message_v1": "preflight_timeout_decision_snapshot_v1",
+    }
     rep = run_rm_preflight_wiring_v1(
         scenarios=[{"manifest_path": "m.json", "scenario_id": "x"}],
         job_id="jid_timeout",
@@ -346,15 +347,19 @@ def test_run_rm_preflight_worker_timeout_v1(mock_worker, monkeypatch: pytest.Mon
     )
     assert rep.get("ok_v1") is False
     miss = list(rep.get("missing_stages_v1") or [])
-    assert "preflight_timeout_waiting_for_trade_v1" in miss
+    assert "preflight_timeout_decision_snapshot_v1" in miss
 
 
-@patch("renaissance_v4.game_theory.rm_preflight_wiring_v1._worker_run_one")
-@patch("renaissance_v4.game_theory.rm_preflight_wiring_v1.student_loop_seam_after_parallel_batch_v1")
-def test_run_rm_preflight_propagates_worker_failure(mock_seam, mock_worker):
-    from renaissance_v4.game_theory.rm_preflight_wiring_v1 import run_rm_preflight_wiring_v1
-
-    mock_worker.return_value = {"ok": False, "error": "boom", "scenario_id": "x"}
+@patch("renaissance_v4.game_theory.rm_preflight_wiring_v1.run_rm_preflight_decision_snapshot_v1")
+def test_run_rm_preflight_propagates_decision_snapshot_failure(mock_snap):
+    mock_snap.return_value = {
+        "ok_v1": False,
+        "scenario_id": "x",
+        "trade_id": PREFLIGHT_DECISION_SNAPSHOT_TRADE_ID_V1,
+        "seam_audit": None,
+        "missing_stages_v1": ["preflight_decision_snapshot_packet_failed_v1"],
+        "human_message_v1": "boom",
+    }
     rep = run_rm_preflight_wiring_v1(
         scenarios=[{"manifest_path": "m.json", "scenario_id": "x"}],
         job_id="jid1",
@@ -365,4 +370,4 @@ def test_run_rm_preflight_propagates_worker_failure(mock_seam, mock_worker):
     )
     assert rep["ok_v1"] is False
     assert rep["status_v1"] == FAILED_PREFLIGHT_STATUS_V1
-    mock_seam.assert_not_called()
+    mock_snap.assert_called_once()
