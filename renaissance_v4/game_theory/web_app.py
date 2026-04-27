@@ -6620,13 +6620,74 @@ PAGE_HTML = """<!DOCTYPE html>
     body.pg-run-active .pg-runtime-stack .pg-panel-score {
       opacity: 0.94;
     }
-    .live-telemetry-title {
+    .live-telemetry-head-row {
+      display: flex;
+      flex-wrap: wrap;
+      align-items: flex-start;
+      justify-content: space-between;
+      gap: 8px 12px;
       margin: 0 0 8px;
+    }
+    .live-telemetry-title {
+      margin: 0;
       font-size: 0.72rem;
       font-weight: 700;
       color: #8b98a5;
       text-transform: uppercase;
       letter-spacing: 0.04em;
+      flex: 1;
+      min-width: 0;
+    }
+    .pg-copy-all-actions {
+      display: flex;
+      flex-wrap: wrap;
+      align-items: center;
+      gap: 8px;
+      flex: 0 0 auto;
+    }
+    .pg-copy-all-btn {
+      font: inherit;
+      font-size: 0.72rem;
+      font-weight: 700;
+      text-transform: none;
+      letter-spacing: 0.02em;
+      padding: 4px 10px;
+      border-radius: 6px;
+      border: 1px solid rgba(255, 255, 255, 0.22);
+      background: rgba(255, 255, 255, 0.08);
+      color: #e6edf3;
+      cursor: pointer;
+      white-space: nowrap;
+    }
+    .pg-copy-all-btn:hover {
+      background: rgba(255, 255, 255, 0.14);
+      border-color: rgba(42, 143, 217, 0.55);
+    }
+    .pg-copy-all-btn:focus-visible {
+      outline: 2px solid rgba(42, 143, 217, 0.75);
+      outline-offset: 2px;
+    }
+    .pg-copy-feedback {
+      font-size: 0.68rem;
+      font-weight: 600;
+      color: #7ee787;
+      min-height: 1.1em;
+    }
+    .pg-copy-feedback--err {
+      color: #f85149;
+    }
+    .pg-results-copy-head {
+      display: flex;
+      flex-wrap: wrap;
+      align-items: center;
+      justify-content: space-between;
+      gap: 8px 12px;
+      margin: 0 0 10px;
+      padding-bottom: 8px;
+      border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+    }
+    .pg-results-copy-head .pg-copy-all-actions {
+      margin-left: auto;
     }
     .memory-status-card {
       font-size: 0.78rem;
@@ -7208,9 +7269,15 @@ PAGE_HTML = """<!DOCTYPE html>
               <div class="pg-focus-pane-inner--dark">
               <div class="pg-telemetry-dock" style="position:static;max-height:none;top:0">
       <div id="liveTelemetryWrap" class="live-telemetry-wrap">
-        <p class="live-telemetry-title">Live output <span class="pg-secondary-surface-label telemetry-run-only">While running</span>
-          <span class="pg-sr-only">Live engine replay telemetry and Decision Context Recall (DCR) counters — not the Student learning store.</span>
-          <span aria-hidden="true" style="display:block;margin-top:6px;font-size:0.78rem;font-weight:600;color:#9aa7b4;text-transform:none;letter-spacing:0">Engine replay + DCR</span></p>
+        <div class="live-telemetry-head-row">
+          <p class="live-telemetry-title">Live output <span class="pg-secondary-surface-label telemetry-run-only">While running</span>
+            <span class="pg-sr-only">Live engine replay telemetry and Decision Context Recall (DCR) counters — not the Student learning store.</span>
+            <span aria-hidden="true" style="display:block;margin-top:6px;font-size:0.78rem;font-weight:600;color:#9aa7b4;text-transform:none;letter-spacing:0">Engine replay + DCR</span></p>
+          <div class="pg-copy-all-actions">
+            <button type="button" class="pg-copy-all-btn" id="pgCopyTerminalBtn" title="Copy full Terminal text (rolling log + detail + run summary)">Copy Terminal</button>
+            <span class="pg-copy-feedback" id="pgCopyTerminalFeedback" aria-live="polite" hidden></span>
+          </div>
+        </div>
         <div class="pg-terminal-split">
         <div class="pg-terminal-split-left">
         <div id="memoryStatusCard" class="memory-status-card" aria-live="polite">
@@ -7246,6 +7313,13 @@ PAGE_HTML = """<!DOCTYPE html>
             </div>
             <div id="pgFocusPaneResults" class="pg-focus-pane pg-focus-pane--results" hidden>
               <div class="pg-header-drawer-inner" style="background:transparent;padding:0">
+                <div class="pg-results-copy-head">
+                  <span class="pg-sr-only">Results panel copy</span>
+                  <div class="pg-copy-all-actions">
+                    <button type="button" class="pg-copy-all-btn" id="pgCopyResultsBtn" title="Copy Referee outcomes, RM job binding, raw JSON, session note, and scorecard hints shown in this panel">Copy Results</button>
+                    <span class="pg-copy-feedback" id="pgCopyResultsFeedback" aria-live="polite" hidden></span>
+                  </div>
+                </div>
                 <div class="pg-tab-strip" role="tablist">
                   <button type="button" class="pg-tab active" data-tab="outcomes" role="tab">Referee outcomes</button>
                   <button type="button" class="pg-tab" data-tab="json" role="tab">Raw JSON</button>
@@ -9988,6 +10062,153 @@ PAGE_HTML = """<!DOCTYPE html>
         fl.textContent = t;
       }
     }
+
+    function pgBuildTerminalCopyTextV1() {
+      const blocks = [];
+      const batch = document.getElementById('tcsBatch');
+      if (batch && (batch.textContent || '').trim()) {
+        blocks.push('Batch (job): ' + batch.textContent.trim());
+      }
+      const tcs = document.getElementById('terminalCompactSummary');
+      if (tcs) {
+        const s = (tcs.innerText || '').trim();
+        if (s) blocks.push('=== Run summary ===\\n' + s);
+      }
+      const mCard = document.getElementById('memoryStatusCard');
+      if (mCard) {
+        const mt = (mCard.innerText || '').trim();
+        if (mt) blocks.push('=== Memory status ===\\n' + mt);
+      }
+      const roll = document.getElementById('telemetryRollingLog');
+      if (roll && roll.children.length) {
+        const lines = [];
+        for (let i = 0; i < roll.children.length; i++) {
+          lines.push((roll.children[i].textContent || '').trim());
+        }
+        const rj = lines.filter(Boolean).join('\\n');
+        if (rj) blocks.push('=== Rolling log ===\\n' + rj);
+      }
+      const ltp = document.getElementById('liveTelemetryPanel');
+      if (ltp) {
+        const t = (ltp.textContent || '').trim();
+        if (t) blocks.push('=== Live telemetry detail ===\\n' + t);
+      }
+      return blocks.join('\\n\\n').trim() || '(empty)';
+    }
+
+    function pgBuildResultsCopyTextV1() {
+      const blocks = [];
+      const batch = document.getElementById('tcsBatch');
+      if (batch && (batch.textContent || '').trim()) {
+        blocks.push('Batch (job): ' + batch.textContent.trim());
+      }
+      try {
+        if (typeof pgGetInflightJobId === 'function') {
+          const jid = pgGetInflightJobId();
+          if (jid && String(jid).trim()) blocks.push('Inflight job_id (client): ' + String(jid).trim());
+        }
+      } catch (_e0) { /* */ }
+      const preB = document.getElementById('pgRmJobBindingPre');
+      if (preB && (preB.textContent || '').trim()) {
+        blocks.push('=== Reasoning Model ↔ job binding (trace-backed) ===');
+        const fail = document.getElementById('pgRmJobBindingFailures');
+        if (fail && !fail.hidden && (fail.textContent || '').trim()) {
+          blocks.push((fail.textContent || '').trim());
+        }
+        blocks.push((preB.textContent || '').trim());
+      }
+      const out = document.getElementById('out');
+      if (out && (out.textContent || '').trim()) {
+        blocks.push('=== Raw JSON / primary output ===');
+        blocks.push((out.textContent || '').trim());
+      }
+      const sn = document.getElementById('sessionLogNote');
+      if (sn && (sn.textContent || '').trim() && sn.style.display !== 'none') {
+        blocks.push('=== Session log note ===');
+        blocks.push((sn.textContent || '').trim());
+      }
+      const polTb = document.getElementById('policyOutcomeTbody');
+      if (polTb && (polTb.innerText || '').trim()) {
+        blocks.push('=== Referee outcomes (table) ===');
+        blocks.push((polTb.innerText || '').trim());
+      }
+      const lbr = document.getElementById('lastBatchRunLine');
+      if (lbr && (lbr.textContent || '').trim()) {
+        blocks.push('=== Last completed exam line ===');
+        blocks.push((lbr.textContent || '').trim());
+      }
+      const scTb = document.getElementById('scorecardHistoryTbody');
+      if (scTb && (scTb.innerText || '').trim()) {
+        blocks.push('=== Scorecard history (visible rows) ===');
+        blocks.push((scTb.innerText || '').trim());
+      }
+      const bd = document.getElementById('batchDrillPanel');
+      if (bd && (bd.innerText || '').trim()) {
+        blocks.push('=== Batch drill ===');
+        blocks.push((bd.innerText || '').trim());
+      }
+      return blocks.join('\\n\\n').trim() || '(empty)';
+    }
+
+    async function pgExecCopyAllV1(text, feedbackEl) {
+      const msgOk = 'Copied';
+      const msgFail = 'Copy failed — select manually';
+      const tipMs = 2600;
+      if (!feedbackEl) {
+        try {
+          if (navigator.clipboard && navigator.clipboard.writeText) {
+            await navigator.clipboard.writeText(text);
+          }
+        } catch (_e1) { /* */ }
+        return;
+      }
+      feedbackEl.hidden = false;
+      feedbackEl.classList.remove('pg-copy-feedback--err');
+      try {
+        if (navigator.clipboard && navigator.clipboard.writeText) {
+          await navigator.clipboard.writeText(text);
+        } else {
+          const ta = document.createElement('textarea');
+          ta.value = text;
+          ta.setAttribute('readonly', '');
+          ta.style.position = 'fixed';
+          ta.style.left = '-9999px';
+          ta.style.top = '0';
+          document.body.appendChild(ta);
+          ta.focus();
+          ta.select();
+          const ok = document.execCommand('copy');
+          document.body.removeChild(ta);
+          if (!ok) throw new Error('execCommand failed');
+        }
+        feedbackEl.textContent = msgOk;
+      } catch (_err) {
+        feedbackEl.textContent = msgFail;
+        feedbackEl.classList.add('pg-copy-feedback--err');
+      }
+      window.setTimeout(function () {
+        feedbackEl.textContent = '';
+        feedbackEl.hidden = true;
+        feedbackEl.classList.remove('pg-copy-feedback--err');
+      }, tipMs);
+    }
+
+    (function wirePgCopyAllControlsV1() {
+      const bT = document.getElementById('pgCopyTerminalBtn');
+      const bR = document.getElementById('pgCopyResultsBtn');
+      const fT = document.getElementById('pgCopyTerminalFeedback');
+      const fR = document.getElementById('pgCopyResultsFeedback');
+      if (bT) {
+        bT.addEventListener('click', function () {
+          void pgExecCopyAllV1(pgBuildTerminalCopyTextV1(), fT);
+        });
+      }
+      if (bR) {
+        bR.addEventListener('click', function () {
+          void pgExecCopyAllV1(pgBuildResultsCopyTextV1(), fR);
+        });
+      }
+    })();
 
     function pgFocusEnterPanel(mode) {
       const dock = document.getElementById('pgFocusDock');
