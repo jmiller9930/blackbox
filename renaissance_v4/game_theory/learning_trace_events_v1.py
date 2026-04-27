@@ -273,6 +273,110 @@ def count_learning_trace_terminal_integrity_v1(
     return out
 
 
+def count_learning_trace_rm_breadcrumbs_for_job_v1(
+    job_id: str,
+    *,
+    path: Path | None = None,
+    max_lines: int = 2_000_000,
+) -> dict[str, Any]:
+    """
+    Count RM-related stages for **this job_id** in ``learning_trace_events_v1.jsonl`` (parallel + seam).
+
+    Used for operator Results panel live counts (file-backed, not UI guesses).
+    """
+    jid = str(job_id or "").strip()
+    out: dict[str, Any] = {
+        "schema": "learning_trace_rm_breadcrumb_counts_v1",
+        "job_id": jid or None,
+        "entry_reasoning_sealed_v1": 0,
+        "reasoning_router_decision_v1": 0,
+        "reasoning_cost_governor_v1": 0,
+        "student_decision_authority_v1": 0,
+        "student_output_sealed": 0,
+        "decision_source_reasoning_model_v1": 0,
+        "authority_with_safety_pass_v1": 0,
+        "authority_safety_missing_or_fail_v1": 0,
+        "authority_sealed_mismatch_v1": 0,
+        "last_scenario_id_v1": None,
+        "last_trade_id_v1": None,
+        "trace_file_exists": False,
+        "lines_scanned_total": 0,
+        "lines_matched_job": 0,
+    }
+    if not jid:
+        return out
+    p = (path or default_learning_trace_events_jsonl()).expanduser().resolve()
+    if not p.is_file():
+        return out
+    out["trace_file_exists"] = True
+    ds_rm = "reasoning_model"
+    scanned = 0
+    matched = 0
+    auth_n = 0
+    sealed_n = 0
+    last_sid: str | None = None
+    last_tid: str | None = None
+    try:
+        with p.open(encoding="utf-8", errors="replace") as fh:
+            for raw in fh:
+                if scanned >= max_lines:
+                    break
+                scanned += 1
+                line = raw.strip()
+                if not line:
+                    continue
+                try:
+                    obj = json.loads(line)
+                except json.JSONDecodeError:
+                    continue
+                if str(obj.get("schema") or "") != SCHEMA_EVENT:
+                    continue
+                if str(obj.get("job_id") or "").strip() != jid:
+                    continue
+                matched += 1
+                st = str(obj.get("stage") or "").strip()
+                if obj.get("scenario_id") is not None:
+                    last_sid = str(obj.get("scenario_id") or "").strip() or last_sid
+                if obj.get("trade_id") is not None:
+                    last_tid = str(obj.get("trade_id") or "").strip() or last_tid
+                if st == "entry_reasoning_sealed_v1":
+                    out["entry_reasoning_sealed_v1"] += 1
+                elif st == "reasoning_router_decision_v1":
+                    out["reasoning_router_decision_v1"] += 1
+                elif st == "reasoning_cost_governor_v1":
+                    out["reasoning_cost_governor_v1"] += 1
+                elif st == "student_decision_authority_v1":
+                    auth_n += 1
+                    ep = obj.get("evidence_payload") if isinstance(obj.get("evidence_payload"), dict) else {}
+                    inner = ep.get("student_decision_authority_v1") if isinstance(ep.get("student_decision_authority_v1"), dict) else {}
+                    ref = inner.get("referee_safety_check_v1")
+                    refd = ref if isinstance(ref, dict) else {}
+                    if refd.get("passed_v1") is True:
+                        out["authority_with_safety_pass_v1"] += 1
+                    else:
+                        out["authority_safety_missing_or_fail_v1"] += 1
+                    if inner.get("decision_source_v1") == ds_rm:
+                        out["decision_source_reasoning_model_v1"] += 1
+                elif st == "student_output_sealed":
+                    sealed_n += 1
+                    ep = obj.get("evidence_payload") if isinstance(obj.get("evidence_payload"), dict) else {}
+                    if ep.get("decision_source_v1") == ds_rm:
+                        out["decision_source_reasoning_model_v1"] += 1
+    except OSError:
+        out["read_error_v1"] = True
+        return out
+    out["student_decision_authority_v1"] = auth_n
+    out["student_output_sealed"] = sealed_n
+    out["authority_sealed_mismatch_v1"] = abs(auth_n - sealed_n) if (auth_n or sealed_n) else 0
+    if auth_n and sealed_n and auth_n != sealed_n:
+        out["authority_sealed_mismatch_v1"] = max(int(out["authority_sealed_mismatch_v1"]), 1)
+    out["last_scenario_id_v1"] = last_sid
+    out["last_trade_id_v1"] = last_tid
+    out["lines_scanned_total"] = scanned
+    out["lines_matched_job"] = matched
+    return out
+
+
 def _node_by_id(nodes: list[dict[str, Any]], node_id: str) -> dict[str, Any] | None:
     for n in nodes:
         if str(n.get("id") or "") == node_id:
@@ -385,6 +489,7 @@ __all__ = [
     "append_learning_trace_event_v1",
     "append_learning_trace_event_from_kwargs_v1",
     "build_learning_trace_event_v1",
+    "count_learning_trace_rm_breadcrumbs_for_job_v1",
     "count_learning_trace_terminal_integrity_v1",
     "learning_trace_memory_sink_active_v1",
     "learning_trace_memory_sink_session_v1",

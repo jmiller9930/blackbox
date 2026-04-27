@@ -65,6 +65,13 @@ def test_trace_proof_ok_synthetic_two_trades(tmp_path: Path) -> None:
             evidence_payload={"reasoning_router_decision_v1": {"final_route_v1": "local_only"}},
             **base,
         )
+        _append(
+            path=p,
+            stage="reasoning_cost_governor_v1",
+            summary="cost",
+            evidence_payload={"reasoning_cost_governor_v1": {"ok_v1": True}},
+            **base,
+        )
         auth_pl = {
             "authority_mode_v1": "shadow",
             "authority_applied_v1": False,

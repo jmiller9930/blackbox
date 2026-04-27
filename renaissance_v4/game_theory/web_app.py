@@ -106,6 +106,7 @@ presets include a starter hypothesis string.
 
 from __future__ import annotations
 
+import copy
 import html
 import json
 import os
@@ -131,7 +132,7 @@ _PATTERN_BANNER_WEBP_PATH = _RV4_ROOT / "assets" / "pattern.webp"
 _PATTERN_GAME_BANNER_BOOT_JS = _GAME_THEORY / "static" / "pattern_game_banner_boot.js"
 
 # Operator-visible web UI bundle version — bump when changing PAGE_HTML (HTML/CSS/JS) so deploys are provable.
-PATTERN_GAME_WEB_UI_VERSION = "2.19.104"
+PATTERN_GAME_WEB_UI_VERSION = "2.19.105"
 
 from renaissance_v4.game_theory.reasoning_model_operator_surface_v1 import (
     get_reasoning_model_operator_snapshot_v1,
@@ -304,7 +305,10 @@ from renaissance_v4.game_theory.live_telemetry_v1 import (
     default_telemetry_dir,
     read_job_telemetry_v1,
 )
-from renaissance_v4.game_theory.learning_trace_events_v1 import count_learning_trace_terminal_integrity_v1
+from renaissance_v4.game_theory.learning_trace_events_v1 import (
+    count_learning_trace_rm_breadcrumbs_for_job_v1,
+    count_learning_trace_terminal_integrity_v1,
+)
 from renaissance_v4.game_theory.learning_trace_instrumentation_v1 import learning_trace_instrumentation_enabled_v1
 from renaissance_v4.game_theory.candle_timeframe_runtime import (
     annotate_scenarios_with_candle_timeframe,
@@ -385,6 +389,40 @@ def _parallel_job_cancel_requested(job_id: str) -> bool:
     with _JOBS_LOCK:
         j = _JOBS.get(job_id)
         return bool(j and j.get("cancel_requested"))
+
+
+def _parallel_job_rm_preflight_progress_cb_v1(job_id: str):
+    """``run_rm_preflight_wiring_v1(progress_cb=…)`` — live snapshots for Results panel polling."""
+
+    jid = str(job_id or "").strip()
+
+    def _cb(panel: dict[str, Any]) -> None:
+        if not isinstance(panel, dict):
+            return
+        try:
+            snap = copy.deepcopy(panel)
+        except Exception:
+            snap = dict(panel)
+        with _JOBS_LOCK:
+            j = _JOBS.get(jid)
+            if isinstance(j, dict):
+                j["rm_preflight_results_panel_v1"] = snap
+
+    return _cb
+
+
+def _parallel_job_store_rm_preflight_panel_from_audit_v1(job_id: str, audit: dict[str, Any] | None) -> None:
+    """Ensure final ``rm_preflight_results_panel_v1`` is on the in-memory job (all return paths)."""
+    if not isinstance(audit, dict):
+        return
+    p = audit.get("rm_preflight_results_panel_v1")
+    if not isinstance(p, dict):
+        return
+    jid = str(job_id or "").strip()
+    with _JOBS_LOCK:
+        j = _JOBS.get(jid)
+        if isinstance(j, dict):
+            j["rm_preflight_results_panel_v1"] = copy.deepcopy(p)
 
 
 def _parallel_job_append_rm_preflight_line_v1(job_id: str, line: str) -> None:
@@ -633,6 +671,125 @@ def _parallel_status_learning_trace_terminal_v1(job_id: str, j: dict[str, Any], 
         "integrity_ok": bool(snap.get("integrity_ok")),
         "trace_file_exists": bool(snap.get("trace_file_exists")),
     }
+
+
+def _build_rm_coupling_integrity_failures_v1(
+    job_id: str,
+    j: dict[str, Any],
+    bc: dict[str, Any],
+    lt: dict[str, Any],
+    panel: dict[str, Any] | None,
+) -> list[str]:
+    """Red-line failures for Results panel — trace + preflight audit, not UI guesses."""
+    fails: list[str] = []
+    jid = str(job_id or "").strip()
+    st = str(j.get("status") or "")
+    stg = (panel or {}).get("stages_v1") if isinstance(panel, dict) else None
+    stg = stg if isinstance(stg, dict) else {}
+    tp = stg.get("terminal_pass_v1")
+    if tp is False:
+        fails.append(
+            "RM PREFLIGHT FAIL — parallel workers must not start; checklist shows where RM and job_id decoupled."
+        )
+        fr = (panel or {}).get("failure_reasons_display_v1") if isinstance(panel, dict) else None
+        if isinstance(fr, list):
+            for x in fr:
+                sx = str(x).strip()
+                if sx:
+                    fails.append("  · " + sx)
+    if str(lt.get("mode") or "") == "live" and lt.get("integrity_ok") is False:
+        fails.append("FAIL: authority vs sealed trade counts differ (learning_trace_events_v1.jsonl).")
+    auth = int(bc.get("student_decision_authority_v1") or 0)
+    ds_rm = int(bc.get("decision_source_reasoning_model_v1") or 0)
+    if bc.get("read_error_v1"):
+        fails.append("FAIL: could not read learning_trace_events_v1.jsonl (OS).")
+    if int(bc.get("authority_sealed_mismatch_v1") or 0) > 0:
+        fails.append("FAIL: authority vs sealed mismatch counter > 0 (trace scan).")
+    if auth > 0 and ds_rm < auth:
+        fails.append(
+            "FAIL: decision_source_v1: reasoning_model not proven on every authority row for this job_id."
+        )
+    sfx = int(bc.get("authority_safety_missing_or_fail_v1") or 0)
+    if auth > 0 and sfx > 0:
+        fails.append("FAIL: referee_safety_check_v1 missing or not passed on one or more authority events.")
+    comp = int(j.get("completed") or 0)
+    if st == "running" and comp >= 1:
+        if not bool(bc.get("trace_file_exists")):
+            fails.append(
+                "FAIL: learning trace file missing while batch reports progress — cannot prove RM breadcrumbs."
+            )
+        elif bool(bc.get("trace_file_exists")):
+            for key in (
+                "entry_reasoning_sealed_v1",
+                "reasoning_router_decision_v1",
+                "reasoning_cost_governor_v1",
+            ):
+                if int(bc.get(key) or 0) <= 0:
+                    fails.append(
+                        f"FAIL: after {comp} scenario(s) finished, trace shows zero {key} rows for job_id={jid!r}."
+                    )
+    if bool(bc.get("scenario_trace_worker_mismatch_v1")):
+        fails.append(
+            "FAIL: scenario drift — worker last scenario_id does not match last trace scenario_id for this job."
+        )
+    pvd = int(bc.get("preflight_breadcrumb_mismatch_count_v1") or 0)
+    if pvd > 0:
+        fails.append(f"FAIL: preflight breadcrumb_mismatch_count_v1={pvd} (sink audit).")
+    return fails
+
+
+def _parallel_status_attach_rm_coupling_v1(job_id: str, j: dict[str, Any], out: dict[str, Any]) -> None:
+    """Expose RM preflight panel + file-backed Student trace counts on ``GET …/status/<job_id>``."""
+    panel = j.get("rm_preflight_results_panel_v1")
+    if isinstance(panel, dict):
+        out["rm_preflight_results_panel_v1"] = copy.deepcopy(panel)
+    lt = out.get("learning_trace_terminal_v1") if isinstance(out.get("learning_trace_terminal_v1"), dict) else {}
+    mode = str(lt.get("mode") or "")
+    if mode == "baseline":
+        out["student_rm_trace_breadcrumbs_v1"] = {
+            "schema": "student_rm_trace_breadcrumbs_v1",
+            "mode": "baseline",
+            "message": "Reasoning Model ↔ job coupling: not applicable — Baseline run.",
+        }
+        out["rm_results_integrity_failures_v1"] = []
+        return
+    if mode in ("trace_unavailable", "trace_disabled"):
+        msg = str(lt.get("message") or "Trace unavailable")
+        out["student_rm_trace_breadcrumbs_v1"] = {
+            "schema": "student_rm_trace_breadcrumbs_v1",
+            "mode": mode,
+            "message": msg,
+        }
+        out["rm_results_integrity_failures_v1"] = [
+            "FAIL: " + msg + " — cannot prove Student RM trace coupling from file."
+        ]
+        return
+    try:
+        bc = count_learning_trace_rm_breadcrumbs_for_job_v1(job_id)
+    except (OSError, TypeError, ValueError, RuntimeError) as e:
+        out["student_rm_trace_breadcrumbs_v1"] = {
+            "schema": "student_rm_trace_breadcrumbs_v1",
+            "mode": "error",
+            "trace_scan_error_v1": f"{type(e).__name__}: {e}",
+        }
+        out["rm_results_integrity_failures_v1"] = [f"FAIL: trace scan error ({type(e).__name__})."]
+        return
+    bc_out = dict(bc)
+    stj = str(j.get("status") or "")
+    lw = str(j.get("last_scenario_id") or "").strip()
+    lts = str(bc_out.get("last_scenario_id_v1") or "").strip()
+    bc_out["scenario_trace_worker_mismatch_v1"] = bool(lw and lts and lw != lts and stj == "running")
+    pvd = 0
+    if isinstance(panel, dict):
+        det = panel.get("preflight_sink_detail_v1")
+        if isinstance(det, dict):
+            pvd = int(det.get("breadcrumb_mismatch_count_v1") or 0)
+    bc_out["preflight_breadcrumb_mismatch_count_v1"] = pvd
+    fails = _build_rm_coupling_integrity_failures_v1(
+        job_id, j, bc_out, lt, panel if isinstance(panel, dict) else None
+    )
+    out["student_rm_trace_breadcrumbs_v1"] = bc_out
+    out["rm_results_integrity_failures_v1"] = fails
 
 
 def _slug_preset_display_name(name: str) -> str:
@@ -1494,6 +1651,7 @@ def create_app() -> Flask:
                 "operator_run_mode_surface_v1": orsf,
                 "reasoning_tile_run_kind_v1": reasoning_tile_run_kind_v1,
                 "rm_preflight_terminal_lines_v1": [],
+                "rm_preflight_results_panel_v1": None,
                 "operator_exam_brain_profile_v1": _brain,
                 "student_rm_contract_applies_v1": _student_rm_contract,
                 "rm_preflight_should_skip_reason_enqueue_v1": _sk_pf,
@@ -1559,7 +1717,9 @@ def create_app() -> Flask:
                     exam_run_contract_request_v1=exam_req if isinstance(exam_req, dict) else None,
                     operator_batch_audit=operator_batch_audit if isinstance(operator_batch_audit, dict) else None,
                     cancel_check=lambda: _parallel_job_cancel_requested(job_id),
+                    progress_cb=_parallel_job_rm_preflight_progress_cb_v1(job_id),
                 )
+                _parallel_job_store_rm_preflight_panel_from_audit_v1(job_id, pf_audit)
                 if pf_audit.get("cancelled_during_preflight_v1"):
                     err_c = str(
                         pf_audit.get("human_message_v1")
@@ -2080,6 +2240,7 @@ def create_app() -> Flask:
             ), 404
         out: dict[str, Any] = {
             "ok": True,
+            "job_id": job_id,
             "status": j["status"],
             "total": j["total"],
             "completed": j["completed"],
@@ -2136,6 +2297,10 @@ def create_app() -> Flask:
         if j["status"] == "done" and j.get("result"):
             out["result"] = j["result"]
         _parallel_status_learning_trace_terminal_v1(job_id, j, out)
+        try:
+            _parallel_status_attach_rm_coupling_v1(job_id, j, out)
+        except Exception:
+            out.setdefault("rm_results_integrity_failures_v1", [])
         try:
             out["operator_rm_gates_v1"] = _build_operator_rm_gates_v1(j, job_id)
         except Exception:
@@ -6164,6 +6329,33 @@ PAGE_HTML = """<!DOCTYPE html>
       font-weight: 600;
     }
     .btn-rename-preset:disabled { opacity: 0.45; cursor: not-allowed; }
+    .pg-rm-job-binding-wrap {
+      margin: 0 0 14px;
+      padding: 10px 12px 12px;
+      border-radius: 10px;
+      background: rgba(0, 0, 0, 0.05);
+      border: 1px solid var(--pg-line);
+    }
+    .pg-rm-job-binding-hint { margin: 4px 0 10px !important; font-size: 0.76rem !important; line-height: 1.45; }
+    .pg-rm-job-binding-failures {
+      margin: 0 0 10px;
+      padding: 8px 10px;
+      border-radius: 8px;
+      background: #fdecec;
+      border: 1px solid #e0a0a0;
+      color: #8a2222;
+      font-weight: 600;
+      font-size: 0.78rem;
+      line-height: 1.4;
+      white-space: pre-wrap;
+    }
+    .pg-rm-job-binding-pre {
+      margin: 0;
+      max-height: 22rem;
+      overflow: auto;
+      font-size: 0.72rem;
+      line-height: 1.38;
+    }
     .policy-outcome-panel .hint { font-size: 0.78rem; color: var(--pg-muted); margin: 0 0 10px 0; line-height: 1.4; }
     .pg-evidence-panel .policy-outcome-panel {
       margin: 0;
@@ -6879,6 +7071,13 @@ PAGE_HTML = """<!DOCTYPE html>
                   <button type="button" class="pg-tab" data-tab="scorecard" role="tab">Scorecard</button>
                 </div>
                 <div id="pgEvidenceOutcomes" class="pg-evidence-panel">
+                  <div id="pgRmJobBindingWrap" class="pg-rm-job-binding-wrap" hidden aria-live="polite">
+                    <p class="sls-title">Reasoning Model ↔ job binding (trace-backed)</p>
+                    <p class="hint pg-rm-job-binding-hint">Rifle = RM path · Shell = this batch <code>job_id</code>.
+                    Proof below is from RM preflight audit (memory sink) and from <code>learning_trace_events_v1.jsonl</code> scans — not inferred in the browser.</p>
+                    <div id="pgRmJobBindingFailures" class="pg-rm-job-binding-failures" hidden></div>
+                    <pre id="pgRmJobBindingPre" class="pg-pre-json pg-rm-job-binding-pre"></pre>
+                  </div>
                   <div class="policy-outcome-panel" id="policyOutcomePanel" hidden>
                     <p class="hint">Trade win % per scenario; session from cumulative P&amp;L.</p>
                     <div class="pg-table-scroll">
@@ -9188,6 +9387,130 @@ PAGE_HTML = """<!DOCTYPE html>
       if (btn) btn.hidden = false;
     }
 
+    function updatePgRmJobBindingPanelFromParallelStatus(pj) {
+      const wrap = document.getElementById('pgRmJobBindingWrap');
+      const failEl = document.getElementById('pgRmJobBindingFailures');
+      const pre = document.getElementById('pgRmJobBindingPre');
+      if (!wrap || !failEl || !pre) return;
+      if (!pj || typeof pj !== 'object') {
+        wrap.hidden = true;
+        return;
+      }
+      const batchSt = pj.status;
+      const active =
+        batchSt === 'preflight' ||
+        batchSt === 'running' ||
+        batchSt === 'done' ||
+        batchSt === 'error' ||
+        batchSt === 'cancelled';
+      const panel = pj.rm_preflight_results_panel_v1;
+      const bc = pj.student_rm_trace_breadcrumbs_v1;
+      const fails = pj.rm_results_integrity_failures_v1;
+      const jidHas = pj.job_id && String(pj.job_id).trim();
+      if (!panel && !bc && !(active && jidHas)) {
+        wrap.hidden = true;
+        return;
+      }
+      wrap.hidden = false;
+      const lines = [];
+      lines.push('=== Active job_id (batch) ===');
+      lines.push(jidHas ? String(pj.job_id) : '(job_id not on status — stale client payload?)');
+      lines.push('');
+      if (panel && typeof panel === 'object') {
+        lines.push('=== RM preflight checklist (audit / memory sink) ===');
+        const lv = panel.lines_v1;
+        if (Array.isArray(lv) && lv.length) {
+          for (let i = 0; i < lv.length; i++) lines.push(String(lv[i]));
+        } else {
+          lines.push('(preflight panel lines not populated yet — poll again)');
+        }
+        const sid = panel.active_scenario_id_v1 != null ? String(panel.active_scenario_id_v1) : '—';
+        const tid = panel.active_trade_id_v1 != null ? String(panel.active_trade_id_v1) : '—';
+        lines.push('');
+        lines.push('Preflight bound ids: scenario_id=' + sid + ' · trade_id=' + tid);
+        const det = panel.preflight_sink_detail_v1;
+        if (det && typeof det === 'object') {
+          lines.push(
+            'Preflight sink summary: ok_v1=' +
+              String(det.ok_v1) +
+              ' · decision_source_reasoning_model_count_v1=' +
+              String(det.decision_source_reasoning_model_count_v1 != null ? det.decision_source_reasoning_model_count_v1 : '—') +
+              ' · breadcrumb_mismatch_count_v1=' +
+              String(det.breadcrumb_mismatch_count_v1 != null ? det.breadcrumb_mismatch_count_v1 : '—')
+          );
+        }
+        lines.push('');
+      } else if (active && jidHas) {
+        lines.push('=== RM preflight checklist ===');
+        lines.push('(waiting for first preflight panel snapshot from server)');
+        lines.push('');
+      }
+      if (bc && typeof bc === 'object') {
+        lines.push('=== Student run — learning_trace_events_v1.jsonl (this job_id only) ===');
+        if (
+          bc.mode === 'baseline' ||
+          bc.mode === 'trace_unavailable' ||
+          bc.mode === 'trace_disabled' ||
+          bc.mode === 'error'
+        ) {
+          lines.push(String(bc.message || bc.trace_scan_error_v1 || '—'));
+        } else {
+          lines.push(
+            'entry_reasoning_sealed_v1: ' +
+              String(bc.entry_reasoning_sealed_v1 != null ? bc.entry_reasoning_sealed_v1 : '—')
+          );
+          lines.push(
+            'reasoning_router_decision_v1: ' +
+              String(bc.reasoning_router_decision_v1 != null ? bc.reasoning_router_decision_v1 : '—')
+          );
+          lines.push(
+            'reasoning_cost_governor_v1: ' +
+              String(bc.reasoning_cost_governor_v1 != null ? bc.reasoning_cost_governor_v1 : '—')
+          );
+          lines.push(
+            'student_decision_authority_v1: ' +
+              String(bc.student_decision_authority_v1 != null ? bc.student_decision_authority_v1 : '—')
+          );
+          lines.push('student_output_sealed: ' + String(bc.student_output_sealed != null ? bc.student_output_sealed : '—'));
+          lines.push(
+            'decision_source_reasoning_model_v1: ' +
+              String(bc.decision_source_reasoning_model_v1 != null ? bc.decision_source_reasoning_model_v1 : '—')
+          );
+          lines.push(
+            'authority safety pass / missing_or_fail: ' +
+              String(bc.authority_with_safety_pass_v1 != null ? bc.authority_with_safety_pass_v1 : '—') +
+              ' / ' +
+              String(bc.authority_safety_missing_or_fail_v1 != null ? bc.authority_safety_missing_or_fail_v1 : '—')
+          );
+          lines.push(
+            'authority_sealed_mismatch_v1: ' +
+              String(bc.authority_sealed_mismatch_v1 != null ? bc.authority_sealed_mismatch_v1 : '—')
+          );
+          lines.push(
+            'last_scenario_id_v1 (trace): ' + String(bc.last_scenario_id_v1 != null ? bc.last_scenario_id_v1 : '—')
+          );
+          lines.push('last_trade_id_v1 (trace): ' + String(bc.last_trade_id_v1 != null ? bc.last_trade_id_v1 : '—'));
+          lines.push(
+            'preflight_breadcrumb_mismatch_count_v1 (from last preflight audit): ' +
+              String(bc.preflight_breadcrumb_mismatch_count_v1 != null ? bc.preflight_breadcrumb_mismatch_count_v1 : '—')
+          );
+          lines.push(
+            'scenario_trace_worker_mismatch_v1: ' + String(bc.scenario_trace_worker_mismatch_v1 === true ? 'true' : 'false')
+          );
+          lines.push('lines_matched_job: ' + String(bc.lines_matched_job != null ? bc.lines_matched_job : '—'));
+        }
+        lines.push('');
+      }
+      if (Array.isArray(fails) && fails.length) {
+        failEl.hidden = false;
+        failEl.textContent = fails.join('\\n');
+      } else {
+        failEl.hidden = true;
+        failEl.textContent = '';
+      }
+      pre.textContent = lines.join('\\n');
+    }
+
     function renderLiveTelemetryPanel(pj, opts) {
       const el = document.getElementById('liveTelemetryPanel');
       const roll = document.getElementById('telemetryRollingLog');
@@ -9433,6 +9756,7 @@ PAGE_HTML = """<!DOCTYPE html>
         pj, batchActive, completed, total, elapsed, hot, winStr, lm, echo, recipe
       );
       updateFocusTerminalOverviewTile();
+      updatePgRmJobBindingPanelFromParallelStatus(pj);
     }
 
     function updateFocusTerminalOverviewTile() {
