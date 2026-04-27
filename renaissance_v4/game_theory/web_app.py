@@ -402,6 +402,137 @@ def _parallel_job_append_rm_preflight_line_v1(job_id: str, line: str) -> None:
     print(f"[pattern_game_parallel] job_id={jid} {msg}", file=sys.stderr, flush=True)
 
 
+def _parallel_job_store_rm_gate_summary_v1(job_id: str, summary: dict[str, Any]) -> None:
+    """Persist RM / job-id gate proof for status polling and operator tape."""
+    jid = str(job_id or "").strip()
+    if not jid or not isinstance(summary, dict):
+        return
+    with _JOBS_LOCK:
+        j = _JOBS.get(jid)
+        if isinstance(j, dict):
+            j["rm_gate_summary_v1"] = dict(summary)
+
+
+def _append_enqueue_operator_gate_tape_v1(job_id: str) -> None:
+    """First tape lines: contract applies, gates pending (before long RM preflight work)."""
+    jid = str(job_id or "").strip()
+    if not jid:
+        return
+    with _JOBS_LOCK:
+        j = _JOBS.get(jid)
+        contract = bool(j and j.get("student_rm_contract_applies_v1"))
+        brain = str((j or {}).get("operator_exam_brain_profile_v1") or "")
+    if contract:
+        _parallel_job_append_rm_preflight_line_v1(
+            jid,
+            "GATE: Student RM contract applies = YES "
+            f"(brain_profile={brain or '?'}) — RM preflight must PASS before parallel workers run.",
+        )
+        _parallel_job_append_rm_preflight_line_v1(
+            jid,
+            "GATE: RM online (mandate) = PENDING — becomes ENFORCED only after preflight PASS.",
+        )
+        _parallel_job_append_rm_preflight_line_v1(
+            jid,
+            "GATE: JOB-ID loaded in RM trace = PENDING — verified when memory sink rows carry this batch job_id.",
+        )
+    else:
+        _parallel_job_append_rm_preflight_line_v1(
+            jid,
+            "GATE: Student RM contract applies = NO (baseline / cold Student path) — no Student RM wiring mandate.",
+        )
+        _parallel_job_append_rm_preflight_line_v1(
+            jid,
+            "GATE: RM online (mandate) = N/A — preflight may still run as optional policy smoke.",
+        )
+        _parallel_job_append_rm_preflight_line_v1(
+            jid,
+            "GATE: JOB-ID in RM trace = N/A for mandate (binding checks apply when Student RM contract is active).",
+        )
+
+
+def _build_operator_rm_gates_v1(j: dict[str, Any], job_id: str) -> dict[str, Any]:
+    """Structured gate snapshot for UI + curl; aligned with Student RM preflight contract."""
+    jid = str(job_id or "").strip()
+    contract = bool(j.get("student_rm_contract_applies_v1"))
+    brain = str(j.get("operator_exam_brain_profile_v1") or "")
+    sk = j.get("rm_preflight_should_skip_reason_enqueue_v1")
+    summary = j.get("rm_gate_summary_v1") if isinstance(j.get("rm_gate_summary_v1"), dict) else None
+    st = str(j.get("status") or "").strip().lower()
+    lines: list[str] = [
+        "── Operator gates (this job) ──",
+    ]
+    out: dict[str, Any] = {
+        "schema": "operator_rm_gates_v1",
+        "job_id": jid,
+        "student_rm_contract_applies_v1": contract,
+        "operator_exam_brain_profile_v1": brain or None,
+        "rm_preflight_should_skip_reason_enqueue_v1": sk,
+    }
+
+    if not contract:
+        out["rm_online_enforced_v1"] = "not_applicable"
+        out["job_id_loaded_in_rm_trace_v1"] = "not_applicable"
+        lines.append("RM online enforced (Student RM mandate): NOT APPLICABLE — baseline / cold profile.")
+        lines.append("JOB-ID loaded in RM trace (preflight proof): NOT APPLICABLE for this profile.")
+    elif summary is None and st == "preflight":
+        out["rm_online_enforced_v1"] = "pending"
+        out["job_id_loaded_in_rm_trace_v1"] = "pending"
+        lines.append("RM online enforced (Student RM mandate): PENDING — RM preflight running.")
+        lines.append("JOB-ID loaded in RM trace: PENDING — proof completes at end of preflight.")
+    elif summary is None and st == "running":
+        out["rm_online_enforced_v1"] = "yes"
+        out["job_id_loaded_in_rm_trace_v1"] = "yes"
+        lines.append("RM online enforced: YES — batch is in parallel phase (preflight already satisfied).")
+        lines.append("JOB-ID in RM trace: YES — preflight completed before workers started (see tape above).")
+    elif summary is None:
+        out["rm_online_enforced_v1"] = "unknown"
+        out["job_id_loaded_in_rm_trace_v1"] = "unknown"
+        lines.append("RM online enforced: UNKNOWN — job state incomplete for gate summary.")
+        lines.append("JOB-ID in RM trace: UNKNOWN.")
+    else:
+        po = str(summary.get("preflight_outcome_v1") or "")
+        if po == "passed":
+            ok_rm = bool(summary.get("rm_online_enforced_proof_v1"))
+            jbind = summary.get("job_id_loaded_in_rm_trace_v1")
+            out["rm_online_enforced_v1"] = "yes" if ok_rm else "no"
+            if jbind is True:
+                out["job_id_loaded_in_rm_trace_v1"] = "yes"
+            elif jbind is False:
+                out["job_id_loaded_in_rm_trace_v1"] = "no"
+            else:
+                out["job_id_loaded_in_rm_trace_v1"] = "unknown"
+            lines.append(
+                "RM online enforced (Student RM mandate): "
+                + ("YES — preflight PASS." if ok_rm else "NO — preflight reported failure proof.")
+            )
+            lines.append(
+                "JOB-ID loaded in RM trace (preflight): "
+                + ("YES — required stages carried batch job_id." if jbind is True else "NO — binding or trace incomplete." if jbind is False else "UNKNOWN.")
+            )
+        elif po == "skipped_policy":
+            out["rm_online_enforced_v1"] = "not_applicable"
+            out["job_id_loaded_in_rm_trace_v1"] = "not_applicable"
+            lines.append("RM online enforced: NOT APPLICABLE — RM preflight skipped by policy (" + str(sk or "") + ").")
+            lines.append("JOB-ID in RM trace (preflight): NOT APPLICABLE (preflight skipped).")
+        elif po == "cancelled":
+            out["rm_online_enforced_v1"] = "cancelled"
+            out["job_id_loaded_in_rm_trace_v1"] = "cancelled"
+            lines.append("RM online enforced: CANCELLED — operator or system stopped during preflight.")
+            lines.append("JOB-ID in RM trace: CANCELLED — parallel workers were not started.")
+        else:
+            out["rm_online_enforced_v1"] = "no"
+            out["job_id_loaded_in_rm_trace_v1"] = "no"
+            lines.append("RM online enforced: NO — RM preflight did not complete successfully.")
+            lines.append("JOB-ID in RM trace: NO — inspect rm_preflight_audit_v1 / Results JSON.")
+        miss = summary.get("preflight_missing_stages_v1")
+        if isinstance(miss, list) and miss:
+            lines.append("Preflight missing / mismatch keys: " + ", ".join(str(x) for x in miss[:16]))
+    lines.append("──")
+    out["detail_lines_v1"] = lines
+    return out
+
+
 def _merge_scorecard_with_inflight(
     file_rows: list[dict[str, Any]],
     *,
@@ -1327,6 +1458,22 @@ def create_app() -> Flask:
             if orsf == "student"
             else ("baseline" if orsf == "baseline" else "unknown")
         )
+        from renaissance_v4.game_theory.exam_run_contract_v1 import (
+            STUDENT_BRAIN_PROFILE_BASELINE_NO_MEMORY_NO_LLM_V1,
+            normalize_student_reasoning_mode_v1,
+        )
+        from renaissance_v4.game_theory.rm_preflight_wiring_v1 import should_skip_rm_preflight_v1
+
+        _ex_rq = exam_req if isinstance(exam_req, dict) else {}
+        _brain = normalize_student_reasoning_mode_v1(
+            str(
+                _ex_rq.get("student_brain_profile_v1")
+                or _ex_rq.get("student_reasoning_mode")
+                or ""
+            )
+        )
+        _sk_pf = should_skip_rm_preflight_v1(exam_run_contract_request_v1=_ex_rq if _ex_rq else None)
+        _student_rm_contract = _brain != STUDENT_BRAIN_PROFILE_BASELINE_NO_MEMORY_NO_LLM_V1
         with _JOBS_LOCK:
             _JOBS[job_id] = {
                 "status": "preflight",
@@ -1347,6 +1494,9 @@ def create_app() -> Flask:
                 "operator_run_mode_surface_v1": orsf,
                 "reasoning_tile_run_kind_v1": reasoning_tile_run_kind_v1,
                 "rm_preflight_terminal_lines_v1": [],
+                "operator_exam_brain_profile_v1": _brain,
+                "student_rm_contract_applies_v1": _student_rm_contract,
+                "rm_preflight_should_skip_reason_enqueue_v1": _sk_pf,
             }
 
         def run_job() -> None:
@@ -1391,6 +1541,7 @@ def create_app() -> Flask:
             results: list[dict[str, Any]] | None = None
             referee_parallel_completed_emit_v1 = False
             try:
+                _append_enqueue_operator_gate_tape_v1(job_id)
                 _parallel_job_append_rm_preflight_line_v1(job_id, "RM PREFLIGHT START")
                 _parallel_job_append_rm_preflight_line_v1(
                     job_id,
@@ -1413,6 +1564,20 @@ def create_app() -> Flask:
                     err_c = str(
                         pf_audit.get("human_message_v1")
                         or "Stopped by operator during RM preflight — parallel workers were not started."
+                    )
+                    _parallel_job_store_rm_gate_summary_v1(
+                        job_id,
+                        {
+                            "preflight_outcome_v1": "cancelled",
+                            "rm_online_enforced_proof_v1": False,
+                            "job_id_loaded_in_rm_trace_v1": False,
+                        },
+                    )
+                    _parallel_job_append_rm_preflight_line_v1(
+                        job_id, "GATE: RM online (mandate) = CANCELLED — parallel workers not started."
+                    )
+                    _parallel_job_append_rm_preflight_line_v1(
+                        job_id, "GATE: JOB-ID in RM trace = CANCELLED — no parallel Referee batch."
                     )
                     _parallel_job_append_rm_preflight_line_v1(job_id, "RM PREFLIGHT CANCELLED (operator)")
                     exam_line_c = _exam_run_line_meta_for_parallel_job_v1(
@@ -1452,6 +1617,7 @@ def create_app() -> Flask:
                                 "cancelled": True,
                                 "rm_preflight_audit_v1": pf_audit,
                                 "batch_timing": timing_c,
+                                "operator_rm_gates_v1": _build_operator_rm_gates_v1(jc, job_id),
                             }
                     return
                 if not pf_audit.get("ok_v1"):
@@ -1465,6 +1631,24 @@ def create_app() -> Flask:
                     _parallel_job_append_rm_preflight_line_v1(
                         job_id,
                         "RM PREFLIGHT FAIL: " + (err_msg[:900] if len(err_msg) > 900 else err_msg),
+                    )
+                    _ms = pf_audit.get("missing_stages_v1")
+                    _parallel_job_store_rm_gate_summary_v1(
+                        job_id,
+                        {
+                            "preflight_outcome_v1": "failed",
+                            "rm_online_enforced_proof_v1": False,
+                            "job_id_loaded_in_rm_trace_v1": False,
+                            "preflight_missing_stages_v1": _ms if isinstance(_ms, list) else [],
+                            "human_message_v1": err_msg[:1200],
+                        },
+                    )
+                    _parallel_job_append_rm_preflight_line_v1(
+                        job_id, "GATE: RM online (mandate) = FAILED — Student RM contract blocks parallel start."
+                    )
+                    _parallel_job_append_rm_preflight_line_v1(
+                        job_id,
+                        "GATE: JOB-ID loaded in RM trace = FAILED — see rm_preflight_audit_v1 / missing_stages_v1 in Results.",
                     )
                     exam_line_pf = _exam_run_line_meta_for_parallel_job_v1(
                         exam_req=exam_req if isinstance(exam_req, dict) else None,
@@ -1506,9 +1690,57 @@ def create_app() -> Flask:
                                 "rm_preflight_audit_v1": pf_audit,
                                 "batch_timing": timing_pf,
                                 "status_v1": FAILED_PREFLIGHT_STATUS_V1,
+                                "operator_rm_gates_v1": _build_operator_rm_gates_v1(jpf, job_id),
                             }
                     return
 
+                if pf_audit.get("skipped_v1"):
+                    _parallel_job_store_rm_gate_summary_v1(
+                        job_id,
+                        {
+                            "preflight_outcome_v1": "skipped_policy",
+                            "rm_online_enforced_proof_v1": None,
+                            "job_id_loaded_in_rm_trace_v1": None,
+                            "skip_reason_v1": pf_audit.get("skip_reason_v1"),
+                        },
+                    )
+                    _parallel_job_append_rm_preflight_line_v1(
+                        job_id,
+                        "GATE: RM online (mandate) = NOT APPLICABLE — preflight skipped for this profile/policy.",
+                    )
+                    _parallel_job_append_rm_preflight_line_v1(
+                        job_id,
+                        "GATE: JOB-ID in RM trace = NOT APPLICABLE — no Student RM binding proof for this run.",
+                    )
+                else:
+                    _bind = (
+                        pf_audit.get("rm_preflight_job_binding_audit_v1")
+                        if isinstance(pf_audit.get("rm_preflight_job_binding_audit_v1"), dict)
+                        else {}
+                    )
+                    _jbind = (
+                        _bind.get("trace_job_binding_ok_v1") is True
+                        and _bind.get("scenario_binding_ok_v1") is True
+                    )
+                    _parallel_job_store_rm_gate_summary_v1(
+                        job_id,
+                        {
+                            "preflight_outcome_v1": "passed",
+                            "rm_online_enforced_proof_v1": True,
+                            "job_id_loaded_in_rm_trace_v1": _jbind,
+                            "rm_preflight_job_binding_audit_v1": _bind,
+                        },
+                    )
+                    _parallel_job_append_rm_preflight_line_v1(
+                        job_id,
+                        "GATE: RM online (mandate) = ENFORCED — RM preflight PASS (Student RM path active).",
+                    )
+                    _parallel_job_append_rm_preflight_line_v1(
+                        job_id,
+                        "GATE: JOB-ID loaded in RM trace = "
+                        + ("TRUE" if _jbind else "FALSE")
+                        + " — required trace stages must carry this job_id + scenario binding.",
+                    )
                 pass_msg = "RM PREFLIGHT PASS"
                 if pf_audit.get("skipped_v1"):
                     pass_msg += " (skipped: " + str(pf_audit.get("skip_reason_v1") or "policy") + ")"
@@ -1563,6 +1795,12 @@ def create_app() -> Flask:
                     j_go = _JOBS.get(job_id)
                     if j_go:
                         j_go["status"] = "running"
+                _parallel_job_append_rm_preflight_line_v1(
+                    job_id,
+                    "PARALLEL: workers starting — Referee replay; telemetry files use job_id="
+                    + str(job_id)
+                    + " (RM trace job-id binding was proven in preflight only).",
+                )
                 emit_referee_execution_started_v1(
                     job_id=job_id, fingerprint=lt_fp, scenario_total=len(scenarios)
                 )
@@ -1717,6 +1955,7 @@ def create_app() -> Flask:
                 with _JOBS_LOCK:
                     j = _JOBS.get(job_id)
                     if j:
+                        payload["operator_rm_gates_v1"] = _build_operator_rm_gates_v1(j, job_id)
                         j["status"] = "done"
                         j["completed"] = len(results)
                         j["result"] = payload
@@ -1897,6 +2136,10 @@ def create_app() -> Flask:
         if j["status"] == "done" and j.get("result"):
             out["result"] = j["result"]
         _parallel_status_learning_trace_terminal_v1(job_id, j, out)
+        try:
+            out["operator_rm_gates_v1"] = _build_operator_rm_gates_v1(j, job_id)
+        except Exception:
+            pass
         return jsonify(out)
 
     @app.post("/api/run-parallel/cancel/<job_id>")
@@ -8966,6 +9209,11 @@ PAGE_HTML = """<!DOCTYPE html>
       }
       const rpl =
         pj && Array.isArray(pj.rm_preflight_terminal_lines_v1) ? pj.rm_preflight_terminal_lines_v1 : [];
+      const og = pj && pj.operator_rm_gates_v1;
+      const ogKey =
+        og && typeof og === 'object'
+          ? String(og.rm_online_enforced_v1 || '') + '|' + String(og.job_id_loaded_in_rm_trace_v1 || '')
+          : '';
       let hot = null;
       if (rows.length) {
         rows.sort(
@@ -8988,6 +9236,12 @@ PAGE_HTML = """<!DOCTYPE html>
       if (rpl.length) {
         for (let ri = 0; ri < rpl.length; ri++) {
           lines.push(String(rpl[ri]));
+        }
+        lines.push('');
+      }
+      if (og && Array.isArray(og.detail_lines_v1) && og.detail_lines_v1.length) {
+        for (let gi = 0; gi < og.detail_lines_v1.length; gi++) {
+          lines.push(String(og.detail_lines_v1[gi]));
         }
         lines.push('');
       }
@@ -9121,7 +9375,9 @@ PAGE_HTML = """<!DOCTYPE html>
         String(hot && hot.candidate_phase != null ? hot.candidate_phase : '') +
         '|pf:' +
         String(rpl.length) +
-        ltAstr;
+        ltAstr +
+        '|og:' +
+        ogKey;
       if (roll && rpl.length > _pgRmPreflightLineIdx) {
         for (let ri = _pgRmPreflightLineIdx; ri < rpl.length; ri++) {
           const tpf = document.createElement('div');
