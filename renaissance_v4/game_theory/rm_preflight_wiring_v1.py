@@ -5,11 +5,13 @@ RM preflight — in-memory wiring validation before parallel batch (Directive: r
 * **Decision-snapshot path (non-baseline Student):** builds ``student_decision_packet_v1`` from SQLite + manifest,
   runs ``run_entry_reasoning_pipeline_preflight_v1`` (tail-capped bars, router local-only) → authority →
   deterministic stub seal — **no** Referee replay worker
-  and **no** wait for closed trades. Wall clock capped by ``PATTERN_GAME_RM_PREFLIGHT_DECISION_SNAPSHOT_TIMEOUT_S``
-  (default **5**; fail ``preflight_timeout_decision_snapshot_v1``). Preflight entry-reasoning wall time is
-  additionally capped by ``PATTERN_GAME_RM_PREFLIGHT_PIPELINE_MAX_S`` (default **2**;
-  fail ``preflight_timeout_preflight_pipeline_v1``) with ``PATTERN_GAME_RM_PREFLIGHT_ENTRY_MAX_BARS`` (default **64**)
-  tail slice for indicator work.
+  and **no** wait for closed trades. In-process mode still uses ``PATTERN_GAME_RM_PREFLIGHT_DECISION_SNAPSHOT_TIMEOUT_S``
+  (default **5**; fail ``preflight_timeout_decision_snapshot_v1``) as a monotonic inner deadline.
+  Entry reasoning uses a tail slice (``PATTERN_GAME_RM_PREFLIGHT_ENTRY_MAX_BARS``, default **64**).
+* **Hard wall (default on):** decision-snapshot preflight runs in a **spawn** subprocess and the parent
+  ``terminate()``/``kill()`` the child if ``time.time()`` exceeds ``PATTERN_GAME_RM_PREFLIGHT_HARD_TIMEOUT_S``
+  (defaults to the decision-snapshot timeout). Failure code: ``preflight_hard_timeout_v1``. Set
+  ``PATTERN_GAME_RM_PREFLIGHT_SUBPROCESS_ISOLATION=0`` for in-process mode (e.g. tests that patch the snapshot).
 * Bounded replay + ``_worker_run_one`` remain available for full exam / grading flows elsewhere; preflight does
   not depend on them.
 * Validates required RM trace stages in the sink — **no** ``learning_trace_events_v1.jsonl`` writes.
@@ -21,7 +23,9 @@ skip RM preflight via env (contract).
 from __future__ import annotations
 
 import copy
+import multiprocessing
 import os
+import queue
 import sqlite3
 import time
 from collections import defaultdict
@@ -462,6 +466,13 @@ def map_rm_preflight_missing_to_operator_display_v1(missing: list[str]) -> list[
                 "RM preflight entry-reasoning SLA exceeded — exceeded "
                 "PATTERN_GAME_RM_PREFLIGHT_PIPELINE_MAX_S (preflight pipeline only)"
             )
+        elif s == "preflight_hard_timeout_v1":
+            out.append(
+                "RM preflight hard timeout — process terminated; exceeded "
+                "PATTERN_GAME_RM_PREFLIGHT_HARD_TIMEOUT_S (wall clock, subprocess isolation)"
+            )
+        elif s == "preflight_decision_snapshot_subprocess_failed_v1":
+            out.append("RM preflight subprocess failed (see human_message_v1)")
         else:
             out.append(s)
     return out
@@ -474,6 +485,27 @@ def _rm_preflight_decision_snapshot_timeout_s_v1() -> float:
     except (TypeError, ValueError):
         t = 5.0
     return max(2.0, min(t, 30.0))
+
+
+def _rm_preflight_hard_timeout_s_v1() -> float:
+    """
+    Wall-clock envelope for **entire** decision-snapshot preflight when subprocess isolation is on.
+    Defaults to the decision-snapshot timeout if ``PATTERN_GAME_RM_PREFLIGHT_HARD_TIMEOUT_S`` unset.
+    """
+    raw = (os.environ.get("PATTERN_GAME_RM_PREFLIGHT_HARD_TIMEOUT_S") or "").strip()
+    if not raw:
+        return float(_rm_preflight_decision_snapshot_timeout_s_v1())
+    try:
+        t = float(raw)
+    except (TypeError, ValueError):
+        return float(_rm_preflight_decision_snapshot_timeout_s_v1())
+    return max(1.0, min(t, 120.0))
+
+
+def _rm_preflight_subprocess_isolation_enabled_v1() -> bool:
+    """When true (default), decision-snapshot preflight runs in a spawn child and is SIGKILL/terminate on SLA."""
+    v = (os.environ.get("PATTERN_GAME_RM_PREFLIGHT_SUBPROCESS_ISOLATION") or "1").strip().lower()
+    return v not in ("0", "false", "off", "no")
 
 
 class _PreflightPhaseAuditCollectorV1:
@@ -1124,6 +1156,130 @@ def run_rm_preflight_decision_snapshot_v1(
             pass
 
 
+def _rm_preflight_decision_snapshot_subprocess_entry_v1(
+    result_q: Any,
+    payload: dict[str, Any],
+) -> None:
+    """Spawn entrypoint — isolated interpreter; must stay top-level for pickling."""
+    try:
+        ddl_wall = float(payload["deadline_wall_time"])
+        rem = ddl_wall - time.time()
+        mono_deadline = time.monotonic() + max(0.05, rem)
+        t0 = time.monotonic()
+        jid = str(payload.get("job_id") or "").strip()
+        with learning_trace_memory_sink_session_v1() as sink:
+            with rm_preflight_seam_early_exit_session_v1():
+                panel = _new_rm_preflight_results_panel_v1(jid)
+                branch = run_rm_preflight_decision_snapshot_v1(
+                    scenario=payload["scenario"],
+                    job_id=jid,
+                    exam_run_contract_request_v1=payload.get("exam_run_contract_request_v1"),
+                    operator_batch_audit=payload.get("operator_batch_audit"),
+                    panel=panel,
+                    cancel_check=None,
+                    progress_cb=None,
+                    t0=t0,
+                    deadline=mono_deadline,
+                )
+        result_q.put(
+            {
+                "kind": "done",
+                "branch": copy.deepcopy(branch),
+                "sink": copy.deepcopy(sink),
+                "panel": copy.deepcopy(panel),
+            }
+        )
+    except Exception as e:
+        try:
+            result_q.put({"kind": "error", "message": f"{type(e).__name__}: {e}"})
+        except Exception:
+            pass
+
+
+def _rm_preflight_run_decision_snapshot_isolated_v1(
+    *,
+    scenario: dict[str, Any],
+    job_id: str,
+    exam_run_contract_request_v1: dict[str, Any] | None,
+    operator_batch_audit: dict[str, Any] | None,
+    cancel_check: Callable[[], bool] | None,
+    hard_timeout_s: float,
+) -> dict[str, Any]:
+    """
+    Run decision-snapshot preflight in a **spawn** subprocess; ``terminate()``/``kill()`` on SLA breach.
+
+    ``cancel_check`` is polled in the parent only (child has no cancel callback).
+    ``progress_cb`` is not invoked in the child (use telemetry after merge).
+    """
+    ctx = multiprocessing.get_context("spawn")
+    result_q: multiprocessing.Queue = ctx.Queue(maxsize=2)
+    deadline_wall = time.time() + float(hard_timeout_s)
+    payload: dict[str, Any] = {
+        "scenario": scenario,
+        "job_id": str(job_id).strip(),
+        "exam_run_contract_request_v1": exam_run_contract_request_v1,
+        "operator_batch_audit": operator_batch_audit,
+        "deadline_wall_time": deadline_wall,
+    }
+    # Resolve at call time so tests may monkeypatch ``_rm_preflight_decision_snapshot_subprocess_entry_v1``.
+    import renaissance_v4.game_theory.rm_preflight_wiring_v1 as _rmw_self
+
+    _entry = getattr(_rmw_self, "_rm_preflight_decision_snapshot_subprocess_entry_v1")
+    proc = ctx.Process(
+        target=_entry,
+        args=(result_q, payload),
+        name="rm_preflight_decision_snapshot_v1",
+        daemon=True,
+    )
+    proc.start()
+    try:
+        while proc.is_alive():
+            if time.time() >= deadline_wall:
+                proc.terminate()
+                proc.join(timeout=3.0)
+                if proc.is_alive():
+                    proc.kill()
+                    proc.join(timeout=2.0)
+                return {"mode": "hard_timeout"}
+            if _preflight_cancel_hit_v1(cancel_check):
+                proc.terminate()
+                proc.join(timeout=3.0)
+                if proc.is_alive():
+                    proc.kill()
+                    proc.join(timeout=2.0)
+                return {"mode": "cancelled"}
+            proc.join(timeout=0.05)
+        proc.join(timeout=1.0)
+        if proc.exitcode not in (0, None):
+            return {"mode": "error", "message": f"child_exit:{proc.exitcode}"}
+        try:
+            item = result_q.get(timeout=30.0)
+        except queue.Empty:
+            return {"mode": "error", "message": "no_result_from_child_queue"}
+        if not isinstance(item, dict):
+            return {"mode": "error", "message": "invalid_child_payload"}
+        if item.get("kind") == "done":
+            return {
+                "mode": "ok",
+                "branch": item.get("branch"),
+                "sink": item.get("sink"),
+                "panel": item.get("panel"),
+            }
+        if item.get("kind") == "error":
+            return {"mode": "error", "message": str(item.get("message") or "child_error")}
+        return {"mode": "error", "message": "unknown_child_kind"}
+    finally:
+        if proc.is_alive():
+            proc.terminate()
+            proc.join(timeout=1.0)
+            if proc.is_alive():
+                try:
+                    proc.kill()
+                except Exception:
+                    pass
+                proc.join(timeout=1.0)
+
+
 def validate_rm_preflight_memory_sink_v1(
     events: list[dict[str, Any]],
     *,
@@ -1274,29 +1430,100 @@ def run_rm_preflight_wiring_v1(
         except (TypeError, ValueError):
             bars_cap = 80
         t0 = time.monotonic()
-        deadline = t0 + float(_rm_preflight_decision_snapshot_timeout_s_v1())
+        hard_s = float(_rm_preflight_hard_timeout_s_v1())
+        use_iso = _rm_preflight_subprocess_isolation_enabled_v1()
         _preflight_telemetry_update_v1(
             panel,
             phase="decision_snapshot_v1",
             t0=t0,
             bars_replay_cap=bars_cap,
             heartbeat_seq=0,
-            note="rm_preflight_decision_snapshot_no_replay_worker_v1",
+            note=(
+                "rm_preflight_decision_snapshot_subprocess_spawn_v1"
+                if use_iso
+                else "rm_preflight_decision_snapshot_no_replay_worker_v1"
+            ),
         )
         _emit_rm_preflight_panel_v1(panel, progress_cb)
+        branch: dict[str, Any]
+        sink_events: list[dict[str, Any]] = []
         try:
-            with rm_preflight_seam_early_exit_session_v1():
-                branch = run_rm_preflight_decision_snapshot_v1(
+            if use_iso:
+                iso = _rm_preflight_run_decision_snapshot_isolated_v1(
                     scenario=shrunk,
                     job_id=str(job_id).strip(),
                     exam_run_contract_request_v1=exam_run_contract_request_v1,
                     operator_batch_audit=operator_batch_audit if isinstance(operator_batch_audit, dict) else None,
-                    panel=panel,
                     cancel_check=cancel_check,
-                    progress_cb=progress_cb,
-                    t0=t0,
-                    deadline=deadline,
+                    hard_timeout_s=hard_s,
                 )
+                if iso.get("mode") == "hard_timeout":
+                    st["terminal_pass_v1"] = False
+                    panel["preflight_hard_timeout_v1"] = True
+                    panel["failure_reasons_display_v1"] = map_rm_preflight_missing_to_operator_display_v1(
+                        ["preflight_hard_timeout_v1"]
+                    )
+                    _emit_rm_preflight_panel_v1(panel, progress_cb)
+                    return _merge_panel_into_audit_v1(
+                        panel,
+                        {
+                            "schema": "rm_preflight_wiring_audit_v1",
+                            "ok_v1": False,
+                            "skipped_v1": False,
+                            "status_v1": FAILED_PREFLIGHT_STATUS_V1,
+                            "missing_stages_v1": ["preflight_hard_timeout_v1"],
+                            "human_message_v1": "preflight_hard_timeout_v1",
+                            "memory_sink_event_count_v1": 0,
+                        },
+                    )
+                if iso.get("mode") == "cancelled":
+                    st["terminal_pass_v1"] = False
+                    panel["failure_reasons_display_v1"] = ["cancelled_during_preflight_v1"]
+                    _emit_rm_preflight_panel_v1(panel, progress_cb)
+                    return _merge_panel_into_audit_v1(
+                        panel,
+                        _operator_cancelled_preflight_audit_v1(memory_sink_event_count_v1=0),
+                    )
+                if iso.get("mode") != "ok":
+                    st["terminal_pass_v1"] = False
+                    em = str(iso.get("message") or "preflight_decision_snapshot_subprocess_failed_v1")
+                    panel["failure_reasons_display_v1"] = [em]
+                    _emit_rm_preflight_panel_v1(panel, progress_cb)
+                    return _merge_panel_into_audit_v1(
+                        panel,
+                        {
+                            "schema": "rm_preflight_wiring_audit_v1",
+                            "ok_v1": False,
+                            "skipped_v1": False,
+                            "status_v1": FAILED_PREFLIGHT_STATUS_V1,
+                            "missing_stages_v1": ["preflight_decision_snapshot_subprocess_failed_v1"],
+                            "human_message_v1": em,
+                            "memory_sink_event_count_v1": 0,
+                        },
+                    )
+                br = iso.get("branch")
+                branch = br if isinstance(br, dict) else {}
+                pnl = iso.get("panel")
+                if isinstance(pnl, dict):
+                    panel.clear()
+                    panel.update(pnl)
+                sk = iso.get("sink")
+                sink_events = list(sk) if isinstance(sk, list) else []
+            else:
+                deadline = t0 + float(_rm_preflight_decision_snapshot_timeout_s_v1())
+                with rm_preflight_seam_early_exit_session_v1():
+                    branch = run_rm_preflight_decision_snapshot_v1(
+                        scenario=shrunk,
+                        job_id=str(job_id).strip(),
+                        exam_run_contract_request_v1=exam_run_contract_request_v1,
+                        operator_batch_audit=operator_batch_audit if isinstance(operator_batch_audit, dict) else None,
+                        panel=panel,
+                        cancel_check=cancel_check,
+                        progress_cb=progress_cb,
+                        t0=t0,
+                        deadline=deadline,
+                    )
+                sink_events = list(sink)
         except Exception as e:
             st["terminal_pass_v1"] = False
             panel["failure_reasons_display_v1"] = [f"preflight_decision_snapshot_exception_v1: {e!r}"]
@@ -1325,7 +1552,7 @@ def run_rm_preflight_wiring_v1(
                     "status_v1": FAILED_PREFLIGHT_STATUS_V1,
                     "missing_stages_v1": miss,
                     "human_message_v1": str(branch.get("human_message_v1") or "rm_preflight_decision_snapshot_v1 failed"),
-                    "memory_sink_event_count_v1": len(sink),
+                    "memory_sink_event_count_v1": len(sink_events),
                     "preflight_seam_audit_v1": branch.get("seam_audit"),
                     "preflight_decision_snapshot_branch_v1": branch,
                 },
@@ -1363,7 +1590,7 @@ def run_rm_preflight_wiring_v1(
                         "RM preflight: decision snapshot scenario_id does not match first submitted scenario "
                         f"(batch_first={expected_batch_scenario_id_v1!r}, branch={scenario_id!r})."
                     ),
-                    "memory_sink_event_count_v1": len(sink),
+                    "memory_sink_event_count_v1": len(sink_events),
                     "rm_preflight_job_binding_audit_v1": jbind,
                 },
             )
@@ -1375,7 +1602,7 @@ def run_rm_preflight_wiring_v1(
         st["seam_completed_v1"] = True
         _emit_rm_preflight_panel_v1(panel, progress_cb)
 
-        n_sink_before_validate = len(sink)
+        n_sink_before_validate = len(sink_events)
         _preflight_telemetry_update_v1(
             panel,
             phase="trace_validation",
@@ -1386,7 +1613,7 @@ def run_rm_preflight_wiring_v1(
         )
         _emit_rm_preflight_panel_v1(panel, progress_cb)
         det = validate_rm_preflight_memory_sink_detailed_v1(
-            sink,
+            sink_events,
             scenario_id=scenario_id,
             trade_id=trade_id,
             job_id=str(job_id).strip(),
@@ -1420,9 +1647,9 @@ def run_rm_preflight_wiring_v1(
                     "missing_stages_v1": missing,
                     "human_message_v1": "RM preflight: incomplete reasoning trace or job not bound to trace — "
                     + ", ".join(missing),
-                    "memory_sink_event_count_v1": len(sink),
+                    "memory_sink_event_count_v1": len(sink_events),
                     "preflight_seam_audit_v1": seam,
-                    "preflight_trace_events_sample_v1": sink[n_sink_before_validate:][:40],
+                    "preflight_trace_events_sample_v1": sink_events[n_sink_before_validate:][:40],
                     "rm_preflight_job_binding_audit_v1": jbind_ok,
                 },
             )
@@ -1438,7 +1665,7 @@ def run_rm_preflight_wiring_v1(
                 "skipped_v1": False,
                 "status_v1": "passed_rm_preflight_wiring_v1",
                 "missing_stages_v1": [],
-                "memory_sink_event_count_v1": len(sink),
+                "memory_sink_event_count_v1": len(sink_events),
                 "preflight_seam_audit_v1": seam,
                 "preflight_trade_id_v1": trade_id,
                 "preflight_scenario_id_v1": scenario_id,

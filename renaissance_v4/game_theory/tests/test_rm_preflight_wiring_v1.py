@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import json
 from pathlib import Path
+from typing import Any
 from unittest.mock import patch
 
 import pytest
@@ -16,6 +17,7 @@ from renaissance_v4.game_theory.rm_preflight_wiring_v1 import (
     FAILED_PREFLIGHT_STATUS_V1,
     PREFLIGHT_DECISION_SNAPSHOT_TRADE_ID_V1,
     REQUIRED_RM_PREFLIGHT_STAGES_V1,
+    _rm_preflight_run_decision_snapshot_isolated_v1,
     _rm_preflight_root_cause_phase_v1,
     _shrink_scenario_for_rm_preflight_v1,
     rm_preflight_enabled_v1,
@@ -26,6 +28,40 @@ from renaissance_v4.game_theory.rm_preflight_wiring_v1 import (
 from renaissance_v4.game_theory.student_proctor.student_decision_authority_v1 import (
     DECISION_SOURCE_REASONING_MODEL_V1,
 )
+
+
+def _rm_preflight_test_subprocess_hang_entry_v1(_result_q: Any, _payload: dict[str, Any]) -> None:
+    """Top-level for spawn pickling — simulates a blocked preflight child."""
+    import time as _time
+
+    _time.sleep(3.0)
+
+
+@pytest.fixture(autouse=True)
+def _disable_rm_preflight_subprocess_isolation(monkeypatch: pytest.MonkeyPatch) -> None:
+    """In-process snapshot so ``@patch(... run_rm_preflight_decision_snapshot_v1)`` applies."""
+    monkeypatch.setenv("PATTERN_GAME_RM_PREFLIGHT_SUBPROCESS_ISOLATION", "0")
+
+
+def test_run_decision_snapshot_isolated_hard_timeout_terminates_blocked_child(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    from renaissance_v4.game_theory import rm_preflight_wiring_v1 as rmw
+
+    monkeypatch.setattr(
+        rmw,
+        "_rm_preflight_decision_snapshot_subprocess_entry_v1",
+        _rm_preflight_test_subprocess_hang_entry_v1,
+    )
+    r = _rm_preflight_run_decision_snapshot_isolated_v1(
+        scenario={"manifest_path": "missing.json", "scenario_id": "x"},
+        job_id="j_hard_timeout",
+        exam_run_contract_request_v1={"student_brain_profile_v1": "memory_context_student"},
+        operator_batch_audit={},
+        cancel_check=None,
+        hard_timeout_s=0.35,
+    )
+    assert r.get("mode") == "hard_timeout"
 
 
 def test_validate_rm_preflight_memory_sink_ok():

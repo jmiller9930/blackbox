@@ -18,7 +18,6 @@ import hashlib
 import json
 import math
 import os
-import time
 from typing import Any
 
 from renaissance_v4.game_theory.student_proctor.contracts_v1 import (
@@ -807,17 +806,6 @@ def run_entry_reasoning_pipeline_v1(
     return out, [], trace, _pfm
 
 
-def _preflight_pipeline_max_s_v1() -> float:
-    """Wall-clock SLA for RM preflight entry-reasoning only (default 2s; clamp 0.5–5)."""
-    raw = (os.environ.get("PATTERN_GAME_RM_PREFLIGHT_PIPELINE_MAX_S") or "2").strip()
-    try:
-        t = float(raw)
-    except (TypeError, ValueError):
-        t = 2.0
-    # Floor 0.01s so tests / diagnostics can set a tight cap; production default remains 2s.
-    return max(0.01, min(t, 5.0))
-
-
 def _preflight_entry_max_bars_v1() -> int:
     """Tail cap for indicator work inside preflight entry pipeline (default 64; clamp 8–512)."""
     raw = (os.environ.get("PATTERN_GAME_RM_PREFLIGHT_ENTRY_MAX_BARS") or "64").strip()
@@ -890,15 +878,13 @@ def run_entry_reasoning_pipeline_preflight_v1(
     """
     RM preflight-only lightweight path: tail-sliced bars + router never calls external services.
 
-    Proves decision capability (same schema / traces as the full pipeline on the sliced packet)
-    within ``PATTERN_GAME_RM_PREFLIGHT_PIPELINE_MAX_S`` (default **2**). On SLA breach returns
-    ``(None, ["preflight_timeout_preflight_pipeline_v1"], trace, fault_map)`` even if the inner
-    pipeline would have succeeded — use a smaller tail or raise the cap only for diagnostics.
+    Proves decision capability (same schema / traces as the full pipeline on the sliced packet).
+    Wall-clock enforcement for the **whole** preflight is ``run_rm_preflight_wiring_v1`` subprocess
+    isolation + ``PATTERN_GAME_RM_PREFLIGHT_HARD_TIMEOUT_S`` (terminate child on breach); this
+    function does **not** apply a post-hoc inner SLA.
 
     Full exams must keep using ``run_entry_reasoning_pipeline_v1`` on the unsliced packet.
     """
-    t_wall0 = time.perf_counter()
-    max_s = float(_preflight_pipeline_max_s_v1())
     mx = int(_preflight_entry_max_bars_v1())
     pkt = _student_decision_packet_tail_slice_for_preflight_v1(student_decision_packet, max_bars=mx)
     rcfg = _router_config_preflight_local_only_v1(
@@ -924,9 +910,6 @@ def run_entry_reasoning_pipeline_preflight_v1(
         router_trade_notional_usd=router_trade_notional_usd,
         router_seed=router_seed,
     )
-    elapsed = time.perf_counter() - t_wall0
-    if ere is not None and not errs and elapsed > max_s:
-        return None, ["preflight_timeout_preflight_pipeline_v1"], trace, pfm
     return ere, errs, trace, pfm
 
 
