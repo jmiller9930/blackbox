@@ -456,6 +456,47 @@ def student_loop_seam_after_parallel_batch_v1(
         scorecard_line=scorecard_entry_effective if isinstance(scorecard_entry_effective, dict) else None,
     )
 
+    mandate_active_v1 = profile != STUDENT_BRAIN_PROFILE_BASELINE_NO_MEMORY_NO_LLM_V1
+    _mandate_pre = []
+    if mandate_active_v1:
+        from renaissance_v4.game_theory.student_proctor.student_decision_authority_v1 import (
+            validate_student_decision_authority_mandate_preconditions_v1,
+        )
+
+        _mandate_pre = validate_student_decision_authority_mandate_preconditions_v1(
+            exam_run_contract_request_v1=ex_req,
+            job_id=str(run_id).strip(),
+            student_brain_profile_v1=profile,
+            student_llm_gate_blocked_batch_v1=bool(use_llm and batch_student_llm_gate_failed),
+        )
+    if _mandate_pre:
+        return {
+            "schema": "student_loop_seam_audit_v1",
+            "skipped": True,
+            "reason": "student_decision_authority_mandate_preconditions_failed_v1",
+            "student_decision_authority_mandate_block_v1": True,
+            "student_decision_authority_mandate_errors_v1": list(_mandate_pre),
+            "student_learning_rows_appended": 0,
+            "student_retrieval_matches": 0,
+            "student_output_fingerprint": None,
+            "shadow_student_enabled": False,
+            "phased_honesty_annotation_v1": _phased_honesty_annotation_v1(
+                seam_attempted=True, student_emit_occurred=False
+            ),
+            "wiring_honesty_annotation_v1": _wiring_honesty_annotation_v1(
+                seam_attempted=True,
+                trades_seen=0,
+                first_packet_annex_present=None,
+                retrieval_matches_total=0,
+            ),
+            "memory_semantics_annotation_v1": _memory_semantics_annotation_v1(seam_attempted=True),
+            "deliverable_vocabulary_annotation_v1": _deliverable_vocabulary_annotation_v1(
+                seam_attempted=True
+            ),
+            "llm_student_output_rejections_v1": 0,
+            "errors": list(_mandate_pre),
+        }
+
     emit_candle_timeframe_nexus_v1(
         job_id=str(run_id).strip(),
         fingerprint=fp_emit,
@@ -664,6 +705,22 @@ def student_loop_seam_after_parallel_batch_v1(
                                 if _pfm_learn is not None:
                                     pfm = _pfm_learn
                                     ere["student_reasoning_fault_map_v1"] = pfm
+                if isinstance(ere, dict):
+                    from renaissance_v4.game_theory.student_proctor.student_decision_authority_v1 import (
+                        run_student_decision_authority_for_trade_v1,
+                    )
+
+                    run_student_decision_authority_for_trade_v1(
+                        job_id=str(run_id).strip(),
+                        fingerprint=fp_emit,
+                        scenario_id=sid,
+                        trade_id=str(o.trade_id),
+                        ere=ere,
+                        pkt=pkt,
+                        unified_router_enabled=unified_router,
+                        exam_run_contract_request_v1=ex_req if isinstance(ex_req, dict) else None,
+                        mandate_active_v1=mandate_active_v1,
+                    )
                 allowed_mids = frozenset(
                     str(z.get("record_id") or "").strip()
                     for z in rxx
@@ -792,6 +849,18 @@ def student_loop_seam_after_parallel_batch_v1(
                         f"{'; '.join(auth_errs) if auth_errs else 'null_student_output'}"
                     )
                     continue
+                if mandate_active_v1:
+                    _bind = ere.get("student_decision_authority_binding_v1") if isinstance(ere, dict) else None
+                    if not isinstance(_bind, dict) or not _bind.get("learning_trace_persisted_v1"):
+                        errors.append(
+                            f"{sid} trade={o.trade_id}: STUDENT_DECISION_AUTHORITY_MANDATE_V1: "
+                            "missing student_decision_authority_binding_v1 after authority — bypass blocked"
+                        )
+                        continue
+                if isinstance(so, dict) and isinstance(ere, dict):
+                    _b = ere.get("student_decision_authority_binding_v1")
+                    if isinstance(_b, dict) and _b.get("decision_source_v1"):
+                        so["decision_source_v1"] = str(_b["decision_source_v1"])
                 if isinstance(ere, dict) and not ere.get("student_reasoning_fault_map_v1") and isinstance(
                     pfm, dict
                 ):
@@ -981,6 +1050,7 @@ def student_loop_seam_after_parallel_batch_v1(
     out_audit: dict[str, Any] = {
         "schema": "student_loop_seam_audit_v1",
         "run_id": run_id,
+        "student_decision_authority_mandate_enforced_v1": bool(mandate_active_v1),
         "candle_timeframe_minutes_effective_v1": int(c_tf),
         "student_learning_store_path": str(store.resolve()),
         "database_path_used": str(db.resolve()),

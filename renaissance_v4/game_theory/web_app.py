@@ -2238,6 +2238,46 @@ def create_app() -> Flask:
             headers={"Cache-Control": "no-store", "X-Pattern-Game-UI-Version": PATTERN_GAME_WEB_UI_VERSION},
         )
 
+    @app.get("/api/operator-report/transaction-ab")
+    def api_operator_transaction_ab_compare_v1() -> Any:
+        """Per-trade Baseline (A) vs Student (B) for one ``scenario_id`` — replay outcomes + deltas (no ``data_gap`` strings)."""
+        from renaissance_v4.game_theory.transaction_ab_compare_v1 import (
+            build_transaction_ab_compare_v1,
+            transaction_ab_compare_to_csv_v1,
+        )
+
+        ja = (request.args.get("job_a") or request.args.get("job_id_baseline") or "").strip()
+        jb = (request.args.get("job_b") or request.args.get("job_id_student") or "").strip()
+        sid = (request.args.get("scenario_id") or "").strip()
+        fmt = (request.args.get("format") or "json").strip().lower()
+        if not ja or not jb or not sid:
+            return jsonify(
+                {
+                    "ok": False,
+                    "error": "Query params job_a, job_b, and scenario_id are required (aliases: job_id_baseline, job_id_student).",
+                }
+            ), 400
+        doc = build_transaction_ab_compare_v1(job_id_baseline=ja, job_id_student=jb, scenario_id=sid)
+        if fmt == "csv":
+            if not doc.get("ok"):
+                return Response(
+                    f"# error: {doc.get('error') or 'unknown'}\n",
+                    status=404,
+                    mimetype="text/csv; charset=utf-8",
+                    headers={"Cache-Control": "no-store", "X-Pattern-Game-UI-Version": PATTERN_GAME_WEB_UI_VERSION},
+                )
+            csv_body = transaction_ab_compare_to_csv_v1(doc)
+            return Response(
+                csv_body,
+                mimetype="text/csv; charset=utf-8",
+                headers={
+                    "Cache-Control": "no-store",
+                    "Content-Disposition": f'attachment; filename="transaction_ab_{sid}_{ja}_{jb}.csv"',
+                    "X-Pattern-Game-UI-Version": PATTERN_GAME_WEB_UI_VERSION,
+                },
+            )
+        return jsonify(doc), 200
+
     @app.get("/api/debug/learning-loop/trace-stream/<job_id>")
     def api_debug_learning_loop_trace_stream_v1(job_id: str) -> Any:
         """NDJSON stream: stage timings then final ``complete`` payload (same as non-stream API)."""

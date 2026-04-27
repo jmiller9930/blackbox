@@ -2,7 +2,7 @@
   "schema": "gt_directive_026ai_scenario_proof_bundle_v1",
   "proof_version": 1,
   "scenario_id": "05_successful_external_escalation_mocked",
-  "generated_at_utc": "2026-04-26T18:27:49Z",
+  "generated_at_utc": "2026-04-26T22:46:30Z",
   "narrative": "Low confidence → call → accepted review; tokens & cost on ledger (mocked provider)",
   "python": "3.11.0",
   "entry_reasoning_excerpt_v1": {
@@ -114,7 +114,7 @@
     "output_tokens_v1": 10,
     "total_tokens_v1": 20,
     "estimated_cost_usd_v1": 0.00012,
-    "latency_ms_v1": 0.004583998816087842,
+    "latency_ms_v1": 0.002792003215290606,
     "provider_v1": "openai",
     "model_requested_v1": "gpt-5.5",
     "model_resolved_v1": "gpt-proof-mock",

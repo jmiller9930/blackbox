@@ -2,7 +2,7 @@
   "schema": "gt_directive_026ai_scenario_proof_bundle_v1",
   "proof_version": 1,
   "scenario_id": "07_external_disagrees_deterministic_unchanged",
-  "generated_at_utc": "2026-04-26T18:27:49Z",
+  "generated_at_utc": "2026-04-26T22:46:30Z",
   "narrative": "Advisory long suggestion; engine action unchanged; router_external_influence_v1 on ere",
   "python": "3.11.0",
   "entry_reasoning_excerpt_v1": {
@@ -114,7 +114,7 @@
     "output_tokens_v1": 1,
     "total_tokens_v1": 2,
     "estimated_cost_usd_v1": 1.2e-05,
-    "latency_ms_v1": 0.0018749997252598405,
+    "latency_ms_v1": 0.0026659981813281775,
     "provider_v1": "openai",
     "model_requested_v1": "gpt-5.5",
     "model_resolved_v1": "gpt-mock",

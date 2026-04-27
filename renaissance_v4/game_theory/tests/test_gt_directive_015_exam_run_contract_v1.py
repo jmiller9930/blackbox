@@ -155,6 +155,45 @@ def test_build_exam_run_line_full_control_authority() -> None:
     assert line.get("student_full_control_v1") == STUDENT_FULL_CONTROL_STATUS_ENABLED_V1
 
 
+def test_parse_student_decision_authority_mode_v1_valid() -> None:
+    out, err = parse_exam_run_contract_request_v1(
+        {
+            "exam_run_contract_v1": {
+                "student_reasoning_mode": STUDENT_REASONING_MODE_REPEAT_ANNA_V1,
+                "student_decision_authority_mode_v1": "active",
+            }
+        }
+    )
+    assert err is None and out is not None
+    assert out.get("student_decision_authority_mode_v1") == "active"
+
+
+def test_parse_student_decision_authority_mode_v1_invalid() -> None:
+    out, err = parse_exam_run_contract_request_v1(
+        {
+            "exam_run_contract_v1": {
+                "student_reasoning_mode": STUDENT_REASONING_MODE_REPEAT_ANNA_V1,
+                "student_decision_authority_mode_v1": "banana",
+            }
+        }
+    )
+    assert out is None
+    assert err and "invalid student_decision_authority_mode_v1" in err
+
+
+def test_parse_student_decision_authority_off_rejected_for_non_baseline() -> None:
+    out, err = parse_exam_run_contract_request_v1(
+        {
+            "exam_run_contract_v1": {
+                "student_reasoning_mode": STUDENT_REASONING_MODE_REPEAT_ANNA_V1,
+                "student_decision_authority_mode_v1": "off",
+            }
+        }
+    )
+    assert out is None
+    assert err and "STUDENT_DECISION_AUTHORITY_MANDATE_V1" in err
+
+
 def test_parse_llm_profile_requires_http_base(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setenv("STUDENT_OLLAMA_BASE_URL", "ftp://invalid.example/no-http")
     out, err = parse_exam_run_contract_request_v1(

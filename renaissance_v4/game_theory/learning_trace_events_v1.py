@@ -55,6 +55,7 @@ EVENT_STAGES_V1 = (
     # GT_DIRECTIVE_026B — per-bar lifecycle + tape summary (trace_store)
     "lifecycle_reasoning_stage_v1",
     "lifecycle_tape_summary_v1",
+    "student_decision_authority_v1",
 )
 
 # Map persisted ``stage`` → graph node ``id`` (reconstructed trace) for merge / provenance.
@@ -92,6 +93,7 @@ STAGE_TO_NODE_IDS_V1: dict[str, tuple[str, ...]] = {
     "reasoning_cost_governor_v1": ("student_reasoning", "llm_reasoning"),
     "lifecycle_reasoning_stage_v1": ("student_reasoning", "llm_reasoning"),
     "lifecycle_tape_summary_v1": ("student_reasoning", "llm_reasoning"),
+    "student_decision_authority_v1": ("student_decision", "student_reasoning"),
 }
 
 

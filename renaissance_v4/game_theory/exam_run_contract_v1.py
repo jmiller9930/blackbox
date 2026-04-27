@@ -378,6 +378,8 @@ def parse_exam_run_contract_request_v1(data: dict[str, Any]) -> tuple[dict[str, 
         block["retrieved_context_ids"] = data.get("retrieved_context_ids")
     if data.get("candle_timeframe_minutes") is not None:
         block["candle_timeframe_minutes"] = data.get("candle_timeframe_minutes")
+    if data.get("student_decision_authority_mode_v1") is not None:
+        block["student_decision_authority_mode_v1"] = data.get("student_decision_authority_mode_v1")
 
     raw_profile = block.get("student_brain_profile_v1")
     raw_mode = block.get("student_reasoning_mode")
@@ -499,6 +501,20 @@ def parse_exam_run_contract_request_v1(data: dict[str, Any]) -> tuple[dict[str, 
         out["exam_unit_id"] = euid.strip()[:256]
     if ctf_out is not None:
         out["candle_timeframe_minutes"] = int(ctf_out)
+    raw_auth = block.get("student_decision_authority_mode_v1")
+    if raw_auth is None and data.get("student_decision_authority_mode_v1") is not None:
+        raw_auth = data.get("student_decision_authority_mode_v1")
+    if raw_auth is not None:
+        am = str(raw_auth).strip().lower()
+        if am not in ("shadow", "active", "off"):
+            return None, f"invalid student_decision_authority_mode_v1: {raw_auth!r}"
+        out["student_decision_authority_mode_v1"] = am
+    if profile != STUDENT_BRAIN_PROFILE_BASELINE_NO_MEMORY_NO_LLM_V1 and out.get("student_decision_authority_mode_v1") == "off":
+        return (
+            None,
+            "student_decision_authority_mode_v1 off is not permitted when student_brain_profile_v1 is not "
+            "cold baseline (STUDENT_DECISION_AUTHORITY_MANDATE_V1)",
+        )
     lc_err = _apply_optional_026b_lifecycle_fields_v1(out, block, data)
     if lc_err:
         return None, lc_err

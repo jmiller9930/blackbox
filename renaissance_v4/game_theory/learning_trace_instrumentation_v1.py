@@ -658,6 +658,44 @@ def emit_026c_learning_decision_made_v1(
     )
 
 
+def emit_student_decision_authority_v1(
+    *,
+    job_id: str,
+    fingerprint: str | None,
+    scenario_id: str,
+    trade_id: str,
+    payload: dict[str, Any] | None,
+) -> bool:
+    """Governed Student Decision Authority — shadow or active (see ``student_decision_authority_v1``).
+
+    Returns **True** iff a line was appended to ``learning_trace_events_v1`` (instrumentation on
+    and append succeeded). Mandate callers must treat **False** as a hard failure.
+    """
+    pl = payload if isinstance(payload, dict) else {}
+    would = bool(pl.get("authority_would_apply_v1"))
+    st = "pass" if would or pl.get("authority_mode_v1") == "active" else "partial"
+    if pl.get("authority_skipped_v1"):
+        st = "partial"
+    if not learning_trace_instrumentation_enabled_v1():
+        return False
+    try:
+        append_learning_trace_event_from_kwargs_v1(
+            job_id=job_id,
+            fingerprint=fingerprint,
+            stage="student_decision_authority_v1",
+            status=st,
+            summary="student_decision_authority_v1 (shadow computes would_apply; active may patch ere).",
+            producer="student_decision_authority_v1",
+            scenario_id=scenario_id,
+            trade_id=trade_id,
+            evidence_payload={"student_decision_authority_v1": pl},
+        )
+        return True
+    except Exception as e:
+        print(f"[learning_trace_instrumentation_v1] emit_student_decision_authority_v1 failed: {e}", file=sys.stderr)
+        return False
+
+
 __all__ = [
     "emit_026c_learning_decision_made_v1",
     "emit_026c_learning_record_created_v1",
@@ -682,6 +720,7 @@ __all__ = [
     "emit_referee_execution_started_v1",
     "emit_referee_used_student_output_batch_truth_v1",
     "emit_seam_disabled_placeholder_events_v1",
+    "emit_student_decision_authority_v1",
     "emit_student_output_sealed_v1",
     "emit_timeframe_mismatch_detected_v1",
     "fingerprint_for_parallel_job_v1",

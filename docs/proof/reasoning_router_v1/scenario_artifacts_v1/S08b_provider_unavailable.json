@@ -2,7 +2,7 @@
   "schema": "gt_directive_026ai_scenario_proof_bundle_v1",
   "proof_version": 1,
   "scenario_id": "08b_provider_unavailable_network_style",
-  "generated_at_utc": "2026-04-26T18:27:49Z",
+  "generated_at_utc": "2026-04-26T22:46:30Z",
   "narrative": "Simulated URLError/timeout class → provider_unavailable_v1, fallback",
   "python": "3.11.0",
   "entry_reasoning_excerpt_v1": {
