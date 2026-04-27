@@ -128,7 +128,7 @@ _PATTERN_BANNER_WEBP_PATH = _RV4_ROOT / "assets" / "pattern.webp"
 _PATTERN_GAME_BANNER_BOOT_JS = _GAME_THEORY / "static" / "pattern_game_banner_boot.js"
 
 # Operator-visible web UI bundle version — bump when changing PAGE_HTML (HTML/CSS/JS) so deploys are provable.
-PATTERN_GAME_WEB_UI_VERSION = "2.19.101"
+PATTERN_GAME_WEB_UI_VERSION = "2.19.102"
 
 from renaissance_v4.game_theory.reasoning_model_operator_surface_v1 import (
     get_reasoning_model_operator_snapshot_v1,
@@ -3947,7 +3947,7 @@ PAGE_HTML = """<!DOCTYPE html>
       flex: 1;
       min-height: 0;
       overflow-y: auto;
-      overflow-x: hidden;
+      overflow-x: auto;
       scrollbar-gutter: stable;
       padding-right: 2px;
     }
@@ -3985,28 +3985,51 @@ PAGE_HTML = """<!DOCTYPE html>
       border-collapse: collapse;
       font-size: 0.74rem;
     }
-    /* L1 exam list — fixed layout so drag-resize column widths stick; preview tables omit this class. */
+    /*
+      L1 exam list — colgroup drives column widths (see studentPanelD11WireL1ExamColumnResize).
+      Table may grow wider than the viewport; .pg-student-d11-table-wrap scrolls horizontally.
+    */
     .pg-student-d11-table--l1-exam {
       table-layout: fixed;
+      width: max-content;
+      min-width: 100%;
     }
     .pg-student-d11-table--l1-exam thead th {
-      position: relative;
+      position: sticky;
+      top: 0;
+      z-index: 4;
+      background: var(--pg-surface-strong);
+      box-shadow: 0 1px 0 rgba(255, 255, 255, 0.08);
       overflow: visible;
+      padding-right: 14px;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+    .pg-student-d11-table--l1-exam thead th.pg-student-d11-sticky-actions {
+      top: 0;
+      right: 0;
+      z-index: 6;
+    }
+    .pg-student-d11-table--l1-exam col.pg-d11-l1-col--actions {
+      min-width: 5.5rem;
+      width: 5.75rem;
     }
     .pg-d11-col-resizer {
       position: absolute;
       top: 0;
       right: 0;
-      width: 8px;
-      margin-right: -4px;
+      width: 14px;
+      margin-right: -7px;
       cursor: col-resize;
-      z-index: 5;
+      z-index: 8;
       height: 100%;
+      min-height: 1.5rem;
       user-select: none;
       touch-action: none;
     }
-    .pg-d11-col-resizer:hover {
-      background: rgba(30, 214, 170, 0.22);
+    .pg-d11-col-resizer:hover,
+    .pg-d11-col-resizer:focus-visible {
+      background: rgba(30, 214, 170, 0.35);
     }
     .pg-student-d11-table--l1-exam thead th:nth-child(1),
     .pg-student-d11-table--l1-exam tbody td:nth-child(1) {
@@ -4017,6 +4040,26 @@ PAGE_HTML = """<!DOCTYPE html>
       white-space: normal;
       display: inline-block;
       max-width: 100%;
+    }
+    .pg-student-d11-table--l1-exam tbody td {
+      position: relative;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+    .pg-student-d11-table--l1-exam tbody td.pg-l1-time-cell {
+      overflow: visible;
+      text-overflow: clip;
+      white-space: normal;
+      max-width: none;
+    }
+    .pg-student-d11-table--l1-exam tbody td:nth-child(1) {
+      overflow: visible;
+      white-space: normal;
+    }
+    .pg-student-d11-table--l1-exam tbody td.pg-student-d11-sticky-actions {
+      overflow: visible;
+      text-overflow: clip;
     }
     .pg-student-d11-table th,
     .pg-student-d11-table td {
@@ -7107,9 +7150,33 @@ PAGE_HTML = """<!DOCTYPE html>
       const table = root && root.querySelector('.pg-student-d11-table--l1-exam');
       if (!wrap || !table) return;
       const LS_KEY = 'patternGame.d11L1ExamColWidthsV1';
+      const D11_COL_MAX_PX = 4800;
       const thList = Array.prototype.slice.call(table.querySelectorAll('thead tr th'));
       const n = thList.length;
       if (!n) return;
+      function ensureColgroup() {
+        let cg = table.querySelector('colgroup');
+        if (!cg) {
+          cg = document.createElement('colgroup');
+          table.insertBefore(cg, table.firstChild);
+        }
+        while (cg.querySelectorAll('col').length < n) {
+          const c = document.createElement('col');
+          cg.appendChild(c);
+        }
+        while (cg.querySelectorAll('col').length > n) {
+          cg.removeChild(cg.lastElementChild);
+        }
+        const cols = cg.querySelectorAll('col');
+        for (let i = 0; i < cols.length; i++) {
+          cols[i].classList.remove('pg-d11-l1-col--actions');
+          if (thList[i] && thList[i].classList.contains('pg-student-d11-sticky-actions')) {
+            cols[i].classList.add('pg-d11-l1-col--actions');
+          }
+        }
+        return Array.prototype.slice.call(cols);
+      }
+      const colEls = ensureColgroup();
       function loadWidths() {
         try {
           const raw = localStorage.getItem(LS_KEY);
@@ -7126,25 +7193,24 @@ PAGE_HTML = """<!DOCTYPE html>
           localStorage.setItem(LS_KEY, JSON.stringify(arr));
         } catch (_e) { /* */ }
       }
-      function applyWidths(widths) {
+      function applyColWidths(widths) {
+        let sum = 0;
         for (let i = 0; i < n; i++) {
+          const col = colEls[i];
+          if (!col) continue;
           const w = widths && widths[i] != null ? Number(widths[i]) : 0;
-          const usable = w >= 32 && Number.isFinite(w);
-          const cells = table.querySelectorAll(
-            'thead tr th:nth-child(' + (i + 1) + '), tbody tr td:nth-child(' + (i + 1) + ')'
-          );
-          for (let j = 0; j < cells.length; j++) {
-            const cell = cells[j];
-            if (usable) {
-              cell.style.width = w + 'px';
-              cell.style.minWidth = w + 'px';
-              cell.style.maxWidth = 'none';
-            } else {
-              cell.style.width = '';
-              cell.style.minWidth = '';
-              cell.style.maxWidth = '';
-            }
+          const usable = w >= 40 && Number.isFinite(w);
+          if (usable) {
+            col.style.width = w + 'px';
+            sum += w;
+          } else {
+            col.style.width = '';
           }
+        }
+        if (sum > 0) {
+          table.style.minWidth = sum + 'px';
+        } else {
+          table.style.minWidth = '';
         }
       }
       let wCur = loadWidths();
@@ -7152,7 +7218,30 @@ PAGE_HTML = """<!DOCTYPE html>
         wCur = new Array(n);
         for (let z = 0; z < n; z++) wCur[z] = 0;
       }
-      applyWidths(wCur);
+      const hasSaved = wCur.some(function (x) {
+        return x >= 40;
+      });
+      if (hasSaved) {
+        applyColWidths(wCur);
+      }
+      function measureDefaultWidths() {
+        for (let i = 0; i < n; i++) {
+          if (colEls[i]) colEls[i].style.width = '';
+        }
+        table.style.minWidth = '';
+        for (let i = 0; i < n; i++) {
+          const th = thList[i];
+          if (!th) continue;
+          wCur[i] = Math.max(52, Math.round(th.getBoundingClientRect().width));
+        }
+        applyColWidths(wCur);
+        saveWidths(wCur);
+      }
+      if (!hasSaved) {
+        window.requestAnimationFrame(function () {
+          window.requestAnimationFrame(measureDefaultWidths);
+        });
+      }
       for (let ix = 0; ix < thList.length; ix++) {
         const th = thList[ix];
         if (th.classList.contains('pg-student-d11-sticky-actions')) continue;
@@ -7160,14 +7249,26 @@ PAGE_HTML = """<!DOCTYPE html>
         const h = document.createElement('span');
         h.className = 'pg-d11-col-resizer';
         h.setAttribute('data-d11-col', String(ix));
-        h.title = 'Drag to widen · double-click to reset column';
+        h.setAttribute('tabindex', '0');
+        h.setAttribute('role', 'separator');
+        h.setAttribute('aria-orientation', 'vertical');
+        h.title = 'Drag right to widen this column · double-click to reset width';
         th.appendChild(h);
         h.addEventListener('dblclick', function (ev) {
           ev.preventDefault();
           ev.stopPropagation();
           wCur[ix] = 0;
-          applyWidths(wCur);
+          applyColWidths(wCur);
           saveWidths(wCur);
+          window.requestAnimationFrame(function () {
+            const th0 = thList[ix];
+            if (!th0) return;
+            colEls[ix].style.width = '';
+            const r = th0.getBoundingClientRect();
+            wCur[ix] = Math.max(52, Math.round(r.width));
+            applyColWidths(wCur);
+            saveWidths(wCur);
+          });
         });
       }
       if (wrap.dataset.d11ColResizeBound === '1') return;
@@ -7180,14 +7281,18 @@ PAGE_HTML = """<!DOCTYPE html>
         const idx = parseInt(handle.getAttribute('data-d11-col') || '-1', 10);
         if (idx < 0 || idx >= n) return;
         const th0 = thList[idx];
+        const col0 = colEls[idx];
         const r = th0.getBoundingClientRect();
         const startX = ev.clientX;
-        const startW = Math.max(32, Math.round(r.width));
+        const curW = col0 && col0.style.width
+          ? parseFloat(col0.style.width)
+          : Math.max(40, Math.round(r.width));
+        const startW = Math.max(40, Number.isFinite(curW) ? curW : Math.round(r.width));
         function onMove(e) {
           const dw = e.clientX - startX;
-          const nw = Math.min(720, Math.max(32, Math.round(startW + dw)));
+          const nw = Math.min(D11_COL_MAX_PX, Math.max(40, Math.round(startW + dw)));
           wCur[idx] = nw;
-          applyWidths(wCur);
+          applyColWidths(wCur);
         }
         function onUp() {
           document.removeEventListener('pointermove', onMove);
@@ -7969,7 +8074,7 @@ PAGE_HTML = """<!DOCTYPE html>
         (leg.band_b ? ' | ' + String(leg.band_b).slice(0, 160) : '');
       let scroll =
         '<p class="pg-student-d11-legend" style="margin-top:0"><strong title="Level 1 (L1): list of exam runs from the scorecard">Level 1 — exam list</strong> — Each row is one exam attempt (<code title="API schema name for one run row">student_panel_run_row_v2</code> + <code title="D14 aggregate block on the same response">d14_run_row_v1</code>). Referee rollups and harness signals. Click a row (not ×) for Level 2. <strong title="Remove this scorecard line only">×</strong> removes this scorecard line only. <strong title="Sys BL: system baseline trade win percent — oldest same-fingerprint anchor">Sys BL %</strong> = system baseline trade win % (oldest same-fingerprint anchor). <strong title="Run TW: this run trade win percent from the Referee batch">Run TW %</strong> = this exam&rsquo;s trade win %. <strong title="Greater than baseline: strict beat vs Sys BL; not on anchor row">&gt;BL</strong> = strict beat vs Sys BL (not on anchor). <strong title="L1 road: fingerprint-group band vs baseline">Road</strong> / <strong title="Anchor: baseline ruler vs compare row role">Anchor</strong> / <strong title="Road gaps: merge-time data gap codes">Road gaps</strong> come from <code title="Embedded L1 road payload on this API response">l1_road_v1</code> on this response (same aggregation as <code>GET /api/student-panel/l1-road</code>). Full <code>l1_road_v1.legend</code> copy is in native browser tooltips (<code>title</code>) on column headers and on Profile / LLM / Road cells and the fingerprint table — not a separate on-page legend block. <a href="/docs/student-panel-dictionary" onclick="return pgOpenStudentPanelDictionaryPopout();" title="Glossary in a resizable pop-out">Dictionary</a> · <a href="/api/student-panel/l1-road" target="_blank" rel="noopener noreferrer">L1 road JSON</a></p>' +
-        '<div class="pg-student-d11-table-wrap" title="Drag the right edge of a column header to widen it; double-click the grip to reset that column.">' +
+        '<div class="pg-student-d11-table-wrap" title="Drag the green grip on the right edge of each column header to widen (table scrolls horizontally). Double-click grip to reset that column.">' +
         '<table class="pg-student-d11-table pg-student-d11-table--l1-exam"><thead><tr>' +
         '<th title="Run id: unique parallel batch job identifier">run_id</th>' +
         '<th title="L1 time cell (stacked): line 1 = UTC audit headline (job completion time when ended_at_utc exists, else start); line 2 = same instant in browser local timezone; line 3 = job wall duration from scorecard started_at_utc→ended_at_utc when both parse, else Duration unavailable with gap in tooltip. See l1_* fields on student_panel_run_row_v2.">time</th>' +
