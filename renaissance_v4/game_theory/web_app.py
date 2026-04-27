@@ -172,6 +172,7 @@ from renaissance_v4.game_theory.student_proctor.student_learning_operator_v1 imp
 from renaissance_v4.game_theory.student_proctor.student_proctor_operator_runtime_v1 import (
     student_loop_seam_after_parallel_batch_v1,
 )
+from renaissance_v4.game_theory.student_rm_trace_contract_v1 import student_rm_wiring_mandate_active_v1
 from renaissance_v4.game_theory.student_controlled_replay_v1 import (
     apply_automated_student_lanes_from_exam_contract_v1,
 )
@@ -455,13 +456,8 @@ def _parallel_status_learning_trace_terminal_v1(job_id: str, j: dict[str, Any], 
             "message": "Reasoning Model: not used — Baseline run",
         }
         return
-    if not learning_trace_instrumentation_enabled_v1():
-        out["learning_trace_terminal_v1"] = {
-            "schema": "learning_trace_terminal_banner_v1",
-            "mode": "trace_disabled",
-            "message": "Reasoning indicators unavailable (trace disabled)",
-        }
-        return
+    # Non-baseline Student: ``PATTERN_GAME_LEARNING_TRACE_EVENTS=0`` does not excuse an empty
+    # trace file after a successful job (mandated emits still append during the seam).
     try:
         snap = count_learning_trace_terminal_integrity_v1(job_id)
     except (OSError, TypeError, ValueError, RuntimeError) as e:
@@ -507,6 +503,19 @@ def _web_ui_require_hypothesis() -> bool:
     if v in ("0", "false", "no", "off"):
         return False
     return True
+
+
+FAILED_RUNTIME_STUDENT_RM_TRACE_CONTRACT_V1 = "failed_runtime_student_rm_trace_contract_v1"
+
+
+def _student_rm_trace_contract_error_message_v1(trace_audit: dict[str, Any]) -> str:
+    errs = trace_audit.get("errors_v1") or []
+    if errs:
+        return (
+            f"{FAILED_RUNTIME_STUDENT_RM_TRACE_CONTRACT_V1}: "
+            + "; ".join(str(x) for x in errs[:24])
+        )
+    return f"{FAILED_RUNTIME_STUDENT_RM_TRACE_CONTRACT_V1}: trace proof failed"
 
 
 def _prepare_parallel_payload(data: dict[str, Any]) -> dict[str, Any]:
@@ -1458,6 +1467,58 @@ def create_app() -> Flask:
                     if isinstance(operator_batch_audit, dict)
                     else None,
                 )
+                if student_rm_wiring_mandate_active_v1(exam_req if isinstance(exam_req, dict) else None):
+                    from renaissance_v4.game_theory.tools.student_reasoning_model_trace_proof_v1 import (
+                        validate_student_reasoning_model_trace_for_job_v1,
+                    )
+
+                    trace_contract_audit = validate_student_reasoning_model_trace_for_job_v1(job_id)
+                    if not trace_contract_audit.get("ok_v1"):
+                        err_rt = _student_rm_trace_contract_error_message_v1(trace_contract_audit)
+                        exam_line_rt = _exam_run_line_meta_for_parallel_job_v1(
+                            exam_req=exam_req if isinstance(exam_req, dict) else None,
+                            fingerprint_preview=fp_prev if isinstance(fp_prev, str) else None,
+                            operator_batch_audit=operator_batch_audit,
+                            results=results,
+                            job_id=job_id,
+                            seam_audit=seam_audit,
+                            error=err_rt,
+                        )
+                        if isinstance(exam_line_rt, dict):
+                            exam_line_rt["student_rm_trace_contract_audit_v1"] = trace_contract_audit
+                            exam_line_rt["batch_terminal_status_v1"] = (
+                                FAILED_RUNTIME_STUDENT_RM_TRACE_CONTRACT_V1
+                            )
+                        timing_rt = record_parallel_batch_finished(
+                            job_id=job_id,
+                            started_at_utc=started_iso,
+                            start_unix=start_unix,
+                            total_scenarios=len(scenarios),
+                            workers_used=workers_used,
+                            results=results,
+                            session_log_batch_dir=session_batch_dir[0],
+                            error=err_rt,
+                            operator_batch_audit=operator_batch_audit,
+                            student_seam_observability_v1=seam_audit,
+                            exam_run_line_meta_v1=exam_line_rt,
+                        )
+                        with _JOBS_LOCK:
+                            jrt = _JOBS.get(job_id)
+                            if jrt:
+                                jrt["status"] = "error"
+                                jrt["completed"] = len(results)
+                                jrt["error"] = err_rt
+                                jrt["batch_timing"] = timing_rt
+                                jrt["result"] = {
+                                    "ok": False,
+                                    "job_id": job_id,
+                                    "error": err_rt,
+                                    "student_rm_trace_contract_audit_v1": trace_contract_audit,
+                                    "batch_timing": timing_rt,
+                                    "status_v1": FAILED_RUNTIME_STUDENT_RM_TRACE_CONTRACT_V1,
+                                    "results": results,
+                                }
+                        return
                 if seam_audit.get("skipped"):
                     emit_seam_disabled_placeholder_events_v1(
                         job_id=job_id,
@@ -2046,6 +2107,54 @@ def create_app() -> Flask:
                 if isinstance(operator_batch_audit, dict)
                 else None,
             )
+            if student_rm_wiring_mandate_active_v1(
+                exam_req_block if isinstance(exam_req_block, dict) else None
+            ):
+                from renaissance_v4.game_theory.tools.student_reasoning_model_trace_proof_v1 import (
+                    validate_student_reasoning_model_trace_for_job_v1,
+                )
+
+                trace_contract_audit_b = validate_student_reasoning_model_trace_for_job_v1(job_id)
+                if not trace_contract_audit_b.get("ok_v1"):
+                    err_rtb = _student_rm_trace_contract_error_message_v1(trace_contract_audit_b)
+                    exam_line_rtb = _exam_run_line_meta_for_parallel_job_v1(
+                        exam_req=exam_req_block if isinstance(exam_req_block, dict) else None,
+                        fingerprint_preview=fp_prev_block if isinstance(fp_prev_block, str) else None,
+                        operator_batch_audit=operator_batch_audit,
+                        results=results,
+                        job_id=job_id,
+                        seam_audit=seam_blocking,
+                        error=err_rtb,
+                    )
+                    if isinstance(exam_line_rtb, dict):
+                        exam_line_rtb["student_rm_trace_contract_audit_v1"] = trace_contract_audit_b
+                        exam_line_rtb["batch_terminal_status_v1"] = (
+                            FAILED_RUNTIME_STUDENT_RM_TRACE_CONTRACT_V1
+                        )
+                    timing_rtb = record_parallel_batch_finished(
+                        job_id=job_id,
+                        started_at_utc=started_iso,
+                        start_unix=start_unix,
+                        total_scenarios=len(scenarios),
+                        workers_used=workers_used,
+                        results=results,
+                        session_log_batch_dir=session_batch_dir[0],
+                        error=err_rtb,
+                        operator_batch_audit=operator_batch_audit,
+                        student_seam_observability_v1=seam_blocking,
+                        exam_run_line_meta_v1=exam_line_rtb,
+                    )
+                    return jsonify(
+                        {
+                            "ok": False,
+                            "error": err_rtb,
+                            "job_id": job_id,
+                            "batch_timing": timing_rtb,
+                            "student_rm_trace_contract_audit_v1": trace_contract_audit_b,
+                            "status_v1": FAILED_RUNTIME_STUDENT_RM_TRACE_CONTRACT_V1,
+                            "results": results,
+                        }
+                    ), 400
             if seam_blocking.get("skipped"):
                 emit_seam_disabled_placeholder_events_v1(
                     job_id=job_id,

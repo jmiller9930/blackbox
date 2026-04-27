@@ -44,6 +44,7 @@ REQUIRED_STAGES_V1 = frozenset(
         "entry_reasoning_validated",
         "entry_reasoning_sealed_v1",
         "reasoning_router_decision_v1",
+        "reasoning_cost_governor_v1",
         "student_decision_authority_v1",
         "student_output_sealed",
     }

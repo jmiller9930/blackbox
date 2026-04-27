@@ -5,7 +5,8 @@ RM preflight — bounded in-memory wiring validation before parallel batch (Dire
 * Runs **one** Student seam pass with memory trace sink + early exit after first ``student_output_sealed``.
 * Validates required RM trace stages in the sink — **no** ``learning_trace_events_v1.jsonl`` writes.
 
-Disable with ``PATTERN_GAME_RM_PREFLIGHT=0``. Default is **on** (unset or non-zero).
+Baseline may disable with ``PATTERN_GAME_RM_PREFLIGHT=0``. Non-baseline Student runs cannot
+skip RM preflight via env (contract).
 """
 
 from __future__ import annotations
@@ -121,17 +122,25 @@ def should_skip_rm_preflight_v1(
     *,
     exam_run_contract_request_v1: dict[str, Any] | None,
 ) -> str | None:
-    """Return skip reason string, or None if preflight should run."""
-    if not rm_preflight_enabled_v1():
-        return "rm_preflight_disabled_v1"
-    if not _env_seam_enabled():
-        return "student_loop_seam_disabled_v1"
+    """Return skip reason string, or None if preflight should run.
+
+    Non-baseline Student (RM wiring mandate): preflight is never skipped for ``rm_preflight_disabled``;
+    seam disabled or env RM off yields a **fatal** reason handled in ``run_rm_preflight_wiring_v1``.
+    """
     ex_req = exam_run_contract_request_v1 if isinstance(exam_run_contract_request_v1, dict) else None
     profile = normalize_student_reasoning_mode_v1(
         str((ex_req or {}).get("student_brain_profile_v1") or (ex_req or {}).get("student_reasoning_mode") or "")
     )
     if profile == STUDENT_BRAIN_PROFILE_BASELINE_NO_MEMORY_NO_LLM_V1:
+        if not rm_preflight_enabled_v1():
+            return "rm_preflight_disabled_v1"
+        if not _env_seam_enabled():
+            return "student_loop_seam_disabled_v1"
         return "baseline_no_student_mandate_v1"
+    if not _env_seam_enabled():
+        return "student_loop_seam_disabled_student_rm_contract_v1"
+    if not rm_preflight_enabled_v1():
+        return "rm_preflight_disabled_student_rm_contract_v1"
     return None
 
 
@@ -149,6 +158,28 @@ def run_rm_preflight_wiring_v1(
     """
     skip = should_skip_rm_preflight_v1(exam_run_contract_request_v1=exam_run_contract_request_v1)
     if skip:
+        if skip in (
+            "student_loop_seam_disabled_student_rm_contract_v1",
+            "rm_preflight_disabled_student_rm_contract_v1",
+        ):
+            human = (
+                "Student RM contract: non-baseline run requires RM preflight and student loop seam. "
+                + (
+                    "Enable PATTERN_GAME_STUDENT_LOOP_SEAM (non-zero)."
+                    if "seam" in skip
+                    else "Do not set PATTERN_GAME_RM_PREFLIGHT=0 for non-baseline Student runs."
+                )
+            )
+            return {
+                "schema": "rm_preflight_wiring_audit_v1",
+                "ok_v1": False,
+                "skipped_v1": False,
+                "skip_reason_v1": skip,
+                "status_v1": FAILED_PREFLIGHT_STATUS_V1,
+                "missing_stages_v1": [skip],
+                "human_message_v1": human,
+                "memory_sink_event_count_v1": 0,
+            }
         return {
             "schema": "rm_preflight_wiring_audit_v1",
             "ok_v1": True,

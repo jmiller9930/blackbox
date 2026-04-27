@@ -16,6 +16,8 @@ from renaissance_v4.game_theory.rm_preflight_wiring_v1 import (
     FAILED_PREFLIGHT_STATUS_V1,
     REQUIRED_RM_PREFLIGHT_STAGES_V1,
     rm_preflight_enabled_v1,
+    run_rm_preflight_wiring_v1,
+    should_skip_rm_preflight_v1,
     validate_rm_preflight_memory_sink_v1,
 )
 from renaissance_v4.game_theory.student_proctor.student_decision_authority_v1 import (
@@ -137,6 +139,34 @@ def test_memory_sink_no_file_write(tmp_path: Path, monkeypatch: pytest.MonkeyPat
 
 def test_rm_preflight_enabled_default():
     assert rm_preflight_enabled_v1() is True
+
+
+def test_student_mandate_should_skip_returns_fatal_when_rm_preflight_env_off(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setenv("PATTERN_GAME_RM_PREFLIGHT", "0")
+    assert (
+        should_skip_rm_preflight_v1(
+            exam_run_contract_request_v1={"student_brain_profile_v1": "memory_context_student"}
+        )
+        == "rm_preflight_disabled_student_rm_contract_v1"
+    )
+
+
+def test_student_mandate_run_rm_preflight_fails_when_rm_preflight_env_off(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setenv("PATTERN_GAME_RM_PREFLIGHT", "0")
+    rep = run_rm_preflight_wiring_v1(
+        scenarios=[{"manifest_path": "m.json", "scenario_id": "x"}],
+        job_id="jid_env_off",
+        exam_run_contract_request_v1={"student_brain_profile_v1": "memory_context_student"},
+        operator_batch_audit={},
+    )
+    assert rep["ok_v1"] is False
+    assert rep["skipped_v1"] is False
+    assert rep["status_v1"] == FAILED_PREFLIGHT_STATUS_V1
+    assert rep.get("skip_reason_v1") == "rm_preflight_disabled_student_rm_contract_v1"
 
 
 def test_required_stages_include_router():
