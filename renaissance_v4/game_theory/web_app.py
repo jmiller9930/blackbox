@@ -8,6 +8,9 @@ is merged into each scenario and drives **calendar tape slicing**; trade window 
 Batches use **``POST /api/run-parallel/start``** + polling **``GET /api/run-parallel/status/<job_id>``**
 (or **``GET /api/run-status/<job_id>``**, same payload). New jobs begin with **``status: preflight``** until
 ``run_rm_preflight_wiring_v1`` passes, then **``status: running``** while ``run_scenarios_parallel`` executes.
+During preflight, status may include **``rm_preflight_telemetry_v1``** (phase, elapsed_s, heartbeat, bars cap),
+**``preflight_display_status_v1``**, and **``last_message``** updated from the preflight progress callback;
+see **``directives/GT_DIRECTIVE_027_rm_preflight_operator_contract_v1.md``**.
 **``POST /api/run-parallel``** (blocking) registers the same in-memory ``job_id`` row so RM preflight can be polled
 live while the HTTP request is open; prefer **``/start``** + poll for operator UI.
 The UI shows **per-scenario progress** plus
@@ -395,7 +398,7 @@ def _parallel_job_cancel_requested(job_id: str) -> bool:
 
 
 def _parallel_job_rm_preflight_progress_cb_v1(job_id: str):
-    """``run_rm_preflight_wiring_v1(progress_cb=…)`` — live snapshots for Results panel polling."""
+    """``run_rm_preflight_wiring_v1(progress_cb=…)`` — live snapshots + heartbeat telemetry for polling."""
 
     jid = str(job_id or "").strip()
 
@@ -406,10 +409,31 @@ def _parallel_job_rm_preflight_progress_cb_v1(job_id: str):
             snap = copy.deepcopy(panel)
         except Exception:
             snap = dict(panel)
+        tel = snap.get("telemetry_v1") if isinstance(snap.get("telemetry_v1"), dict) else None
+        phase = str((tel or {}).get("phase_v1") or "")
+        elapsed = (tel or {}).get("elapsed_s_v1")
+        hb = (tel or {}).get("heartbeat_seq_v1")
+        cap = (tel or {}).get("bars_replay_cap_v1")
+        parts = ["RM preflight ACTIVE"]
+        if phase:
+            parts.append("phase=" + phase)
+        if elapsed is not None:
+            parts.append(f"elapsed_s={elapsed}")
+        if hb is not None:
+            parts.append(f"heartbeat={hb}")
+        if cap is not None:
+            parts.append(f"bars_cap={cap}")
+        if (tel or {}).get("bars_processed_v1") is not None:
+            parts.append("bars_loaded=" + str((tel or {}).get("bars_processed_v1")))
+        line = " · ".join(parts)
         with _JOBS_LOCK:
             j = _JOBS.get(jid)
             if isinstance(j, dict):
                 j["rm_preflight_results_panel_v1"] = snap
+                j["preflight_display_status_v1"] = "preflight_active"
+                if tel is not None:
+                    j["rm_preflight_telemetry_v1"] = copy.deepcopy(tel)
+                j["last_message"] = line[:500]
 
     return _cb
 
@@ -473,6 +497,10 @@ def _parallel_job_enqueue_record_v1(
             "reasoning_tile_run_kind_v1": reasoning_tile_run_kind_v1,
             "rm_preflight_terminal_lines_v1": [],
             "rm_preflight_results_panel_v1": None,
+            "rm_preflight_telemetry_v1": None,
+            "preflight_display_status_v1": (
+                "preflight_active" if _student_rm_contract and not _sk_pf else "preflight_idle"
+            ),
             "operator_exam_brain_profile_v1": _brain,
             "student_rm_contract_applies_v1": _student_rm_contract,
             "rm_preflight_should_skip_reason_enqueue_v1": _sk_pf,
@@ -1744,8 +1772,8 @@ def create_app() -> Flask:
                 _parallel_job_append_rm_preflight_line_v1(job_id, "RM PREFLIGHT START")
                 _parallel_job_append_rm_preflight_line_v1(
                     job_id,
-                    "RM PREFLIGHT: first-scenario replay in-process (same worker as production) — "
-                    "parallel batch not started yet; large window + Student can take several minutes with no further lines until PASS/FAIL.",
+                    "RM PREFLIGHT: bounded first-scenario replay (tail-capped bars + worker timeout) — "
+                    "parallel workers not started; poll this job for telemetry (phase, elapsed, heartbeat).",
                 )
                 from renaissance_v4.game_theory.rm_preflight_wiring_v1 import (
                     FAILED_PREFLIGHT_STATUS_V1,
@@ -1807,6 +1835,7 @@ def create_app() -> Flask:
                         jc = _JOBS.get(job_id)
                         if jc:
                             jc["status"] = "cancelled"
+                            jc["preflight_display_status_v1"] = "preflight_cancelled"
                             jc["completed"] = 0
                             jc["error"] = err_c
                             jc["batch_timing"] = timing_c
@@ -1881,6 +1910,7 @@ def create_app() -> Flask:
                         jpf = _JOBS.get(job_id)
                         if jpf:
                             jpf["status"] = "error"
+                            jpf["preflight_display_status_v1"] = "preflight_failed"
                             jpf["completed"] = 0
                             jpf["error"] = err_msg
                             jpf["batch_timing"] = timing_pf
@@ -1979,6 +2009,7 @@ def create_app() -> Flask:
                         jpc = _JOBS.get(job_id)
                         if jpc:
                             jpc["status"] = "cancelled"
+                            jpc["preflight_display_status_v1"] = "preflight_cancelled_after_pass"
                             jpc["completed"] = 0
                             jpc["error"] = err_pc
                             jpc["batch_timing"] = timing_pc
@@ -1996,6 +2027,7 @@ def create_app() -> Flask:
                     j_go = _JOBS.get(job_id)
                     if j_go:
                         j_go["status"] = "running"
+                        j_go["preflight_display_status_v1"] = "batch_running"
                 _parallel_job_append_rm_preflight_line_v1(
                     job_id,
                     "PARALLEL: workers starting — Referee replay; telemetry files use job_id="
@@ -2332,6 +2364,13 @@ def create_app() -> Flask:
             out["error"] = j["error"]
         if j.get("batch_timing") is not None:
             out["batch_timing"] = j["batch_timing"]
+        if isinstance(j.get("rm_preflight_telemetry_v1"), dict):
+            out["rm_preflight_telemetry_v1"] = copy.deepcopy(j["rm_preflight_telemetry_v1"])
+        pds = j.get("preflight_display_status_v1")
+        if isinstance(pds, str) and pds.strip():
+            out["preflight_display_status_v1"] = pds.strip()
+        elif str(j.get("status") or "") == "preflight":
+            out["preflight_display_status_v1"] = "preflight_active"
         rpl = j.get("rm_preflight_terminal_lines_v1")
         if isinstance(rpl, list) and rpl:
             out["rm_preflight_terminal_lines_v1"] = list(rpl)
@@ -2628,8 +2667,8 @@ def create_app() -> Flask:
             _parallel_job_append_rm_preflight_line_v1(job_id, "RM PREFLIGHT START")
             _parallel_job_append_rm_preflight_line_v1(
                 job_id,
-                "RM PREFLIGHT: first-scenario replay in-process (blocking /api/run-parallel — "
-                "poll GET /api/run-parallel/status/<job_id> for live Results panel data).",
+                "RM PREFLIGHT: bounded replay + seam (blocking /api/run-parallel — "
+                "GET /api/run-status/<job_id> returns rm_preflight_telemetry_v1 while active).",
             )
             print(
                 f"[pattern_game_parallel] job_id={job_id} RM PREFLIGHT START (blocking /api/run-parallel)",
@@ -2700,6 +2739,9 @@ def create_app() -> Flask:
                     jbpf = _JOBS.get(job_id)
                     if isinstance(jbpf, dict):
                         jbpf["status"] = "cancelled" if _pf_cancel else "error"
+                        jbpf["preflight_display_status_v1"] = (
+                            "preflight_cancelled" if _pf_cancel else "preflight_failed"
+                        )
                         jbpf["completed"] = 0
                         jbpf["error"] = err_pb
                         jbpf["batch_timing"] = timing_pb
@@ -2720,6 +2762,7 @@ def create_app() -> Flask:
                 jrun = _JOBS.get(job_id)
                 if isinstance(jrun, dict):
                     jrun["status"] = "running"
+                    jrun["preflight_display_status_v1"] = "batch_running"
             emit_referee_execution_started_v1(
                 job_id=job_id, fingerprint=lt_fp_block, scenario_total=len(scenarios)
             )
@@ -9545,7 +9588,10 @@ PAGE_HTML = """<!DOCTYPE html>
       const bc = pj.student_rm_trace_breadcrumbs_v1;
       const fails = pj.rm_results_integrity_failures_v1;
       const jidHas = pj.job_id && String(pj.job_id).trim();
-      if (!panel && !bc && !(active && jidHas)) {
+      const tel = pj.rm_preflight_telemetry_v1;
+      const hasTel = tel && typeof tel === 'object';
+      const pds = pj.preflight_display_status_v1;
+      if (!panel && !bc && !(active && jidHas) && !(hasTel && batchSt === 'preflight')) {
         wrap.hidden = true;
         return;
       }
@@ -9554,6 +9600,21 @@ PAGE_HTML = """<!DOCTYPE html>
       lines.push('=== Active job_id (batch) ===');
       lines.push(jidHas ? String(pj.job_id) : '(job_id not on status — stale client payload?)');
       lines.push('');
+      if (pds) {
+        lines.push('preflight_display_status_v1: ' + String(pds));
+        lines.push('');
+      }
+      if (hasTel) {
+        lines.push('=== RM preflight live telemetry (GET /api/run-status) ===');
+        lines.push('phase_v1: ' + (tel.phase_v1 != null ? String(tel.phase_v1) : '—'));
+        lines.push('elapsed_s_v1: ' + (tel.elapsed_s_v1 != null ? String(tel.elapsed_s_v1) : '—'));
+        lines.push('heartbeat_seq_v1: ' + (tel.heartbeat_seq_v1 != null ? String(tel.heartbeat_seq_v1) : '—'));
+        lines.push('bars_replay_cap_v1: ' + (tel.bars_replay_cap_v1 != null ? String(tel.bars_replay_cap_v1) : '—'));
+        lines.push('bars_processed_v1: ' + (tel.bars_processed_v1 != null ? String(tel.bars_processed_v1) : '—'));
+        if (tel.replay_position_v1) lines.push('replay_position_v1: ' + String(tel.replay_position_v1));
+        if (tel.note_v1) lines.push('note_v1: ' + String(tel.note_v1));
+        lines.push('');
+      }
       if (panel && typeof panel === 'object') {
         lines.push('=== RM preflight checklist (audit / memory sink) ===');
         const lv = panel.lines_v1;
@@ -9697,6 +9758,23 @@ PAGE_HTML = """<!DOCTYPE html>
       if (rpl.length) {
         for (let ri = 0; ri < rpl.length; ri++) {
           lines.push(String(rpl[ri]));
+        }
+        lines.push('');
+      }
+      const pft = pj && pj.rm_preflight_telemetry_v1;
+      if (preflight && pft && typeof pft === 'object') {
+        lines.push(
+          'RM preflight live: phase=' +
+            String(pft.phase_v1 != null ? pft.phase_v1 : '?') +
+            ' · elapsed_s=' +
+            String(pft.elapsed_s_v1 != null ? pft.elapsed_s_v1 : '—') +
+            ' · hb=' +
+            String(pft.heartbeat_seq_v1 != null ? pft.heartbeat_seq_v1 : '—') +
+            ' · bars_cap=' +
+            String(pft.bars_replay_cap_v1 != null ? pft.bars_replay_cap_v1 : '—')
+        );
+        if (pj.preflight_display_status_v1) {
+          lines.push('preflight_display_status_v1: ' + String(pj.preflight_display_status_v1));
         }
         lines.push('');
       }

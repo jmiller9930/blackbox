@@ -329,6 +329,27 @@ def test_json_roundtrip_sink_event():
 
 
 @patch("renaissance_v4.game_theory.rm_preflight_wiring_v1._worker_run_one")
+def test_run_rm_preflight_worker_timeout_v1(mock_worker, monkeypatch: pytest.MonkeyPatch) -> None:
+    import time
+
+    def _slow(_scenario: dict) -> dict:
+        time.sleep(60.0)
+        return {"ok": True, "scenario_id": "x", "replay_outcomes_json": []}
+
+    mock_worker.side_effect = _slow
+    monkeypatch.setenv("PATTERN_GAME_RM_PREFLIGHT_WORKER_TIMEOUT_S", "1")
+    rep = run_rm_preflight_wiring_v1(
+        scenarios=[{"manifest_path": "m.json", "scenario_id": "x"}],
+        job_id="jid_timeout",
+        exam_run_contract_request_v1={"student_brain_profile_v1": "memory_context_student"},
+        operator_batch_audit={},
+    )
+    assert rep.get("ok_v1") is False
+    miss = list(rep.get("missing_stages_v1") or [])
+    assert "preflight_timeout_waiting_for_trade_v1" in miss
+
+
+@patch("renaissance_v4.game_theory.rm_preflight_wiring_v1._worker_run_one")
 @patch("renaissance_v4.game_theory.rm_preflight_wiring_v1.student_loop_seam_after_parallel_batch_v1")
 def test_run_rm_preflight_propagates_worker_failure(mock_seam, mock_worker):
     from renaissance_v4.game_theory.rm_preflight_wiring_v1 import run_rm_preflight_wiring_v1

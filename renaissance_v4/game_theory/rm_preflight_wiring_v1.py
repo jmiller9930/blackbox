@@ -2,8 +2,9 @@
 RM preflight — bounded in-memory wiring validation before parallel batch (Directive: reasoning_model).
 
 * Shrinks the evaluation calendar window (default **1** month; ``PATTERN_GAME_RM_PREFLIGHT_MAX_CALENDAR_MONTHS``).
-* Caps the Referee tape to the **last N** bars (default **5000**; ``PATTERN_GAME_RM_PREFLIGHT_REPLAY_TAIL_BARS``)
-  so preflight stays **fail-fast** (seconds-scale), not a full operator replay.
+* Caps the Referee tape to the **last N** bars (default **80**; ``PATTERN_GAME_RM_PREFLIGHT_REPLAY_TAIL_BARS``)
+  so preflight stays **seconds-scale**. Worker wall time is capped via ``PATTERN_GAME_RM_PREFLIGHT_WORKER_TIMEOUT_S``
+  (default **10**). Heartbeats update ``telemetry_v1`` on the Results panel while work runs.
 * Runs **one** in-process worker row (same ``_worker_run_one`` as production) on the clamped scenario.
 * Runs **one** Student seam pass with memory trace sink + early exit after first ``student_output_sealed``.
 * Validates required RM trace stages in the sink — **no** ``learning_trace_events_v1.jsonl`` writes.
@@ -16,8 +17,12 @@ from __future__ import annotations
 
 import copy
 import os
+import threading
+import time
 from collections import defaultdict
 from collections.abc import Callable
+from concurrent.futures import ThreadPoolExecutor
+from concurrent.futures import TimeoutError as FuturesTimeoutError
 from typing import Any
 
 from renaissance_v4.game_theory.exam_run_contract_v1 import (
@@ -92,7 +97,7 @@ def _shrink_scenario_for_rm_preflight_v1(scenario: dict[str, Any]) -> dict[str, 
     Defaults target **seconds-scale** wiring checks (not full operator replays). Override with env:
 
     * ``PATTERN_GAME_RM_PREFLIGHT_MAX_CALENDAR_MONTHS`` (default **1**)
-    * ``PATTERN_GAME_RM_PREFLIGHT_REPLAY_TAIL_BARS`` (default **5000**; min 50, max 250000)
+    * ``PATTERN_GAME_RM_PREFLIGHT_REPLAY_TAIL_BARS`` (default **80**; min 50, max 250000)
     """
     s = copy.deepcopy(scenario)
     try:
@@ -111,12 +116,56 @@ def _shrink_scenario_for_rm_preflight_v1(scenario: dict[str, Any]) -> dict[str, 
     ew["rm_preflight_window_clamp_v1"] = True
     s["evaluation_window"] = ew
     try:
-        tail = int(os.environ.get("PATTERN_GAME_RM_PREFLIGHT_REPLAY_TAIL_BARS", "5000"))
+        tail = int(os.environ.get("PATTERN_GAME_RM_PREFLIGHT_REPLAY_TAIL_BARS", "80"))
     except (TypeError, ValueError):
-        tail = 5000
+        tail = 80
     tail = max(50, min(tail, 250_000))
     s["rm_preflight_replay_tail_bars_v1"] = tail
     return s
+
+
+def _rm_preflight_worker_timeout_seconds_v1() -> float:
+    raw = (os.environ.get("PATTERN_GAME_RM_PREFLIGHT_WORKER_TIMEOUT_S") or "10").strip()
+    try:
+        t = float(raw)
+    except (TypeError, ValueError):
+        t = 10.0
+    return max(3.0, min(t, 120.0))
+
+
+def _rm_preflight_heartbeat_interval_s_v1() -> float:
+    raw = (os.environ.get("PATTERN_GAME_RM_PREFLIGHT_HEARTBEAT_INTERVAL_S") or "1.25").strip()
+    try:
+        t = float(raw)
+    except (TypeError, ValueError):
+        t = 1.25
+    return max(0.5, min(t, 5.0))
+
+
+def _preflight_telemetry_update_v1(
+    panel: dict[str, Any],
+    *,
+    phase: str,
+    t0: float,
+    bars_replay_cap: int | None,
+    bars_processed: int | None = None,
+    heartbeat_seq: int | None = None,
+    note: str | None = None,
+) -> None:
+    tel = panel.setdefault("telemetry_v1", {})
+    tel["schema"] = "rm_preflight_telemetry_v1"
+    tel["phase_v1"] = str(phase or "")[:64]
+    tel["elapsed_s_v1"] = round(time.monotonic() - t0, 2)
+    if bars_replay_cap is not None:
+        tel["bars_replay_cap_v1"] = int(bars_replay_cap)
+    if bars_processed is not None:
+        tel["bars_processed_v1"] = int(bars_processed)
+    if heartbeat_seq is not None:
+        tel["heartbeat_seq_v1"] = int(heartbeat_seq)
+    if note:
+        tel["note_v1"] = str(note)[:240]
+    if bars_replay_cap is not None:
+        tel["replay_position_v1"] = f"tail_last_{int(bars_replay_cap)}_bars_v1"
 
 
 def _rm_preflight_by_stage_for_trade_v1(
@@ -349,6 +398,11 @@ def map_rm_preflight_missing_to_operator_display_v1(missing: list[str]) -> list[
             out.append("missing decision_source_v1: reasoning_model (sealed)")
         elif s == "student_output_sealed.student_decision_protocol_incomplete_v1":
             out.append("Student decision protocol incomplete on sealed output (RM preflight)")
+        elif s == "preflight_timeout_waiting_for_trade_v1":
+            out.append(
+                "RM preflight worker timeout — bounded replay did not finish within "
+                "PATTERN_GAME_RM_PREFLIGHT_WORKER_TIMEOUT_S (see telemetry)"
+            )
         else:
             out.append(s)
     return out
@@ -498,294 +552,412 @@ def run_rm_preflight_wiring_v1(
                 _operator_cancelled_preflight_audit_v1(memory_sink_event_count_v1=len(sink)),
             )
 
-        row = _worker_run_one(shrunk)
+        tail_cap_raw = shrunk.get("rm_preflight_replay_tail_bars_v1")
+        try:
+            bars_cap = int(tail_cap_raw) if tail_cap_raw is not None else 80
+        except (TypeError, ValueError):
+            bars_cap = 80
+        t0 = time.monotonic()
+        phase_holder: dict[str, Any] = {"v": "worker_replay"}
+        hb_done = threading.Event()
 
-        if _preflight_cancel_hit_v1(cancel_check):
-            st["terminal_pass_v1"] = False
-            panel["failure_reasons_display_v1"] = ["cancelled_after_worker"]
-            return _merge_panel_into_audit_v1(
-                panel,
-                _operator_cancelled_preflight_audit_v1(memory_sink_event_count_v1=len(sink)),
-            )
+        def _preflight_hb_loop_v1() -> None:
+            iv = _rm_preflight_heartbeat_interval_s_v1()
+            seq = 0
+            while not hb_done.wait(timeout=iv):
+                if _preflight_cancel_hit_v1(cancel_check):
+                    break
+                seq += 1
+                _preflight_telemetry_update_v1(
+                    panel,
+                    phase=str(phase_holder.get("v") or "worker_replay"),
+                    t0=t0,
+                    bars_replay_cap=bars_cap,
+                    heartbeat_seq=seq,
+                    note="rm_preflight_heartbeat_v1",
+                )
+                _emit_rm_preflight_panel_v1(panel, progress_cb)
 
-        if not row.get("ok"):
-            st["terminal_pass_v1"] = False
-            panel["failure_reasons_display_v1"] = [
-                "preflight_worker_row_failed_v1",
-                str(row.get("error") or "worker row not ok"),
-            ]
-            _emit_rm_preflight_panel_v1(panel, progress_cb)
-            return _merge_panel_into_audit_v1(
-                panel,
-                {
-                    "schema": "rm_preflight_wiring_audit_v1",
-                    "ok_v1": False,
-                    "skipped_v1": False,
-                    "status_v1": FAILED_PREFLIGHT_STATUS_V1,
-                    "missing_stages_v1": ["preflight_worker_row_failed_v1"],
-                    "human_message_v1": str(row.get("error") or "worker row not ok"),
-                    "memory_sink_event_count_v1": len(sink),
-                    "preflight_worker_scenario_id_v1": str(row.get("scenario_id") or ""),
-                },
-            )
-
-        expected_batch_scenario_id_v1 = shrunk.get("scenario_id", "unknown")
-        row_sid = row.get("scenario_id")
-        if str(row_sid) != str(expected_batch_scenario_id_v1):
-            st["scenario_bound_failed_v1"] = True
-            st["terminal_pass_v1"] = False
-            panel["failure_reasons_display_v1"] = map_rm_preflight_missing_to_operator_display_v1(
-                ["job_binding_scenario_mismatch_v1"]
-            )
-            jbind = _rm_preflight_job_binding_audit_v1(
-                job_id=str(job_id).strip(),
-                batch_first_scenario_id_v1=str(expected_batch_scenario_id_v1),
-                worker_row_scenario_id_v1=str(row_sid),
-                trade_id_v1="",
-                scenario_binding_ok_v1=False,
-                trace_job_binding_ok_v1=None,
-            )
-            _emit_rm_preflight_panel_v1(panel, progress_cb)
-            return _merge_panel_into_audit_v1(
-                panel,
-                {
-                    "schema": "rm_preflight_wiring_audit_v1",
-                    "ok_v1": False,
-                    "skipped_v1": False,
-                    "status_v1": FAILED_PREFLIGHT_STATUS_V1,
-                    "missing_stages_v1": ["job_binding_scenario_mismatch_v1"],
-                    "human_message_v1": (
-                        "RM preflight: worker scenario_id does not match first submitted scenario "
-                        f"(batch_first={expected_batch_scenario_id_v1!r}, row={row_sid!r})."
-                    ),
-                    "memory_sink_event_count_v1": len(sink),
-                    "rm_preflight_job_binding_audit_v1": jbind,
-                },
-            )
-
-        st["scenario_bound_v1"] = True
-        panel["active_scenario_id_v1"] = str(row_sid or "").strip()
-        _emit_rm_preflight_panel_v1(panel, progress_cb)
-
-        raw_out = row.get("replay_outcomes_json")
-        if not isinstance(raw_out, list) or not raw_out:
-            st["terminal_pass_v1"] = False
-            panel["failure_reasons_display_v1"] = ["no_replay_outcomes_for_preflight_v1"]
-            _emit_rm_preflight_panel_v1(panel, progress_cb)
-            return _merge_panel_into_audit_v1(
-                panel,
-                {
-                    "schema": "rm_preflight_wiring_audit_v1",
-                    "ok_v1": False,
-                    "skipped_v1": False,
-                    "status_v1": FAILED_PREFLIGHT_STATUS_V1,
-                    "missing_stages_v1": ["no_replay_outcomes_for_preflight_v1"],
-                    "human_message_v1": "RM preflight: bounded replay returned no closed trades.",
-                    "memory_sink_event_count_v1": len(sink),
-                },
-            )
-        first = raw_out[0]
-        if not isinstance(first, dict):
-            st["terminal_pass_v1"] = False
-            panel["failure_reasons_display_v1"] = ["invalid_first_outcome_v1"]
-            _emit_rm_preflight_panel_v1(panel, progress_cb)
-            return _merge_panel_into_audit_v1(
-                panel,
-                {
-                    "schema": "rm_preflight_wiring_audit_v1",
-                    "ok_v1": False,
-                    "skipped_v1": False,
-                    "status_v1": FAILED_PREFLIGHT_STATUS_V1,
-                    "missing_stages_v1": ["invalid_first_outcome_v1"],
-                    "human_message_v1": "RM preflight: first outcome is not a dict.",
-                    "memory_sink_event_count_v1": len(sink),
-                },
-            )
-        trade_id = str(first.get("trade_id") or "").strip()
-        scenario_id = str(row.get("scenario_id") or "").strip()
-        if not trade_id:
-            st["trade_bound_failed_v1"] = True
-            st["terminal_pass_v1"] = False
-            panel["failure_reasons_display_v1"] = map_rm_preflight_missing_to_operator_display_v1(
-                ["job_binding_empty_trade_id_v1"]
-            )
-            jbind = _rm_preflight_job_binding_audit_v1(
-                job_id=str(job_id).strip(),
-                batch_first_scenario_id_v1=str(expected_batch_scenario_id_v1),
-                worker_row_scenario_id_v1=str(row_sid),
-                trade_id_v1="",
-                scenario_binding_ok_v1=True,
-                trace_job_binding_ok_v1=None,
-            )
-            _emit_rm_preflight_panel_v1(panel, progress_cb)
-            return _merge_panel_into_audit_v1(
-                panel,
-                {
-                    "schema": "rm_preflight_wiring_audit_v1",
-                    "ok_v1": False,
-                    "skipped_v1": False,
-                    "status_v1": FAILED_PREFLIGHT_STATUS_V1,
-                    "missing_stages_v1": ["job_binding_empty_trade_id_v1"],
-                    "human_message_v1": "RM preflight: first replay outcome has no trade_id — cannot bind RM trace to a shell.",
-                    "memory_sink_event_count_v1": len(sink),
-                    "rm_preflight_job_binding_audit_v1": jbind,
-                },
-            )
-
-        st["trade_bound_v1"] = True
-        panel["active_trade_id_v1"] = trade_id
-        _emit_rm_preflight_panel_v1(panel, progress_cb)
-
-        n_sink_before_seam = len(sink)
-        if _preflight_cancel_hit_v1(cancel_check):
-            st["terminal_pass_v1"] = False
-            panel["failure_reasons_display_v1"] = ["cancelled_before_seam"]
-            return _merge_panel_into_audit_v1(
-                panel,
-                _operator_cancelled_preflight_audit_v1(memory_sink_event_count_v1=len(sink)),
-            )
-        with rm_preflight_seam_early_exit_session_v1():
-            seam = student_loop_seam_after_parallel_batch_v1(
-                results=[row],
-                run_id=str(job_id).strip(),
-                exam_run_contract_request_v1=exam_run_contract_request_v1,
-                operator_batch_audit=operator_batch_audit if isinstance(operator_batch_audit, dict) else None,
-            )
-        if _preflight_cancel_hit_v1(cancel_check):
-            st["terminal_pass_v1"] = False
-            panel["failure_reasons_display_v1"] = ["cancelled_after_seam"]
-            return _merge_panel_into_audit_v1(
-                panel,
-                _operator_cancelled_preflight_audit_v1(memory_sink_event_count_v1=len(sink)),
-            )
-        st["seam_completed_v1"] = True
-        _emit_rm_preflight_panel_v1(panel, progress_cb)
-
-        if seam.get("skipped"):
-            st["terminal_pass_v1"] = False
-            panel["failure_reasons_display_v1"] = [str(seam.get("reason") or "student_seam_skipped_v1")]
-            _emit_rm_preflight_panel_v1(panel, progress_cb)
-            return _merge_panel_into_audit_v1(
-                panel,
-                {
-                    "schema": "rm_preflight_wiring_audit_v1",
-                    "ok_v1": False,
-                    "skipped_v1": False,
-                    "status_v1": FAILED_PREFLIGHT_STATUS_V1,
-                    "missing_stages_v1": ["student_seam_skipped_v1"],
-                    "human_message_v1": str(seam.get("reason") or "seam skipped"),
-                    "memory_sink_event_count_v1": len(sink),
-                    "preflight_seam_audit_v1": seam,
-                },
-            )
-        if not seam.get("rm_preflight_wiring_early_exit_v1"):
-            st["terminal_pass_v1"] = False
-            panel["failure_reasons_display_v1"] = list(
-                map_rm_preflight_missing_to_operator_display_v1(["rm_preflight_early_exit_not_reached_v1"])
-            ) + [str(x) for x in (seam.get("errors") or [])[:6]]
-            _emit_rm_preflight_panel_v1(panel, progress_cb)
-            return _merge_panel_into_audit_v1(
-                panel,
-                {
-                    "schema": "rm_preflight_wiring_audit_v1",
-                    "ok_v1": False,
-                    "skipped_v1": False,
-                    "status_v1": FAILED_PREFLIGHT_STATUS_V1,
-                    "missing_stages_v1": ["rm_preflight_early_exit_not_reached_v1"],
-                    "human_message_v1": (
-                        "RM preflight: first trade did not reach student_output_sealed — "
-                        + "; ".join(str(x) for x in (seam.get("errors") or [])[:8])
-                    ),
-                    "memory_sink_event_count_v1": len(sink),
-                    "preflight_seam_audit_v1": seam,
-                },
-            )
-        seam_errs = [str(x) for x in (seam.get("errors") or []) if x]
-        if seam_errs:
-            st["terminal_pass_v1"] = False
-            panel["failure_reasons_display_v1"] = seam_errs[:12]
-            _emit_rm_preflight_panel_v1(panel, progress_cb)
-            return _merge_panel_into_audit_v1(
-                panel,
-                {
-                    "schema": "rm_preflight_wiring_audit_v1",
-                    "ok_v1": False,
-                    "skipped_v1": False,
-                    "status_v1": FAILED_PREFLIGHT_STATUS_V1,
-                    "missing_stages_v1": ["student_seam_errors_v1"],
-                    "human_message_v1": "RM preflight: " + "; ".join(seam_errs[:12]),
-                    "memory_sink_event_count_v1": len(sink),
-                    "preflight_seam_audit_v1": seam,
-                },
-            )
-
-        det = validate_rm_preflight_memory_sink_detailed_v1(
-            sink,
-            scenario_id=scenario_id,
-            trade_id=trade_id,
-            job_id=str(job_id).strip(),
-        )
-        ok_ev = bool(det.get("ok_v1"))
-        missing = list(det.get("missing_stages_v1") or [])
-        panel["preflight_sink_detail_v1"] = det
-        st["job_id_bound_trace_v1"] = bool(det.get("job_id_binding_ok_v1"))
-        st["breadcrumbs_validated_v1"] = ok_ev
-        _emit_rm_preflight_panel_v1(panel, progress_cb)
-
-        jbind_ok = _rm_preflight_job_binding_audit_v1(
-            job_id=str(job_id).strip(),
-            batch_first_scenario_id_v1=str(expected_batch_scenario_id_v1),
-            worker_row_scenario_id_v1=str(row_sid),
-            trade_id_v1=trade_id,
-            scenario_binding_ok_v1=True,
-            trace_job_binding_ok_v1=ok_ev,
-        )
-        if not ok_ev:
-            st["terminal_pass_v1"] = False
-            panel["failure_reasons_display_v1"] = map_rm_preflight_missing_to_operator_display_v1(missing)
-            _emit_rm_preflight_panel_v1(panel, progress_cb)
-            return _merge_panel_into_audit_v1(
-                panel,
-                {
-                    "schema": "rm_preflight_wiring_audit_v1",
-                    "ok_v1": False,
-                    "skipped_v1": False,
-                    "status_v1": FAILED_PREFLIGHT_STATUS_V1,
-                    "missing_stages_v1": missing,
-                    "human_message_v1": "RM preflight: incomplete reasoning trace or job not bound to trace — "
-                    + ", ".join(missing),
-                    "memory_sink_event_count_v1": len(sink),
-                    "preflight_seam_audit_v1": seam,
-                    "preflight_trace_events_sample_v1": sink[n_sink_before_seam:][:40],
-                    "rm_preflight_job_binding_audit_v1": jbind_ok,
-                },
-            )
-
-        st["terminal_pass_v1"] = True
-        panel["failure_reasons_display_v1"] = []
-        _emit_rm_preflight_panel_v1(panel, progress_cb)
-        return _merge_panel_into_audit_v1(
+        _preflight_telemetry_update_v1(
             panel,
-            {
-                "schema": "rm_preflight_wiring_audit_v1",
-                "ok_v1": True,
-                "skipped_v1": False,
-                "status_v1": "passed_rm_preflight_wiring_v1",
-                "missing_stages_v1": [],
-                "memory_sink_event_count_v1": len(sink),
-                "preflight_seam_audit_v1": seam,
-                "preflight_trade_id_v1": trade_id,
-                "preflight_scenario_id_v1": scenario_id,
-                "rm_preflight_job_binding_audit_v1": jbind_ok,
-                "preflight_replay_bounds_v1": {
-                    "schema": "rm_preflight_replay_bounds_v1",
-                    "calendar_months_v1": (shrunk.get("evaluation_window") or {}).get("calendar_months"),
-                    "rm_preflight_replay_tail_bars_v1": shrunk.get("rm_preflight_replay_tail_bars_v1"),
-                },
-            },
+            phase="starting",
+            t0=t0,
+            bars_replay_cap=bars_cap,
+            heartbeat_seq=0,
+            note="bounded_worker_then_seam",
         )
+        _emit_rm_preflight_panel_v1(panel, progress_cb)
+        _hb_t = threading.Thread(target=_preflight_hb_loop_v1, daemon=True, name="rm_preflight_hb_v1")
+        _hb_t.start()
+        try:
+            _ex = ThreadPoolExecutor(max_workers=1)
+            try:
+                _fut = _ex.submit(_worker_run_one, shrunk)
+                row = _fut.result(timeout=_rm_preflight_worker_timeout_seconds_v1())
+            except FuturesTimeoutError:
+                st["terminal_pass_v1"] = False
+                phase_holder["v"] = "preflight_timeout"
+                _preflight_telemetry_update_v1(
+                    panel,
+                    phase="preflight_timeout",
+                    t0=t0,
+                    bars_replay_cap=bars_cap,
+                    heartbeat_seq=None,
+                    note="preflight_timeout_waiting_for_trade_v1",
+                )
+                panel["failure_reasons_display_v1"] = map_rm_preflight_missing_to_operator_display_v1(
+                    ["preflight_timeout_waiting_for_trade_v1"]
+                )
+                _emit_rm_preflight_panel_v1(panel, progress_cb)
+                return _merge_panel_into_audit_v1(
+                    panel,
+                    {
+                        "schema": "rm_preflight_wiring_audit_v1",
+                        "ok_v1": False,
+                        "skipped_v1": False,
+                        "status_v1": FAILED_PREFLIGHT_STATUS_V1,
+                        "missing_stages_v1": ["preflight_timeout_waiting_for_trade_v1"],
+                        "human_message_v1": (
+                            "RM preflight: bounded replay exceeded "
+                            f"{_rm_preflight_worker_timeout_seconds_v1():.0f}s "
+                            "(see PATTERN_GAME_RM_PREFLIGHT_WORKER_TIMEOUT_S); "
+                            "try a smaller PATTERN_GAME_RM_PREFLIGHT_REPLAY_TAIL_BARS."
+                        ),
+                        "memory_sink_event_count_v1": len(sink),
+                    },
+                )
+            finally:
+                _ex.shutdown(wait=False, cancel_futures=False)
+
+            phase_holder["v"] = "replay_complete"
+            _ds_bars = row.get("dataset_bars")
+            _ds_bars2 = row.get("dataset_bars_after_rollup")
+            _bars_proc = _ds_bars if _ds_bars is not None else _ds_bars2
+            _preflight_telemetry_update_v1(
+                panel,
+                phase="replay_complete",
+                t0=t0,
+                bars_replay_cap=bars_cap,
+                bars_processed=int(_bars_proc)
+                if isinstance(_bars_proc, (int, float)) and not isinstance(_bars_proc, bool)
+                else None,
+                note="worker_row_returned",
+            )
+            _emit_rm_preflight_panel_v1(panel, progress_cb)
+
+            if _preflight_cancel_hit_v1(cancel_check):
+                st["terminal_pass_v1"] = False
+                panel["failure_reasons_display_v1"] = ["cancelled_after_worker"]
+                return _merge_panel_into_audit_v1(
+                    panel,
+                    _operator_cancelled_preflight_audit_v1(memory_sink_event_count_v1=len(sink)),
+                )
+
+            if not row.get("ok"):
+                st["terminal_pass_v1"] = False
+                panel["failure_reasons_display_v1"] = [
+                    "preflight_worker_row_failed_v1",
+                    str(row.get("error") or "worker row not ok"),
+                ]
+                _emit_rm_preflight_panel_v1(panel, progress_cb)
+                return _merge_panel_into_audit_v1(
+                    panel,
+                    {
+                        "schema": "rm_preflight_wiring_audit_v1",
+                        "ok_v1": False,
+                        "skipped_v1": False,
+                        "status_v1": FAILED_PREFLIGHT_STATUS_V1,
+                        "missing_stages_v1": ["preflight_worker_row_failed_v1"],
+                        "human_message_v1": str(row.get("error") or "worker row not ok"),
+                        "memory_sink_event_count_v1": len(sink),
+                        "preflight_worker_scenario_id_v1": str(row.get("scenario_id") or ""),
+                    },
+                )
+
+            expected_batch_scenario_id_v1 = shrunk.get("scenario_id", "unknown")
+            row_sid = row.get("scenario_id")
+            if str(row_sid) != str(expected_batch_scenario_id_v1):
+                st["scenario_bound_failed_v1"] = True
+                st["terminal_pass_v1"] = False
+                panel["failure_reasons_display_v1"] = map_rm_preflight_missing_to_operator_display_v1(
+                    ["job_binding_scenario_mismatch_v1"]
+                )
+                jbind = _rm_preflight_job_binding_audit_v1(
+                    job_id=str(job_id).strip(),
+                    batch_first_scenario_id_v1=str(expected_batch_scenario_id_v1),
+                    worker_row_scenario_id_v1=str(row_sid),
+                    trade_id_v1="",
+                    scenario_binding_ok_v1=False,
+                    trace_job_binding_ok_v1=None,
+                )
+                _emit_rm_preflight_panel_v1(panel, progress_cb)
+                return _merge_panel_into_audit_v1(
+                    panel,
+                    {
+                        "schema": "rm_preflight_wiring_audit_v1",
+                        "ok_v1": False,
+                        "skipped_v1": False,
+                        "status_v1": FAILED_PREFLIGHT_STATUS_V1,
+                        "missing_stages_v1": ["job_binding_scenario_mismatch_v1"],
+                        "human_message_v1": (
+                            "RM preflight: worker scenario_id does not match first submitted scenario "
+                            f"(batch_first={expected_batch_scenario_id_v1!r}, row={row_sid!r})."
+                        ),
+                        "memory_sink_event_count_v1": len(sink),
+                        "rm_preflight_job_binding_audit_v1": jbind,
+                    },
+                )
+
+            st["scenario_bound_v1"] = True
+            panel["active_scenario_id_v1"] = str(row_sid or "").strip()
+            _emit_rm_preflight_panel_v1(panel, progress_cb)
+
+            raw_out = row.get("replay_outcomes_json")
+            if not isinstance(raw_out, list) or not raw_out:
+                st["terminal_pass_v1"] = False
+                panel["failure_reasons_display_v1"] = ["no_replay_outcomes_for_preflight_v1"]
+                _emit_rm_preflight_panel_v1(panel, progress_cb)
+                return _merge_panel_into_audit_v1(
+                    panel,
+                    {
+                        "schema": "rm_preflight_wiring_audit_v1",
+                        "ok_v1": False,
+                        "skipped_v1": False,
+                        "status_v1": FAILED_PREFLIGHT_STATUS_V1,
+                        "missing_stages_v1": ["no_replay_outcomes_for_preflight_v1"],
+                        "human_message_v1": "RM preflight: bounded replay returned no closed trades.",
+                        "memory_sink_event_count_v1": len(sink),
+                    },
+                )
+            first = raw_out[0]
+            if not isinstance(first, dict):
+                st["terminal_pass_v1"] = False
+                panel["failure_reasons_display_v1"] = ["invalid_first_outcome_v1"]
+                _emit_rm_preflight_panel_v1(panel, progress_cb)
+                return _merge_panel_into_audit_v1(
+                    panel,
+                    {
+                        "schema": "rm_preflight_wiring_audit_v1",
+                        "ok_v1": False,
+                        "skipped_v1": False,
+                        "status_v1": FAILED_PREFLIGHT_STATUS_V1,
+                        "missing_stages_v1": ["invalid_first_outcome_v1"],
+                        "human_message_v1": "RM preflight: first outcome is not a dict.",
+                        "memory_sink_event_count_v1": len(sink),
+                    },
+                )
+            trade_id = str(first.get("trade_id") or "").strip()
+            scenario_id = str(row.get("scenario_id") or "").strip()
+            if not trade_id:
+                st["trade_bound_failed_v1"] = True
+                st["terminal_pass_v1"] = False
+                panel["failure_reasons_display_v1"] = map_rm_preflight_missing_to_operator_display_v1(
+                    ["job_binding_empty_trade_id_v1"]
+                )
+                jbind = _rm_preflight_job_binding_audit_v1(
+                    job_id=str(job_id).strip(),
+                    batch_first_scenario_id_v1=str(expected_batch_scenario_id_v1),
+                    worker_row_scenario_id_v1=str(row_sid),
+                    trade_id_v1="",
+                    scenario_binding_ok_v1=True,
+                    trace_job_binding_ok_v1=None,
+                )
+                _emit_rm_preflight_panel_v1(panel, progress_cb)
+                return _merge_panel_into_audit_v1(
+                    panel,
+                    {
+                        "schema": "rm_preflight_wiring_audit_v1",
+                        "ok_v1": False,
+                        "skipped_v1": False,
+                        "status_v1": FAILED_PREFLIGHT_STATUS_V1,
+                        "missing_stages_v1": ["job_binding_empty_trade_id_v1"],
+                        "human_message_v1": "RM preflight: first replay outcome has no trade_id — cannot bind RM trace to a shell.",
+                        "memory_sink_event_count_v1": len(sink),
+                        "rm_preflight_job_binding_audit_v1": jbind,
+                    },
+                )
+
+            st["trade_bound_v1"] = True
+            panel["active_trade_id_v1"] = trade_id
+            _emit_rm_preflight_panel_v1(panel, progress_cb)
+
+            n_sink_before_seam = len(sink)
+            if _preflight_cancel_hit_v1(cancel_check):
+                st["terminal_pass_v1"] = False
+                panel["failure_reasons_display_v1"] = ["cancelled_before_seam"]
+                return _merge_panel_into_audit_v1(
+                    panel,
+                    _operator_cancelled_preflight_audit_v1(memory_sink_event_count_v1=len(sink)),
+                )
+            phase_holder["v"] = "student_seam"
+            _preflight_telemetry_update_v1(
+                panel,
+                phase="student_seam",
+                t0=t0,
+                bars_replay_cap=bars_cap,
+                bars_processed=int(_bars_proc)
+                if isinstance(_bars_proc, (int, float)) and not isinstance(_bars_proc, bool)
+                else None,
+                note="student_loop_seam_early_exit",
+            )
+            _emit_rm_preflight_panel_v1(panel, progress_cb)
+            with rm_preflight_seam_early_exit_session_v1():
+                seam = student_loop_seam_after_parallel_batch_v1(
+                    results=[row],
+                    run_id=str(job_id).strip(),
+                    exam_run_contract_request_v1=exam_run_contract_request_v1,
+                    operator_batch_audit=operator_batch_audit if isinstance(operator_batch_audit, dict) else None,
+                )
+            if _preflight_cancel_hit_v1(cancel_check):
+                st["terminal_pass_v1"] = False
+                panel["failure_reasons_display_v1"] = ["cancelled_after_seam"]
+                return _merge_panel_into_audit_v1(
+                    panel,
+                    _operator_cancelled_preflight_audit_v1(memory_sink_event_count_v1=len(sink)),
+                )
+            st["seam_completed_v1"] = True
+            _emit_rm_preflight_panel_v1(panel, progress_cb)
+
+            if seam.get("skipped"):
+                st["terminal_pass_v1"] = False
+                panel["failure_reasons_display_v1"] = [str(seam.get("reason") or "student_seam_skipped_v1")]
+                _emit_rm_preflight_panel_v1(panel, progress_cb)
+                return _merge_panel_into_audit_v1(
+                    panel,
+                    {
+                        "schema": "rm_preflight_wiring_audit_v1",
+                        "ok_v1": False,
+                        "skipped_v1": False,
+                        "status_v1": FAILED_PREFLIGHT_STATUS_V1,
+                        "missing_stages_v1": ["student_seam_skipped_v1"],
+                        "human_message_v1": str(seam.get("reason") or "seam skipped"),
+                        "memory_sink_event_count_v1": len(sink),
+                        "preflight_seam_audit_v1": seam,
+                    },
+                )
+            if not seam.get("rm_preflight_wiring_early_exit_v1"):
+                st["terminal_pass_v1"] = False
+                panel["failure_reasons_display_v1"] = list(
+                    map_rm_preflight_missing_to_operator_display_v1(["rm_preflight_early_exit_not_reached_v1"])
+                ) + [str(x) for x in (seam.get("errors") or [])[:6]]
+                _emit_rm_preflight_panel_v1(panel, progress_cb)
+                return _merge_panel_into_audit_v1(
+                    panel,
+                    {
+                        "schema": "rm_preflight_wiring_audit_v1",
+                        "ok_v1": False,
+                        "skipped_v1": False,
+                        "status_v1": FAILED_PREFLIGHT_STATUS_V1,
+                        "missing_stages_v1": ["rm_preflight_early_exit_not_reached_v1"],
+                        "human_message_v1": (
+                            "RM preflight: first trade did not reach student_output_sealed — "
+                            + "; ".join(str(x) for x in (seam.get("errors") or [])[:8])
+                        ),
+                        "memory_sink_event_count_v1": len(sink),
+                        "preflight_seam_audit_v1": seam,
+                    },
+                )
+            seam_errs = [str(x) for x in (seam.get("errors") or []) if x]
+            if seam_errs:
+                st["terminal_pass_v1"] = False
+                panel["failure_reasons_display_v1"] = seam_errs[:12]
+                _emit_rm_preflight_panel_v1(panel, progress_cb)
+                return _merge_panel_into_audit_v1(
+                    panel,
+                    {
+                        "schema": "rm_preflight_wiring_audit_v1",
+                        "ok_v1": False,
+                        "skipped_v1": False,
+                        "status_v1": FAILED_PREFLIGHT_STATUS_V1,
+                        "missing_stages_v1": ["student_seam_errors_v1"],
+                        "human_message_v1": "RM preflight: " + "; ".join(seam_errs[:12]),
+                        "memory_sink_event_count_v1": len(sink),
+                        "preflight_seam_audit_v1": seam,
+                    },
+                )
+
+            phase_holder["v"] = "trace_validation"
+            _preflight_telemetry_update_v1(
+                panel,
+                phase="trace_validation",
+                t0=t0,
+                bars_replay_cap=bars_cap,
+                bars_processed=int(_bars_proc)
+                if isinstance(_bars_proc, (int, float)) and not isinstance(_bars_proc, bool)
+                else None,
+                note="memory_sink_rm_stages",
+            )
+            _emit_rm_preflight_panel_v1(panel, progress_cb)
+            det = validate_rm_preflight_memory_sink_detailed_v1(
+                sink,
+                scenario_id=scenario_id,
+                trade_id=trade_id,
+                job_id=str(job_id).strip(),
+            )
+            ok_ev = bool(det.get("ok_v1"))
+            missing = list(det.get("missing_stages_v1") or [])
+            panel["preflight_sink_detail_v1"] = det
+            st["job_id_bound_trace_v1"] = bool(det.get("job_id_binding_ok_v1"))
+            st["breadcrumbs_validated_v1"] = ok_ev
+            _emit_rm_preflight_panel_v1(panel, progress_cb)
+
+            jbind_ok = _rm_preflight_job_binding_audit_v1(
+                job_id=str(job_id).strip(),
+                batch_first_scenario_id_v1=str(expected_batch_scenario_id_v1),
+                worker_row_scenario_id_v1=str(row_sid),
+                trade_id_v1=trade_id,
+                scenario_binding_ok_v1=True,
+                trace_job_binding_ok_v1=ok_ev,
+            )
+            if not ok_ev:
+                st["terminal_pass_v1"] = False
+                panel["failure_reasons_display_v1"] = map_rm_preflight_missing_to_operator_display_v1(missing)
+                _emit_rm_preflight_panel_v1(panel, progress_cb)
+                return _merge_panel_into_audit_v1(
+                    panel,
+                    {
+                        "schema": "rm_preflight_wiring_audit_v1",
+                        "ok_v1": False,
+                        "skipped_v1": False,
+                        "status_v1": FAILED_PREFLIGHT_STATUS_V1,
+                        "missing_stages_v1": missing,
+                        "human_message_v1": "RM preflight: incomplete reasoning trace or job not bound to trace — "
+                        + ", ".join(missing),
+                        "memory_sink_event_count_v1": len(sink),
+                        "preflight_seam_audit_v1": seam,
+                        "preflight_trace_events_sample_v1": sink[n_sink_before_seam:][:40],
+                        "rm_preflight_job_binding_audit_v1": jbind_ok,
+                    },
+                )
+
+            st["terminal_pass_v1"] = True
+            panel["failure_reasons_display_v1"] = []
+            _emit_rm_preflight_panel_v1(panel, progress_cb)
+            return _merge_panel_into_audit_v1(
+                panel,
+                {
+                    "schema": "rm_preflight_wiring_audit_v1",
+                    "ok_v1": True,
+                    "skipped_v1": False,
+                    "status_v1": "passed_rm_preflight_wiring_v1",
+                    "missing_stages_v1": [],
+                    "memory_sink_event_count_v1": len(sink),
+                    "preflight_seam_audit_v1": seam,
+                    "preflight_trade_id_v1": trade_id,
+                    "preflight_scenario_id_v1": scenario_id,
+                    "rm_preflight_job_binding_audit_v1": jbind_ok,
+                    "preflight_replay_bounds_v1": {
+                        "schema": "rm_preflight_replay_bounds_v1",
+                        "calendar_months_v1": (shrunk.get("evaluation_window") or {}).get("calendar_months"),
+                        "rm_preflight_replay_tail_bars_v1": shrunk.get("rm_preflight_replay_tail_bars_v1"),
+                    },
+                },
+            )
 
 
+        finally:
+            hb_done.set()
+            _hb_t.join(timeout=3.0)
 __all__ = [
     "FAILED_PREFLIGHT_STATUS_V1",
     "REQUIRED_RM_PREFLIGHT_STAGES_V1",
