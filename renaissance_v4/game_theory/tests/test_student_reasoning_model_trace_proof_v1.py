@@ -50,7 +50,11 @@ def test_trace_proof_ok_synthetic_two_trades(tmp_path: Path) -> None:
         for st in (
             "market_data_loaded",
             "indicator_context_evaluated",
+            "memory_context_evaluated",
+            "prior_outcomes_evaluated",
+            "risk_reward_evaluated",
             "decision_synthesized",
+            "entry_reasoning_validated",
             "entry_reasoning_sealed_v1",
         ):
             _append(path=p, stage=st, summary=st, evidence_payload={}, **base)
@@ -120,7 +124,16 @@ def test_trace_proof_fails_when_authority_count_mismatch(tmp_path: Path) -> None
         evidence_payload={"student_retrieval_matches": 0, "retrieved_lifecycle_learning_026c_slice_count_v1": 0},
         **base,
     )
-    for st in ("market_data_loaded", "indicator_context_evaluated", "decision_synthesized", "entry_reasoning_sealed_v1"):
+    for st in (
+        "market_data_loaded",
+        "indicator_context_evaluated",
+        "memory_context_evaluated",
+        "prior_outcomes_evaluated",
+        "risk_reward_evaluated",
+        "decision_synthesized",
+        "entry_reasoning_validated",
+        "entry_reasoning_sealed_v1",
+    ):
         _append(path=p, stage=st, summary=st, evidence_payload={}, **base)
     _append(
         path=p,
