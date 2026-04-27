@@ -8,6 +8,8 @@ is merged into each scenario and drives **calendar tape slicing**; trade window 
 Batches use **``POST /api/run-parallel/start``** + polling **``GET /api/run-parallel/status/<job_id>``**
 (or **``GET /api/run-status/<job_id>``**, same payload). New jobs begin with **``status: preflight``** until
 ``run_rm_preflight_wiring_v1`` passes, then **``status: running``** while ``run_scenarios_parallel`` executes.
+**``POST /api/run-parallel``** (blocking) registers the same in-memory ``job_id`` row so RM preflight can be polled
+live while the HTTP request is open; prefer **``/start``** + poll for operator UI.
 The UI shows **per-scenario progress** plus
 **``POST /api/run-parallel/cancel/<job_id>``** to request cancel (best-effort: pending scenarios are not scheduled; workers already running may finish),
 **live telemetry** (decision windows, trades, candidate phase) from worker-written JSON snapshots.
@@ -115,6 +117,7 @@ import sys
 import threading
 import time
 import uuid
+from collections.abc import Callable
 from pathlib import Path
 from typing import Any
 
@@ -132,7 +135,7 @@ _PATTERN_BANNER_WEBP_PATH = _RV4_ROOT / "assets" / "pattern.webp"
 _PATTERN_GAME_BANNER_BOOT_JS = _GAME_THEORY / "static" / "pattern_game_banner_boot.js"
 
 # Operator-visible web UI bundle version — bump when changing PAGE_HTML (HTML/CSS/JS) so deploys are provable.
-PATTERN_GAME_WEB_UI_VERSION = "2.19.105"
+PATTERN_GAME_WEB_UI_VERSION = "2.19.106"
 
 from renaissance_v4.game_theory.reasoning_model_operator_surface_v1 import (
     get_reasoning_model_operator_snapshot_v1,
@@ -407,6 +410,93 @@ def _parallel_job_rm_preflight_progress_cb_v1(job_id: str):
             j = _JOBS.get(jid)
             if isinstance(j, dict):
                 j["rm_preflight_results_panel_v1"] = snap
+
+    return _cb
+
+
+def _parallel_job_enqueue_record_v1(
+    job_id: str,
+    *,
+    scenarios: list[dict[str, Any]],
+    workers_used: int,
+    telem_dir: Path,
+    telemetry_ctx: dict[str, Any],
+    started_iso: str,
+    operator_batch_audit: dict[str, Any],
+    exam_req: dict[str, Any] | None,
+) -> None:
+    """Register ``_JOBS[job_id]`` before RM preflight (async ``/start`` or blocking ``POST /api/run-parallel``)."""
+    from renaissance_v4.game_theory.exam_run_contract_v1 import (
+        STUDENT_BRAIN_PROFILE_BASELINE_NO_MEMORY_NO_LLM_V1,
+        normalize_student_reasoning_mode_v1,
+    )
+    from renaissance_v4.game_theory.rm_preflight_wiring_v1 import should_skip_rm_preflight_v1
+
+    jid = str(job_id or "").strip()
+    if not jid:
+        return
+    oba = operator_batch_audit if isinstance(operator_batch_audit, dict) else {}
+    orsf = oba.get("operator_run_mode_surface_v1")
+    reasoning_tile_run_kind_v1 = (
+        "student"
+        if orsf == "student"
+        else ("baseline" if orsf == "baseline" else "unknown")
+    )
+    _ex_rq = exam_req if isinstance(exam_req, dict) else {}
+    _brain = normalize_student_reasoning_mode_v1(
+        str(
+            _ex_rq.get("student_brain_profile_v1")
+            or _ex_rq.get("student_reasoning_mode")
+            or ""
+        )
+    )
+    _sk_pf = should_skip_rm_preflight_v1(exam_run_contract_request_v1=_ex_rq if _ex_rq else None)
+    _student_rm_contract = _brain != STUDENT_BRAIN_PROFILE_BASELINE_NO_MEMORY_NO_LLM_V1
+    with _JOBS_LOCK:
+        _JOBS[jid] = {
+            "status": "preflight",
+            "created": time.time(),
+            "started_at_utc": started_iso,
+            "total": len(scenarios),
+            "completed": 0,
+            "workers_used": workers_used,
+            "last_scenario_id": None,
+            "last_ok": None,
+            "last_message": None,
+            "error": None,
+            "result": None,
+            "batch_timing": None,
+            "telemetry_dir": str(telem_dir),
+            "telemetry_context_echo": telemetry_ctx,
+            "cancel_requested": False,
+            "operator_run_mode_surface_v1": orsf,
+            "reasoning_tile_run_kind_v1": reasoning_tile_run_kind_v1,
+            "rm_preflight_terminal_lines_v1": [],
+            "rm_preflight_results_panel_v1": None,
+            "operator_exam_brain_profile_v1": _brain,
+            "student_rm_contract_applies_v1": _student_rm_contract,
+            "rm_preflight_should_skip_reason_enqueue_v1": _sk_pf,
+        }
+
+
+def _parallel_job_progress_row_callback_v1(job_id: str) -> Callable[[int, int, dict[str, Any]], None]:
+    """``run_scenarios_parallel(progress_callback=…)`` — mirror scenario completion into ``_JOBS``."""
+
+    jid = str(job_id or "").strip()
+
+    def _cb(completed: int, total: int, row: dict[str, Any]) -> None:
+        sid = row.get("scenario_id", "?")
+        ok = bool(row.get("ok"))
+        msg = f"{sid}: {'ok' if ok else 'failed'}"
+        if not ok and row.get("error"):
+            msg += f" ({row.get('error')})"
+        with _JOBS_LOCK:
+            j = _JOBS.get(jid)
+            if j:
+                j["completed"] = completed
+                j["last_scenario_id"] = sid
+                j["last_ok"] = ok
+                j["last_message"] = msg
 
     return _cb
 
@@ -1609,53 +1699,16 @@ def create_app() -> Flask:
         clear_job_telemetry_files(job_id, base=telem_dir)
         telemetry_ctx = _telemetry_context_for_parallel_job(operator_batch_audit)
         started_iso = utc_timestamp_iso()
-        orsf = operator_batch_audit.get("operator_run_mode_surface_v1")
-        reasoning_tile_run_kind_v1 = (
-            "student"
-            if orsf == "student"
-            else ("baseline" if orsf == "baseline" else "unknown")
+        _parallel_job_enqueue_record_v1(
+            job_id,
+            scenarios=scenarios,
+            workers_used=workers_used,
+            telem_dir=telem_dir,
+            telemetry_ctx=telemetry_ctx,
+            started_iso=started_iso,
+            operator_batch_audit=operator_batch_audit if isinstance(operator_batch_audit, dict) else {},
+            exam_req=exam_req if isinstance(exam_req, dict) else None,
         )
-        from renaissance_v4.game_theory.exam_run_contract_v1 import (
-            STUDENT_BRAIN_PROFILE_BASELINE_NO_MEMORY_NO_LLM_V1,
-            normalize_student_reasoning_mode_v1,
-        )
-        from renaissance_v4.game_theory.rm_preflight_wiring_v1 import should_skip_rm_preflight_v1
-
-        _ex_rq = exam_req if isinstance(exam_req, dict) else {}
-        _brain = normalize_student_reasoning_mode_v1(
-            str(
-                _ex_rq.get("student_brain_profile_v1")
-                or _ex_rq.get("student_reasoning_mode")
-                or ""
-            )
-        )
-        _sk_pf = should_skip_rm_preflight_v1(exam_run_contract_request_v1=_ex_rq if _ex_rq else None)
-        _student_rm_contract = _brain != STUDENT_BRAIN_PROFILE_BASELINE_NO_MEMORY_NO_LLM_V1
-        with _JOBS_LOCK:
-            _JOBS[job_id] = {
-                "status": "preflight",
-                "created": time.time(),
-                "started_at_utc": started_iso,
-                "total": len(scenarios),
-                "completed": 0,
-                "workers_used": workers_used,
-                "last_scenario_id": None,
-                "last_ok": None,
-                "last_message": None,
-                "error": None,
-                "result": None,
-                "batch_timing": None,
-                "telemetry_dir": str(telem_dir),
-                "telemetry_context_echo": telemetry_ctx,
-                "cancel_requested": False,
-                "operator_run_mode_surface_v1": orsf,
-                "reasoning_tile_run_kind_v1": reasoning_tile_run_kind_v1,
-                "rm_preflight_terminal_lines_v1": [],
-                "rm_preflight_results_panel_v1": None,
-                "operator_exam_brain_profile_v1": _brain,
-                "student_rm_contract_applies_v1": _student_rm_contract,
-                "rm_preflight_should_skip_reason_enqueue_v1": _sk_pf,
-            }
 
         def run_job() -> None:
             from renaissance_v4.game_theory.learning_trace_instrumentation_v1 import (
@@ -1682,19 +1735,7 @@ def create_app() -> Flask:
                     scenario_count=len(scenarios),
                 )
 
-            def cb(completed: int, total: int, row: dict[str, Any]) -> None:
-                sid = row.get("scenario_id", "?")
-                ok = bool(row.get("ok"))
-                msg = f"{sid}: {'ok' if ok else 'failed'}"
-                if not ok and row.get("error"):
-                    msg += f" ({row.get('error')})"
-                with _JOBS_LOCK:
-                    j = _JOBS.get(job_id)
-                    if j:
-                        j["completed"] = completed
-                        j["last_scenario_id"] = sid
-                        j["last_ok"] = ok
-                        j["last_message"] = msg
+            cb = _parallel_job_progress_row_callback_v1(job_id)
 
             results: list[dict[str, Any]] | None = None
             referee_parallel_completed_emit_v1 = False
@@ -2514,7 +2555,13 @@ def create_app() -> Flask:
 
     @app.post("/api/run-parallel")
     def api_parallel() -> Any:
-        """Blocking batch run (same work as ``/start`` + poll until done). Prefer ``/start`` for the UI."""
+        """
+        Blocking batch run (same work as ``/start`` + poll until done).
+
+        Registers ``_JOBS[job_id]`` immediately so **GET /api/run-parallel/status/<job_id>** can show
+        live RM preflight + parallel progress while this request is still open. Prefer **/start** for
+        the operator UI (same status contract).
+        """
         data = request.get_json(force=True, silent=True) or {}
         prep = _prepare_parallel_payload(data)
         if not prep["ok"]:
@@ -2530,6 +2577,7 @@ def create_app() -> Flask:
         exam_req_block = prep.get("exam_run_contract_request_v1")
         fp_prev_block = prep.get("exam_run_fingerprint_preview_v1")
 
+        _prune_jobs()
         job_id = uuid.uuid4().hex
         started_iso = utc_timestamp_iso()
         start_unix = time.time()
@@ -2537,6 +2585,16 @@ def create_app() -> Flask:
         telem_dir = default_telemetry_dir()
         clear_job_telemetry_files(job_id, base=telem_dir)
         telemetry_ctx = _telemetry_context_for_parallel_job(operator_batch_audit)
+        _parallel_job_enqueue_record_v1(
+            job_id,
+            scenarios=scenarios,
+            workers_used=workers_used,
+            telem_dir=telem_dir,
+            telemetry_ctx=telemetry_ctx,
+            started_iso=started_iso,
+            operator_batch_audit=operator_batch_audit if isinstance(operator_batch_audit, dict) else {},
+            exam_req=exam_req_block if isinstance(exam_req_block, dict) else None,
+        )
         try:
             from renaissance_v4.game_theory.learning_trace_instrumentation_v1 import (
                 emit_packet_built_v1,
@@ -2566,6 +2624,13 @@ def create_app() -> Flask:
                 run_rm_preflight_wiring_v1,
             )
 
+            _append_enqueue_operator_gate_tape_v1(job_id)
+            _parallel_job_append_rm_preflight_line_v1(job_id, "RM PREFLIGHT START")
+            _parallel_job_append_rm_preflight_line_v1(
+                job_id,
+                "RM PREFLIGHT: first-scenario replay in-process (blocking /api/run-parallel — "
+                "poll GET /api/run-parallel/status/<job_id> for live Results panel data).",
+            )
             print(
                 f"[pattern_game_parallel] job_id={job_id} RM PREFLIGHT START (blocking /api/run-parallel)",
                 file=sys.stderr,
@@ -2576,7 +2641,10 @@ def create_app() -> Flask:
                 job_id=job_id,
                 exam_run_contract_request_v1=exam_req_block if isinstance(exam_req_block, dict) else None,
                 operator_batch_audit=operator_batch_audit if isinstance(operator_batch_audit, dict) else None,
+                cancel_check=lambda: _parallel_job_cancel_requested(job_id),
+                progress_cb=_parallel_job_rm_preflight_progress_cb_v1(job_id),
             )
+            _parallel_job_store_rm_preflight_panel_from_audit_v1(job_id, pf_audit_block)
             if not pf_audit_block.get("ok_v1"):
                 err_pb = str(
                     pf_audit_block.get("human_message_v1")
@@ -2616,35 +2684,59 @@ def create_app() -> Flask:
                     operator_batch_audit=operator_batch_audit,
                     exam_run_line_meta_v1=exam_line_pb,
                 )
-                return jsonify(
-                    {
-                        "ok": False,
-                        "error": err_pb,
-                        "job_id": job_id,
-                        "batch_timing": timing_pb,
-                        "rm_preflight_audit_v1": pf_audit_block,
-                        "status_v1": FAILED_PREFLIGHT_STATUS_V1,
-                    }
-                ), 400
+                _panel_pb = pf_audit_block.get("rm_preflight_results_panel_v1")
+                fail_pb: dict[str, Any] = {
+                    "ok": False,
+                    "error": err_pb,
+                    "job_id": job_id,
+                    "batch_timing": timing_pb,
+                    "rm_preflight_audit_v1": pf_audit_block,
+                    "status_v1": FAILED_PREFLIGHT_STATUS_V1,
+                }
+                if isinstance(_panel_pb, dict):
+                    fail_pb["rm_preflight_results_panel_v1"] = copy.deepcopy(_panel_pb)
+                _pf_cancel = bool(pf_audit_block.get("cancelled_during_preflight_v1"))
+                with _JOBS_LOCK:
+                    jbpf = _JOBS.get(job_id)
+                    if isinstance(jbpf, dict):
+                        jbpf["status"] = "cancelled" if _pf_cancel else "error"
+                        jbpf["completed"] = 0
+                        jbpf["error"] = err_pb
+                        jbpf["batch_timing"] = timing_pb
+                        try:
+                            jbpf["result"] = {
+                                **fail_pb,
+                                "operator_rm_gates_v1": _build_operator_rm_gates_v1(jbpf, job_id),
+                            }
+                        except Exception:
+                            jbpf["result"] = dict(fail_pb)
+                return jsonify(fail_pb), 400
 
             _bp_pass = "RM PREFLIGHT PASS (blocking)"
             if pf_audit_block.get("skipped_v1"):
                 _bp_pass += " (skipped: " + str(pf_audit_block.get("skip_reason_v1") or "policy") + ")"
             print(f"[pattern_game_parallel] job_id={job_id} {_bp_pass}", file=sys.stderr, flush=True)
+            with _JOBS_LOCK:
+                jrun = _JOBS.get(job_id)
+                if isinstance(jrun, dict):
+                    jrun["status"] = "running"
             emit_referee_execution_started_v1(
                 job_id=job_id, fingerprint=lt_fp_block, scenario_total=len(scenarios)
             )
             results: list[dict[str, Any]] | None = None
             referee_parallel_completed_emit_block_v1 = False
+            cb_block = _parallel_job_progress_row_callback_v1(job_id)
             try:
                 results = run_scenarios_parallel(
                     scenarios,
                     max_workers=max_workers,
                     experience_log_path=log_path,
+                    progress_callback=cb_block,
                     on_session_log_batch=on_session_batch,
                     telemetry_job_id=job_id,
                     telemetry_dir=telem_dir,
                     telemetry_context=telemetry_ctx,
+                    cancel_check=lambda: _parallel_job_cancel_requested(job_id),
                 )
                 emit_referee_execution_completed_v1(
                     job_id=job_id, fingerprint=lt_fp_block, results=results
@@ -2719,17 +2811,32 @@ def create_app() -> Flask:
                         student_seam_observability_v1=seam_blocking,
                         exam_run_line_meta_v1=exam_line_rtb,
                     )
-                    return jsonify(
-                        {
-                            "ok": False,
-                            "error": err_rtb,
-                            "job_id": job_id,
-                            "batch_timing": timing_rtb,
-                            "student_rm_trace_contract_audit_v1": trace_contract_audit_b,
-                            "status_v1": FAILED_RUNTIME_STUDENT_RM_TRACE_CONTRACT_V1,
-                            "results": results,
-                        }
-                    ), 400
+                    rt_body: dict[str, Any] = {
+                        "ok": False,
+                        "error": err_rtb,
+                        "job_id": job_id,
+                        "batch_timing": timing_rtb,
+                        "student_rm_trace_contract_audit_v1": trace_contract_audit_b,
+                        "status_v1": FAILED_RUNTIME_STUDENT_RM_TRACE_CONTRACT_V1,
+                        "results": results,
+                    }
+                    _pan_rt = pf_audit_block.get("rm_preflight_results_panel_v1")
+                    if isinstance(_pan_rt, dict):
+                        rt_body["rm_preflight_results_panel_v1"] = copy.deepcopy(_pan_rt)
+                    with _JOBS_LOCK:
+                        jrtb = _JOBS.get(job_id)
+                        if isinstance(jrtb, dict):
+                            jrtb["status"] = "error"
+                            jrtb["error"] = err_rtb
+                            jrtb["batch_timing"] = timing_rtb
+                            try:
+                                jrtb["result"] = {
+                                    **rt_body,
+                                    "operator_rm_gates_v1": _build_operator_rm_gates_v1(jrtb, job_id),
+                                }
+                            except Exception:
+                                jrtb["result"] = dict(rt_body)
+                    return jsonify(rt_body), 400
             if seam_blocking.get("skipped"):
                 emit_seam_disabled_placeholder_events_v1(
                     job_id=job_id,
@@ -2795,8 +2902,22 @@ def create_app() -> Flask:
                 "shadow_student_enabled": bool(seam_blocking.get("shadow_student_enabled")),
                 "groundhog_auto_promote_v1": gh_promo_block,
             }
+            _pan_ok = pf_audit_block.get("rm_preflight_results_panel_v1")
+            if isinstance(_pan_ok, dict):
+                ok_body["rm_preflight_results_panel_v1"] = copy.deepcopy(_pan_ok)
             if disk_warn_msgs:
                 ok_body["operator_disk_warnings"] = disk_warn_msgs
+            with _JOBS_LOCK:
+                jok = _JOBS.get(job_id)
+                if isinstance(jok, dict):
+                    jok["status"] = "done"
+                    jok["completed"] = len(results)
+                    jok["error"] = None
+                    jok["batch_timing"] = timing
+                    try:
+                        jok["result"] = copy.deepcopy(ok_body)
+                    except Exception:
+                        jok["result"] = ok_body
             return jsonify(ok_body)
         except Exception as e:
             err_s = f"{type(e).__name__}: {e}"
@@ -2821,7 +2942,24 @@ def create_app() -> Flask:
                 operator_batch_audit=operator_batch_audit,
                 exam_run_line_meta_v1=exam_line_block_err,
             )
-            return jsonify({"ok": False, "error": err_s, "job_id": job_id, "batch_timing": timing}), 400
+            err_body: dict[str, Any] = {"ok": False, "error": err_s, "job_id": job_id, "batch_timing": timing}
+            with _JOBS_LOCK:
+                jex = _JOBS.get(job_id)
+                if isinstance(jex, dict):
+                    if isinstance(e, ParallelBatchCancelledError):
+                        jex["status"] = "cancelled"
+                    else:
+                        jex["status"] = "error"
+                    jex["error"] = err_s
+                    jex["batch_timing"] = timing
+                    try:
+                        jex["result"] = {
+                            **err_body,
+                            "operator_rm_gates_v1": _build_operator_rm_gates_v1(jex, job_id),
+                        }
+                    except Exception:
+                        jex["result"] = dict(err_body)
+            return jsonify(err_body), 400
         finally:
             try:
                 prune_pml_runtime_batch_dirs()
