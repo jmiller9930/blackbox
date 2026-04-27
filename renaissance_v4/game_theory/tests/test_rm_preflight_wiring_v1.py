@@ -153,6 +153,24 @@ def test_student_mandate_should_skip_returns_fatal_when_rm_preflight_env_off(
     )
 
 
+def test_run_rm_preflight_respects_cancel_check_before_worker() -> None:
+    calls = {"n": 0}
+
+    def _cancel() -> bool:
+        calls["n"] += 1
+        return calls["n"] >= 1
+
+    rep = run_rm_preflight_wiring_v1(
+        scenarios=[{"manifest_path": "m.json", "scenario_id": "x"}],
+        job_id="jid_cancel",
+        exam_run_contract_request_v1={"student_brain_profile_v1": "memory_context_student"},
+        operator_batch_audit={},
+        cancel_check=_cancel,
+    )
+    assert rep.get("cancelled_during_preflight_v1") is True
+    assert rep.get("ok_v1") is False
+
+
 def test_student_mandate_run_rm_preflight_fails_when_rm_preflight_env_off(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:

@@ -14,6 +14,7 @@ from __future__ import annotations
 import copy
 import os
 from collections import defaultdict
+from collections.abc import Callable
 from typing import Any
 
 from renaissance_v4.game_theory.exam_run_contract_v1 import (
@@ -31,6 +32,33 @@ from renaissance_v4.game_theory.student_proctor.student_proctor_operator_runtime
 )
 
 FAILED_PREFLIGHT_STATUS_V1 = "failed_preflight_reasoning_model_v1"
+
+
+def _preflight_cancel_hit_v1(cancel_check: Callable[[], bool] | None) -> bool:
+    if cancel_check is None:
+        return False
+    try:
+        return bool(cancel_check())
+    except Exception:
+        return False
+
+
+def _operator_cancelled_preflight_audit_v1(
+    *,
+    memory_sink_event_count_v1: int = 0,
+    message: str = "Stopped by operator during RM preflight — parallel workers were not started.",
+) -> dict[str, Any]:
+    """Operator cancel is not a wiring failure; ``run_job`` branches on ``cancelled_during_preflight_v1``."""
+    return {
+        "schema": "rm_preflight_wiring_audit_v1",
+        "ok_v1": False,
+        "skipped_v1": False,
+        "cancelled_during_preflight_v1": True,
+        "status_v1": None,
+        "missing_stages_v1": [],
+        "human_message_v1": message,
+        "memory_sink_event_count_v1": int(memory_sink_event_count_v1),
+    }
 
 # Required trace stages for one trade (referee check is payload under authority, not a separate stage).
 REQUIRED_RM_PREFLIGHT_STAGES_V1 = frozenset(
@@ -150,12 +178,18 @@ def run_rm_preflight_wiring_v1(
     job_id: str,
     exam_run_contract_request_v1: dict[str, Any] | None,
     operator_batch_audit: dict[str, Any] | None,
+    cancel_check: Callable[[], bool] | None = None,
 ) -> dict[str, Any]:
     """
     Returns ``ok_v1`` False on any failure (worker, seam, or missing trace stages).
 
     On success, ``skipped_v1`` may still be True when policy skips preflight.
+
+    When ``cancel_check`` returns True, returns ``cancelled_during_preflight_v1`` so the caller can
+    finalize the job as **cancelled** without starting ``run_scenarios_parallel``.
     """
+    if _preflight_cancel_hit_v1(cancel_check):
+        return _operator_cancelled_preflight_audit_v1()
     skip = should_skip_rm_preflight_v1(exam_run_contract_request_v1=exam_run_contract_request_v1)
     if skip:
         if skip in (
@@ -180,7 +214,7 @@ def run_rm_preflight_wiring_v1(
                 "human_message_v1": human,
                 "memory_sink_event_count_v1": 0,
             }
-        return {
+        out_skip = {
             "schema": "rm_preflight_wiring_audit_v1",
             "ok_v1": True,
             "skipped_v1": True,
@@ -189,6 +223,9 @@ def run_rm_preflight_wiring_v1(
             "missing_stages_v1": [],
             "memory_sink_event_count_v1": 0,
         }
+        if _preflight_cancel_hit_v1(cancel_check):
+            return _operator_cancelled_preflight_audit_v1()
+        return out_skip
     if not scenarios:
         return {
             "schema": "rm_preflight_wiring_audit_v1",
@@ -204,7 +241,11 @@ def run_rm_preflight_wiring_v1(
     shrunk = _shrink_scenario_for_rm_preflight_v1(scen0)
 
     with learning_trace_memory_sink_session_v1() as sink:
+        if _preflight_cancel_hit_v1(cancel_check):
+            return _operator_cancelled_preflight_audit_v1(memory_sink_event_count_v1=len(sink))
         row = _worker_run_one(shrunk)
+        if _preflight_cancel_hit_v1(cancel_check):
+            return _operator_cancelled_preflight_audit_v1(memory_sink_event_count_v1=len(sink))
         if not row.get("ok"):
             return {
                 "schema": "rm_preflight_wiring_audit_v1",
@@ -241,6 +282,8 @@ def run_rm_preflight_wiring_v1(
         trade_id = str(first.get("trade_id") or "").strip()
         scenario_id = str(row.get("scenario_id") or "").strip()
         n_sink_before_seam = len(sink)
+        if _preflight_cancel_hit_v1(cancel_check):
+            return _operator_cancelled_preflight_audit_v1(memory_sink_event_count_v1=len(sink))
         with rm_preflight_seam_early_exit_session_v1():
             seam = student_loop_seam_after_parallel_batch_v1(
                 results=[row],
@@ -248,6 +291,8 @@ def run_rm_preflight_wiring_v1(
                 exam_run_contract_request_v1=exam_run_contract_request_v1,
                 operator_batch_audit=operator_batch_audit if isinstance(operator_batch_audit, dict) else None,
             )
+        if _preflight_cancel_hit_v1(cancel_check):
+            return _operator_cancelled_preflight_audit_v1(memory_sink_event_count_v1=len(sink))
         if seam.get("skipped"):
             return {
                 "schema": "rm_preflight_wiring_audit_v1",

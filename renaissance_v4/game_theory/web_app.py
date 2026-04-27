@@ -131,7 +131,7 @@ _PATTERN_BANNER_WEBP_PATH = _RV4_ROOT / "assets" / "pattern.webp"
 _PATTERN_GAME_BANNER_BOOT_JS = _GAME_THEORY / "static" / "pattern_game_banner_boot.js"
 
 # Operator-visible web UI bundle version — bump when changing PAGE_HTML (HTML/CSS/JS) so deploys are provable.
-PATTERN_GAME_WEB_UI_VERSION = "2.19.103"
+PATTERN_GAME_WEB_UI_VERSION = "2.19.104"
 
 from renaissance_v4.game_theory.reasoning_model_operator_surface_v1 import (
     get_reasoning_model_operator_snapshot_v1,
@@ -1402,7 +1402,53 @@ def create_app() -> Flask:
                     job_id=job_id,
                     exam_run_contract_request_v1=exam_req if isinstance(exam_req, dict) else None,
                     operator_batch_audit=operator_batch_audit if isinstance(operator_batch_audit, dict) else None,
+                    cancel_check=lambda: _parallel_job_cancel_requested(job_id),
                 )
+                if pf_audit.get("cancelled_during_preflight_v1"):
+                    err_c = str(
+                        pf_audit.get("human_message_v1")
+                        or "Stopped by operator during RM preflight — parallel workers were not started."
+                    )
+                    _parallel_job_append_rm_preflight_line_v1(job_id, "RM PREFLIGHT CANCELLED (operator)")
+                    exam_line_c = _exam_run_line_meta_for_parallel_job_v1(
+                        exam_req=exam_req if isinstance(exam_req, dict) else None,
+                        fingerprint_preview=fp_prev if isinstance(fp_prev, str) else None,
+                        operator_batch_audit=operator_batch_audit,
+                        results=None,
+                        job_id=job_id,
+                        seam_audit=None,
+                        error=err_c,
+                    )
+                    timing_c = record_parallel_batch_finished(
+                        job_id=job_id,
+                        started_at_utc=started_iso,
+                        start_unix=start_unix,
+                        total_scenarios=len(scenarios),
+                        workers_used=workers_used,
+                        results=None,
+                        session_log_batch_dir=None,
+                        error=err_c,
+                        operator_batch_audit=operator_batch_audit,
+                        exam_run_line_meta_v1=exam_line_c,
+                        parallel_cancel_partial_results=[],
+                    )
+                    with _JOBS_LOCK:
+                        jc = _JOBS.get(job_id)
+                        if jc:
+                            jc["status"] = "cancelled"
+                            jc["completed"] = 0
+                            jc["error"] = err_c
+                            jc["batch_timing"] = timing_c
+                            jc["last_message"] = err_c
+                            jc["result"] = {
+                                "ok": False,
+                                "job_id": job_id,
+                                "error": err_c,
+                                "cancelled": True,
+                                "rm_preflight_audit_v1": pf_audit,
+                                "batch_timing": timing_c,
+                            }
+                    return
                 if not pf_audit.get("ok_v1"):
                     err_msg = str(
                         pf_audit.get("human_message_v1")
@@ -1462,6 +1508,52 @@ def create_app() -> Flask:
                 if pf_audit.get("skipped_v1"):
                     pass_msg += " (skipped: " + str(pf_audit.get("skip_reason_v1") or "policy") + ")"
                 _parallel_job_append_rm_preflight_line_v1(job_id, pass_msg)
+                if _parallel_job_cancel_requested(job_id):
+                    err_pc = (
+                        "Stopped by operator after RM preflight passed — parallel workers were not started."
+                    )
+                    _parallel_job_append_rm_preflight_line_v1(
+                        job_id, "RM PREFLIGHT CANCELLED (operator, after PASS)"
+                    )
+                    exam_line_pc = _exam_run_line_meta_for_parallel_job_v1(
+                        exam_req=exam_req if isinstance(exam_req, dict) else None,
+                        fingerprint_preview=fp_prev if isinstance(fp_prev, str) else None,
+                        operator_batch_audit=operator_batch_audit,
+                        results=None,
+                        job_id=job_id,
+                        seam_audit=None,
+                        error=err_pc,
+                    )
+                    timing_pc = record_parallel_batch_finished(
+                        job_id=job_id,
+                        started_at_utc=started_iso,
+                        start_unix=start_unix,
+                        total_scenarios=len(scenarios),
+                        workers_used=workers_used,
+                        results=None,
+                        session_log_batch_dir=None,
+                        error=err_pc,
+                        operator_batch_audit=operator_batch_audit,
+                        exam_run_line_meta_v1=exam_line_pc,
+                        parallel_cancel_partial_results=[],
+                    )
+                    with _JOBS_LOCK:
+                        jpc = _JOBS.get(job_id)
+                        if jpc:
+                            jpc["status"] = "cancelled"
+                            jpc["completed"] = 0
+                            jpc["error"] = err_pc
+                            jpc["batch_timing"] = timing_pc
+                            jpc["last_message"] = err_pc
+                            jpc["result"] = {
+                                "ok": False,
+                                "job_id": job_id,
+                                "error": err_pc,
+                                "cancelled": True,
+                                "rm_preflight_audit_v1": pf_audit,
+                                "batch_timing": timing_pc,
+                            }
+                    return
                 with _JOBS_LOCK:
                     j_go = _JOBS.get(job_id)
                     if j_go:
@@ -1797,11 +1889,14 @@ def create_app() -> Flask:
     @app.post("/api/run-status/cancel/<job_id>")
     def api_parallel_cancel(job_id: str) -> Any:
         """
-        Request cancellation of a **running** parallel job started from this Flask process.
+        Request cancellation of a parallel job in **preflight** or **running** state.
 
-        Sets ``cancel_requested`` on the in-memory job; the pool stops scheduling new scenarios and
-        raises :class:`ParallelBatchCancelledError` when the runner observes the flag. Already-running
-        worker processes are not SIGKILL'd — they may complete while the parent tears down pending futures.
+        Sets ``cancel_requested`` on the in-memory job. During **RM preflight**, the background
+        thread checks this flag between wiring steps and finalizes **cancelled** without starting
+        ``run_scenarios_parallel`` when possible. During **running**, the pool stops scheduling new
+        scenarios and raises :class:`ParallelBatchCancelledError` when the runner observes the flag.
+        Already-running worker processes are not SIGKILL'd — they may complete while the parent
+        tears down pending futures.
         """
         jid = str(job_id or "").strip()
         if not jid:
