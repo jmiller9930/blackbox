@@ -1392,6 +1392,11 @@ def create_app() -> Flask:
             referee_parallel_completed_emit_v1 = False
             try:
                 _parallel_job_append_rm_preflight_line_v1(job_id, "RM PREFLIGHT START")
+                _parallel_job_append_rm_preflight_line_v1(
+                    job_id,
+                    "RM PREFLIGHT: first-scenario replay in-process (same worker as production) — "
+                    "parallel batch not started yet; large window + Student can take several minutes with no further lines until PASS/FAIL.",
+                )
                 from renaissance_v4.game_theory.rm_preflight_wiring_v1 import (
                     FAILED_PREFLIGHT_STATUS_V1,
                     run_rm_preflight_wiring_v1,
