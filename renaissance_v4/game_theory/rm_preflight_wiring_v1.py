@@ -107,9 +107,11 @@ def validate_rm_preflight_memory_sink_v1(
     *,
     scenario_id: str,
     trade_id: str,
+    job_id: str | None = None,
 ) -> tuple[bool, list[str]]:
     sid = str(scenario_id or "").strip()
     tid = str(trade_id or "").strip()
+    jid = str(job_id or "").strip()
     by_stage: dict[str, list[dict[str, Any]]] = defaultdict(list)
     for ev in events:
         if str(ev.get("scenario_id") or "").strip() != sid:
@@ -120,6 +122,12 @@ def validate_rm_preflight_memory_sink_v1(
         if st:
             by_stage[st].append(ev)
     missing: list[str] = []
+    if jid:
+        for st in sorted(REQUIRED_RM_PREFLIGHT_STAGES_V1):
+            for ev in by_stage.get(st, ()):
+                ev_j = str(ev.get("job_id") or "").strip()
+                if ev_j != jid:
+                    missing.append(f"job_id_not_bound_v1:{st}")
     for st in sorted(REQUIRED_RM_PREFLIGHT_STAGES_V1):
         if st not in by_stage:
             missing.append(st)
@@ -144,6 +152,26 @@ def validate_rm_preflight_memory_sink_v1(
         if sev.get("decision_source_v1") != DECISION_SOURCE_REASONING_MODEL_V1:
             missing.append("student_output_sealed.decision_source_v1_reasoning_model")
     return len(missing) == 0, sorted(set(missing))
+
+
+def _rm_preflight_job_binding_audit_v1(
+    *,
+    job_id: str,
+    batch_first_scenario_id_v1: str,
+    worker_row_scenario_id_v1: str,
+    trade_id_v1: str,
+    scenario_binding_ok_v1: bool,
+    trace_job_binding_ok_v1: bool | None = None,
+) -> dict[str, Any]:
+    return {
+        "schema": "rm_preflight_job_binding_audit_v1",
+        "job_id": str(job_id).strip(),
+        "batch_first_scenario_id_v1": str(batch_first_scenario_id_v1),
+        "worker_row_scenario_id_v1": str(worker_row_scenario_id_v1),
+        "trade_id_v1": str(trade_id_v1),
+        "scenario_binding_ok_v1": bool(scenario_binding_ok_v1),
+        "trace_job_binding_ok_v1": trace_job_binding_ok_v1,
+    }
 
 
 def should_skip_rm_preflight_v1(
@@ -257,6 +285,30 @@ def run_rm_preflight_wiring_v1(
                 "memory_sink_event_count_v1": len(sink),
                 "preflight_worker_scenario_id_v1": str(row.get("scenario_id") or ""),
             }
+        expected_batch_scenario_id_v1 = shrunk.get("scenario_id", "unknown")
+        row_sid = row.get("scenario_id")
+        if str(row_sid) != str(expected_batch_scenario_id_v1):
+            jbind = _rm_preflight_job_binding_audit_v1(
+                job_id=str(job_id).strip(),
+                batch_first_scenario_id_v1=str(expected_batch_scenario_id_v1),
+                worker_row_scenario_id_v1=str(row_sid),
+                trade_id_v1="",
+                scenario_binding_ok_v1=False,
+                trace_job_binding_ok_v1=None,
+            )
+            return {
+                "schema": "rm_preflight_wiring_audit_v1",
+                "ok_v1": False,
+                "skipped_v1": False,
+                "status_v1": FAILED_PREFLIGHT_STATUS_V1,
+                "missing_stages_v1": ["job_binding_scenario_mismatch_v1"],
+                "human_message_v1": (
+                    "RM preflight: worker scenario_id does not match first submitted scenario "
+                    f"(batch_first={expected_batch_scenario_id_v1!r}, row={row_sid!r})."
+                ),
+                "memory_sink_event_count_v1": len(sink),
+                "rm_preflight_job_binding_audit_v1": jbind,
+            }
         raw_out = row.get("replay_outcomes_json")
         if not isinstance(raw_out, list) or not raw_out:
             return {
@@ -281,6 +333,25 @@ def run_rm_preflight_wiring_v1(
             }
         trade_id = str(first.get("trade_id") or "").strip()
         scenario_id = str(row.get("scenario_id") or "").strip()
+        if not trade_id:
+            jbind = _rm_preflight_job_binding_audit_v1(
+                job_id=str(job_id).strip(),
+                batch_first_scenario_id_v1=str(expected_batch_scenario_id_v1),
+                worker_row_scenario_id_v1=str(row_sid),
+                trade_id_v1="",
+                scenario_binding_ok_v1=True,
+                trace_job_binding_ok_v1=None,
+            )
+            return {
+                "schema": "rm_preflight_wiring_audit_v1",
+                "ok_v1": False,
+                "skipped_v1": False,
+                "status_v1": FAILED_PREFLIGHT_STATUS_V1,
+                "missing_stages_v1": ["job_binding_empty_trade_id_v1"],
+                "human_message_v1": "RM preflight: first replay outcome has no trade_id — cannot bind RM trace to a shell.",
+                "memory_sink_event_count_v1": len(sink),
+                "rm_preflight_job_binding_audit_v1": jbind,
+            }
         n_sink_before_seam = len(sink)
         if _preflight_cancel_hit_v1(cancel_check):
             return _operator_cancelled_preflight_audit_v1(memory_sink_event_count_v1=len(sink))
@@ -330,7 +401,20 @@ def run_rm_preflight_wiring_v1(
                 "memory_sink_event_count_v1": len(sink),
                 "preflight_seam_audit_v1": seam,
             }
-        ok_ev, missing = validate_rm_preflight_memory_sink_v1(sink, scenario_id=scenario_id, trade_id=trade_id)
+        ok_ev, missing = validate_rm_preflight_memory_sink_v1(
+            sink,
+            scenario_id=scenario_id,
+            trade_id=trade_id,
+            job_id=str(job_id).strip(),
+        )
+        jbind_ok = _rm_preflight_job_binding_audit_v1(
+            job_id=str(job_id).strip(),
+            batch_first_scenario_id_v1=str(expected_batch_scenario_id_v1),
+            worker_row_scenario_id_v1=str(row_sid),
+            trade_id_v1=trade_id,
+            scenario_binding_ok_v1=True,
+            trace_job_binding_ok_v1=ok_ev,
+        )
         if not ok_ev:
             return {
                 "schema": "rm_preflight_wiring_audit_v1",
@@ -338,10 +422,12 @@ def run_rm_preflight_wiring_v1(
                 "skipped_v1": False,
                 "status_v1": FAILED_PREFLIGHT_STATUS_V1,
                 "missing_stages_v1": missing,
-                "human_message_v1": "RM preflight: incomplete reasoning trace — missing: " + ", ".join(missing),
+                "human_message_v1": "RM preflight: incomplete reasoning trace or job not bound to trace — "
+                + ", ".join(missing),
                 "memory_sink_event_count_v1": len(sink),
                 "preflight_seam_audit_v1": seam,
                 "preflight_trace_events_sample_v1": sink[n_sink_before_seam:][:40],
+                "rm_preflight_job_binding_audit_v1": jbind_ok,
             }
         return {
             "schema": "rm_preflight_wiring_audit_v1",
@@ -353,6 +439,7 @@ def run_rm_preflight_wiring_v1(
             "preflight_seam_audit_v1": seam,
             "preflight_trade_id_v1": trade_id,
             "preflight_scenario_id_v1": scenario_id,
+            "rm_preflight_job_binding_audit_v1": jbind_ok,
         }
 
 

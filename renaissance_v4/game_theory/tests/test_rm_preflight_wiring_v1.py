@@ -87,8 +87,31 @@ def test_validate_rm_preflight_memory_sink_ok():
             evidence_payload={"decision_source_v1": DECISION_SOURCE_REASONING_MODEL_V1},
         ),
     ]
-    ok, miss = validate_rm_preflight_memory_sink_v1(rows, scenario_id=sid, trade_id=tid)
+    ok, miss = validate_rm_preflight_memory_sink_v1(
+        rows, scenario_id=sid, trade_id=tid, job_id="j1"
+    )
     assert ok and miss == []
+
+
+def test_validate_rm_preflight_memory_sink_job_id_mismatch_fails():
+    sid, tid = "scen_a", "t1"
+    rows = [
+        build_learning_trace_event_v1(
+            job_id="wrong",
+            fingerprint=None,
+            stage="entry_reasoning_sealed_v1",
+            status="pass",
+            summary="s",
+            producer="p",
+            scenario_id=sid,
+            trade_id=tid,
+        ),
+    ]
+    ok, miss = validate_rm_preflight_memory_sink_v1(
+        rows, scenario_id=sid, trade_id=tid, job_id="batch_job"
+    )
+    assert not ok
+    assert any(m.startswith("job_id_not_bound_v1:") for m in miss)
 
 
 def test_validate_rm_preflight_memory_sink_missing_router():
@@ -105,7 +128,9 @@ def test_validate_rm_preflight_memory_sink_missing_router():
             trade_id=tid,
         ),
     ]
-    ok, miss = validate_rm_preflight_memory_sink_v1(rows, scenario_id=sid, trade_id=tid)
+    ok, miss = validate_rm_preflight_memory_sink_v1(
+        rows, scenario_id=sid, trade_id=tid, job_id="j"
+    )
     assert not ok
     assert "reasoning_router_decision_v1" in miss
     assert "reasoning_cost_governor_v1" in miss
