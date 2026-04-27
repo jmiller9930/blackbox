@@ -341,6 +341,9 @@ def run_student_decision_authority_for_trade_v1(
     pl2 = maybe_apply_student_decision_authority_to_ere_v1(
         ere=ere, payload=pl, exam_run_contract_request_v1=exam_run_contract_request_v1
     )
+    if mandate_active_v1 and isinstance(pl2, dict):
+        pl2 = copy.deepcopy(pl2)
+        pl2["decision_source_v1"] = DECISION_SOURCE_REASONING_MODEL_V1
     trace_emitted = False
     if str(job_id or "").strip():
         from renaissance_v4.game_theory.learning_trace_instrumentation_v1 import (

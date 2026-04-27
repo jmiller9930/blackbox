@@ -182,6 +182,7 @@ def test_mandate_persists_trace_and_sets_binding(tmp_path: Path, monkeypatch: py
     assert row.get("job_id") == "job_live_proof"
     pl = (row.get("evidence_payload") or {}).get("student_decision_authority_v1") or {}
     assert pl.get("authority_mode_v1") == "shadow"
+    assert pl.get("decision_source_v1") == m.DECISION_SOURCE_REASONING_MODEL_V1
     assert "before_decision_snapshot_v1" in pl
     assert "after_decision_snapshot_v1" in pl
     assert "referee_safety_check_v1" in pl
