@@ -426,6 +426,8 @@ def run_entry_reasoning_pipeline_v1(
     run_candle_timeframe_minutes: int,
     job_id: str = "",
     fingerprint: str | None = None,
+    scenario_id: str | None = None,
+    trade_id: str | None = None,
     long_threshold: float = _LONG_THRESHOLD,
     short_threshold: float = _SHORT_THRESHOLD,
     emit_traces: bool = True,
@@ -461,6 +463,8 @@ def run_entry_reasoning_pipeline_v1(
                 inputs=inputs,
                 outputs=outputs,
                 evidence=evidence,
+                scenario_id=scenario_id,
+                trade_id=trade_id,
             )
 
     bars = student_decision_packet.get("bars_inclusive_up_to_t")
@@ -766,6 +770,8 @@ def run_entry_reasoning_pipeline_v1(
             baseline_action=router_baseline_action,
             trade_notional_usd=router_trade_notional_usd,
             seed=router_seed,
+            scenario_id=scenario_id,
+            trade_id=trade_id,
         )
         out2 = u.get("entry_reasoning_eval_v1")
         pfm2 = u.get("student_reasoning_fault_map_v1")

@@ -280,6 +280,8 @@ def apply_unified_reasoning_router_v1(
     baseline_action: str | None = None,
     trade_notional_usd: float | None = None,
     seed: int | None = None,
+    scenario_id: str | None = None,
+    trade_id: str | None = None,
 ) -> dict[str, Any]:
     """
     After deterministic entry reasoning is built, evaluate router + optional external review.
@@ -549,12 +551,16 @@ def apply_unified_reasoning_router_v1(
             fingerprint=fingerprint,
             decision=decision,
             call_record=call_record,
+            scenario_id=scenario_id,
+            trade_id=trade_id,
         )
         emit_reasoning_cost_governor_v1(
             job_id=job_id,
             fingerprint=fingerprint,
             snapshot=gov.to_snapshot_v1(),
             call_record=call_record,
+            scenario_id=scenario_id,
+            trade_id=trade_id,
         )
         if review_obj:
             emit_external_reasoning_review_v1(job_id=job_id, fingerprint=fingerprint, review=review_obj)

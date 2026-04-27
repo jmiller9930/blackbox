@@ -122,6 +122,8 @@ def apply_unified_reasoning_router_for_lifecycle_v1(
     baseline_action: str | None = None,
     trade_notional_usd: float | None = None,
     seed: int | None = None,
+    scenario_id: str | None = None,
+    trade_id: str | None = None,
 ) -> dict[str, Any]:
     """Reuses 026AI router on a synthetic entry slice built from the current lifecycle bar (advisory; engine rules stay in lifecycle eval)."""
     from renaissance_v4.game_theory.unified_agent_v1.reasoning_router_v1 import apply_unified_reasoning_router_v1
@@ -141,6 +143,8 @@ def apply_unified_reasoning_router_for_lifecycle_v1(
         baseline_action=baseline_action,
         trade_notional_usd=trade_notional_usd,
         seed=seed,
+        scenario_id=scenario_id,
+        trade_id=trade_id,
     )
     out = dict(lifecycle_reasoning_eval_v1)
     udec = u.get("reasoning_router_decision_v1")
@@ -554,6 +558,8 @@ def run_lifecycle_tape_v1(
                 student_decision_packet={"symbol": symbol, "bars_inclusive_up_to_t": _bars_up_to(all_bars, i)},
                 retrieved_student_experience=retrieved_student_experience,
                 run_candle_timeframe_minutes=run_candle_timeframe_minutes,
+                scenario_id=scenario_id,
+                trade_id=trade_id,
             )
             le2 = u.get("lifecycle_reasoning_eval_v1")
             if isinstance(le2, dict):

@@ -78,6 +78,9 @@ from renaissance_v4.game_theory.student_proctor.entry_reasoning_engine_v1 import
     apply_engine_authority_to_student_output_v1,
     run_entry_reasoning_pipeline_v1,
 )
+from renaissance_v4.game_theory.student_proctor.lifecycle_deterministic_learning_026c_v1 import (
+    FIELD_RETRIEVED_LIFECYCLE_LEARNING_026C,
+)
 from renaissance_v4.game_theory.unified_agent_v1.external_api_l1_v1 import l1_fields_from_router_decision_v1
 from renaissance_v4.game_theory.student_proctor.student_execution_intent_v1 import (
     build_student_execution_intent_from_sealed_output_v1,
@@ -583,6 +586,12 @@ def student_loop_seam_after_parallel_batch_v1(
                 rx = pkt.get(FIELD_RETRIEVED_STUDENT_EXPERIENCE_V1)
                 n_rx = len(rx) if isinstance(rx, list) else 0
                 retrieval_matches_total += n_rx
+                _raw026c = (pkt or {}).get(FIELD_RETRIEVED_LIFECYCLE_LEARNING_026C)
+                _n026 = (
+                    len([x for x in _raw026c if isinstance(x, dict)])
+                    if isinstance(_raw026c, list)
+                    else 0
+                )
                 emit_memory_retrieval_completed_v1(
                     job_id=str(run_id).strip(),
                     fingerprint=fp_emit,
@@ -591,6 +600,7 @@ def student_loop_seam_after_parallel_batch_v1(
                     retrieval_matches=n_rx,
                     candle_timeframe_minutes=c_tf,
                     retrieval_signature_key=sk,
+                    retrieved_lifecycle_learning_026c_slice_count_v1=_n026,
                 )
                 rxx = rx if isinstance(rx, list) else []
                 ere, ere_err, _ere_trace, pfm = run_entry_reasoning_pipeline_v1(
@@ -599,6 +609,8 @@ def student_loop_seam_after_parallel_batch_v1(
                     run_candle_timeframe_minutes=int(c_tf),
                     job_id=str(run_id).strip(),
                     fingerprint=fp_emit,
+                    scenario_id=sid,
+                    trade_id=str(o.trade_id),
                     emit_traces=True,
                     unified_agent_router=unified_router,
                 )
@@ -638,9 +650,6 @@ def student_loop_seam_after_parallel_batch_v1(
                             _side = "long" if _act0 == "enter_long" else "short"
                             _ur = bool(
                                 pkt.get("unified_agent_router_lifecycle_v1", unified_router)
-                            )
-                            from renaissance_v4.game_theory.student_proctor.lifecycle_deterministic_learning_026c_v1 import (
-                                FIELD_RETRIEVED_LIFECYCLE_LEARNING_026C,
                             )
                             from renaissance_v4.game_theory.student_proctor.lifecycle_reasoning_engine_v1 import (
                                 run_lifecycle_tape_v1,
@@ -924,6 +933,8 @@ def student_loop_seam_after_parallel_batch_v1(
                     scenario_id=sid,
                     trade_id=str(o.trade_id),
                     via=via,
+                    decision_source_v1=str(so.get("decision_source_v1") or "").strip() or None,
+                    student_action_v1_echo=str(so.get("student_action_v1") or "").strip() or None,
                 )
                 if primary_trade_shadow_student_v1 is None and isinstance(so, dict):
                     primary_student_output_v1 = so

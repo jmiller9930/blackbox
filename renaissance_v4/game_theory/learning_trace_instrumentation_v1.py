@@ -164,6 +164,7 @@ def emit_memory_retrieval_completed_v1(
     retrieval_matches: int,
     candle_timeframe_minutes: int | None = None,
     retrieval_signature_key: str | None = None,
+    retrieved_lifecycle_learning_026c_slice_count_v1: int | None = None,
 ) -> None:
     st = "pass" if retrieval_matches > 0 else "partial"
     ev: dict[str, Any] = {"student_retrieval_matches": retrieval_matches}
@@ -171,6 +172,8 @@ def emit_memory_retrieval_completed_v1(
         ev["candle_timeframe_minutes"] = int(candle_timeframe_minutes)
     if retrieval_signature_key is not None and str(retrieval_signature_key).strip():
         ev["retrieval_signature_key"] = str(retrieval_signature_key).strip()[:2000]
+    if retrieved_lifecycle_learning_026c_slice_count_v1 is not None:
+        ev["retrieved_lifecycle_learning_026c_slice_count_v1"] = int(retrieved_lifecycle_learning_026c_slice_count_v1)
     _emit(
         job_id=job_id,
         fingerprint=fingerprint,
@@ -238,8 +241,20 @@ def emit_llm_output_rejected_v1(
 
 
 def emit_student_output_sealed_v1(
-    *, job_id: str, fingerprint: str | None, scenario_id: str, trade_id: str, via: str
+    *,
+    job_id: str,
+    fingerprint: str | None,
+    scenario_id: str,
+    trade_id: str,
+    via: str,
+    decision_source_v1: str | None = None,
+    student_action_v1_echo: str | None = None,
 ) -> None:
+    ev: dict[str, Any] = {"via": via}
+    if decision_source_v1 is not None and str(decision_source_v1).strip():
+        ev["decision_source_v1"] = str(decision_source_v1).strip()[:128]
+    if student_action_v1_echo is not None and str(student_action_v1_echo).strip():
+        ev["student_action_v1_echo"] = str(student_action_v1_echo).strip()[:64]
     _emit(
         job_id=job_id,
         fingerprint=fingerprint,
@@ -249,7 +264,7 @@ def emit_student_output_sealed_v1(
         producer="student_loop_seam_v1",
         scenario_id=scenario_id,
         trade_id=trade_id,
-        evidence_payload={"via": via},
+        evidence_payload=ev,
     )
 
 
@@ -387,12 +402,16 @@ def emit_reasoning_router_decision_v1(
     fingerprint: str | None,
     decision: dict[str, Any] | None = None,
     call_record: dict[str, Any] | None = None,
+    scenario_id: str | None = None,
+    trade_id: str | None = None,
 ) -> None:
     """GT_DIRECTIVE_026AI — single router decision (no API keys, no raw provider blobs)."""
     d = {k: v for k, v in (decision or {}).items() if "key" not in k.lower()}
     cr = None
     if isinstance(call_record, dict):
         cr = {k: v for k, v in call_record.items() if "key" not in k.lower() and "api_key" not in k.lower()}
+    sid = str(scenario_id).strip() if scenario_id and str(scenario_id).strip() else None
+    tid = str(trade_id).strip() if trade_id and str(trade_id).strip() else None
     _emit(
         job_id=job_id,
         fingerprint=fingerprint,
@@ -400,6 +419,8 @@ def emit_reasoning_router_decision_v1(
         status="pass" if d else "partial",
         summary="Unified reasoning router decision (local primary; external optional).",
         producer="unified_agent_v1",
+        scenario_id=sid,
+        trade_id=tid,
         evidence_payload={"reasoning_router_decision_v1": d, "call_ledger_sanitized_v1": cr or {}},
     )
 
@@ -410,6 +431,8 @@ def emit_reasoning_cost_governor_v1(
     fingerprint: str | None,
     snapshot: dict[str, Any] | None = None,
     call_record: dict[str, Any] | None = None,
+    scenario_id: str | None = None,
+    trade_id: str | None = None,
 ) -> None:
     """GT_DIRECTIVE_026AI — token/call budget state (no secrets)."""
     cr = None
@@ -419,6 +442,8 @@ def emit_reasoning_cost_governor_v1(
         "reasoning_cost_governor_v1": snapshot or {},
         "call_ledger_sanitized_v1": cr or {},
     }
+    sid = str(scenario_id).strip() if scenario_id and str(scenario_id).strip() else None
+    tid = str(trade_id).strip() if trade_id and str(trade_id).strip() else None
     _emit(
         job_id=job_id,
         fingerprint=fingerprint,
@@ -426,6 +451,8 @@ def emit_reasoning_cost_governor_v1(
         status="pass",
         summary="Reasoning cost governor snapshot.",
         producer="unified_agent_v1",
+        scenario_id=sid,
+        trade_id=tid,
         evidence_payload=pl,
     )
 
@@ -573,12 +600,16 @@ def emit_entry_reasoning_pipeline_stage_v1(
     inputs: Any,
     outputs: Any,
     evidence: dict[str, Any] | None = None,
+    scenario_id: str | None = None,
+    trade_id: str | None = None,
 ) -> None:
     """
     GT_DIRECTIVE_026A_IMPL — one stage of the entry reasoning engine (in-process trace).
 
     ``outputs`` / ``inputs`` may be large; keep evidence bounded in production if needed.
     """
+    sid = str(scenario_id).strip() if scenario_id and str(scenario_id).strip() else None
+    tid = str(trade_id).strip() if trade_id and str(trade_id).strip() else None
     _emit(
         job_id=job_id,
         fingerprint=fingerprint,
@@ -586,6 +617,8 @@ def emit_entry_reasoning_pipeline_stage_v1(
         status="pass",
         summary=f"entry_reasoning_engine_v1: {stage}",
         producer="entry_reasoning_engine_v1",
+        scenario_id=sid,
+        trade_id=tid,
         evidence_payload={
             "entry_reasoning_stage": stage,
             "inputs": inputs,
