@@ -261,7 +261,7 @@ def _env_seam_enabled() -> bool:
 
 
 def _env_unified_agent_reasoning_router_v1() -> bool:
-    """GT_DIRECTIVE_026AI — optional OpenAI review path (default off; local reasoning always runs)."""
+    """Legacy opt-in for extra router wiring; OR'd with Student mandate (see unified_router below)."""
     v = (os.environ.get("PATTERN_GAME_UNIFIED_AGENT_REASONING_ROUTER") or "0").strip().lower()
     return v in ("1", "true", "yes", "on")
 
@@ -451,7 +451,6 @@ def student_loop_seam_after_parallel_batch_v1(
     llm_trade_i = 0
     llm_student_output_rejections_v1 = 0
     last_external_api_l1_v1: dict[str, object | None] | None = None
-    unified_router = _env_unified_agent_reasoning_router_v1()
 
     fp_emit = fingerprint_for_parallel_job_v1(
         operator_batch_audit=oba if oba else None,
@@ -460,6 +459,10 @@ def student_loop_seam_after_parallel_batch_v1(
     )
 
     mandate_active_v1 = profile != STUDENT_BRAIN_PROFILE_BASELINE_NO_MEMORY_NO_LLM_V1
+    # Trace proof (026AI): local router evaluation + reasoning_router_decision_v1 must run for
+    # every Student mandate trade — not only when PATTERN_GAME_UNIFIED_AGENT_REASONING_ROUTER
+    # opts into optional external review (that env is legacy; config still gates HTTP inside router).
+    unified_router = bool(mandate_active_v1) or _env_unified_agent_reasoning_router_v1()
     _mandate_pre = []
     if mandate_active_v1:
         from renaissance_v4.game_theory.student_proctor.student_decision_authority_v1 import (

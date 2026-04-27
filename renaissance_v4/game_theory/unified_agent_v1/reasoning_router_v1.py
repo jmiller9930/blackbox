@@ -326,6 +326,38 @@ def apply_unified_reasoning_router_v1(
             governor_snapshot={"schema": "reasoning_cost_governor_snapshot_v1", "blocked": True, "note": "router disabled"},
             review_obj=None,
         )
+        gov_snap = {"schema": "reasoning_cost_governor_snapshot_v1", "blocked": True, "note": "router disabled in config"}
+        call_record_off = {
+            "api_call_attempted_v1": False,
+            "api_call_allowed_v1": False,
+            "api_call_reason_codes_v1": [],
+            "input_tokens_v1": 0,
+            "output_tokens_v1": 0,
+            "total_tokens_v1": 0,
+            "estimated_cost_usd_v1": 0.0,
+            "latency_ms_v1": 0.0,
+            "provider_v1": "openai",
+            "model_requested_v1": str(cfg.get("external_model") or "gpt-5.5"),
+            "model_resolved_v1": None,
+            "response_status_v1": "not_called",
+        }
+        if str(job_id or "").strip():
+            emit_reasoning_router_decision_v1(
+                job_id=job_id,
+                fingerprint=fingerprint,
+                decision=dec,
+                call_record=call_record_off,
+                scenario_id=scenario_id,
+                trade_id=trade_id,
+            )
+            emit_reasoning_cost_governor_v1(
+                job_id=job_id,
+                fingerprint=fingerprint,
+                snapshot=gov_snap,
+                call_record=call_record_off,
+                scenario_id=scenario_id,
+                trade_id=trade_id,
+            )
         return {
             "entry_reasoning_eval_v1": _attach_to_ere(entry_reasoning_eval_v1, dec, None, None),
             "student_reasoning_fault_map_v1": fm,
