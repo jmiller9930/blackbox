@@ -1772,8 +1772,9 @@ def create_app() -> Flask:
                 _parallel_job_append_rm_preflight_line_v1(job_id, "RM PREFLIGHT START")
                 _parallel_job_append_rm_preflight_line_v1(
                     job_id,
-                    "RM PREFLIGHT: bounded first-scenario replay (tail-capped bars + worker timeout) — "
-                    "parallel workers not started; poll this job for telemetry (phase, elapsed, heartbeat).",
+                    "RM PREFLIGHT: decision-snapshot seam (manifest + causal packet + entry reasoning + seal; "
+                    "no Referee worker replay) — parallel workers not started; poll for "
+                    "rm_preflight_telemetry_v1 / preflight_phase_audit_v1.",
                 )
                 from renaissance_v4.game_theory.rm_preflight_wiring_v1 import (
                     FAILED_PREFLIGHT_STATUS_V1,
@@ -2667,7 +2668,7 @@ def create_app() -> Flask:
             _parallel_job_append_rm_preflight_line_v1(job_id, "RM PREFLIGHT START")
             _parallel_job_append_rm_preflight_line_v1(
                 job_id,
-                "RM PREFLIGHT: bounded replay + seam (blocking /api/run-parallel — "
+                "RM PREFLIGHT: decision-snapshot + seam (blocking /api/run-parallel — "
                 "GET /api/run-status/<job_id> returns rm_preflight_telemetry_v1 while active).",
             )
             print(

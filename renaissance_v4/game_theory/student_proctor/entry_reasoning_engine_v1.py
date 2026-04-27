@@ -777,6 +777,10 @@ def run_entry_reasoning_pipeline_v1(
         pfm2 = u.get("student_reasoning_fault_map_v1")
         if isinstance(out2, dict):
             out = out2
+            if isinstance(u, dict):
+                _rw = u.get("ms_elapsed")
+                if isinstance(_rw, (int, float)):
+                    out["reasoning_router_bundle_wall_ms_v1"] = float(_rw)
         if isinstance(pfm2, dict):
             out["student_reasoning_fault_map_v1"] = pfm2
             _pfm = pfm2

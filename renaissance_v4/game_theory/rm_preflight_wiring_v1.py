@@ -467,6 +467,114 @@ def _rm_preflight_decision_snapshot_timeout_s_v1() -> float:
     return max(2.0, min(t, 30.0))
 
 
+class _PreflightPhaseAuditCollectorV1:
+    """Wall-clock + perf slices for RM preflight RCA (decision-snapshot path)."""
+
+    def __init__(self, *, deadline_monotonic: float, budget_s_v1: float) -> None:
+        self.deadline_monotonic = float(deadline_monotonic)
+        self.budget_s_v1 = float(budget_s_v1)
+        self.rows: list[dict[str, Any]] = []
+        self._cur: str | None = None
+        self._t0_perf: float = 0.0
+        self._t0_wall_ms: int = 0
+
+    def monotonic_over_deadline_v1(self) -> bool:
+        return time.monotonic() > self.deadline_monotonic
+
+    def open_phase_v1(self) -> str | None:
+        return self._cur
+
+    def enter(self, phase: str) -> None:
+        self.end()
+        self._cur = str(phase)
+        self._t0_perf = time.perf_counter()
+        self._t0_wall_ms = int(time.time() * 1000)
+
+    def end(self, *, error: str | None = None, timeout_hit: bool = False) -> None:
+        if self._cur is None:
+            return
+        t1p = time.perf_counter()
+        t1w = int(time.time() * 1000)
+        row: dict[str, Any] = {
+            "phase": self._cur,
+            "entered_v1": True,
+            "started_at_ms_v1": int(self._t0_wall_ms),
+            "ended_at_ms_v1": int(t1w),
+            "elapsed_ms_v1": round((t1p - self._t0_perf) * 1000.0, 3),
+            "timeout_hit_v1": bool(timeout_hit),
+        }
+        if error:
+            row["error_v1"] = str(error)[:2000]
+        self.rows.append(row)
+        self._cur = None
+
+    def append_skipped(self, phase: str, note_v1: str) -> None:
+        self.rows.append(
+            {
+                "phase": str(phase),
+                "entered_v1": False,
+                "started_at_ms_v1": None,
+                "ended_at_ms_v1": None,
+                "elapsed_ms_v1": 0.0,
+                "timeout_hit_v1": False,
+                "note_v1": str(note_v1)[:500],
+            }
+        )
+
+    def append_router_cost_rows_v1(self, *, unified_router_ran_v1: bool, bundle_wall_ms_v1: float | None) -> None:
+        if not unified_router_ran_v1:
+            self.append_skipped("reasoning_router_v1", "unified_agent_router_false_v1")
+            self.append_skipped("reasoning_cost_governor_v1", "unified_agent_router_false_v1")
+            return
+        bms = float(bundle_wall_ms_v1) if isinstance(bundle_wall_ms_v1, (int, float)) else None
+        tw = int(time.time() * 1000)
+        base_note = (
+            "wall_clock_inside_apply_unified_reasoning_router_v1 "
+            "(router + cost governor emits occur in same call; see reasoning_router_bundle_wall_ms_v1 on ere)"
+        )
+        for ph in ("reasoning_router_v1", "reasoning_cost_governor_v1"):
+            row: dict[str, Any] = {
+                "phase": ph,
+                "entered_v1": True,
+                "started_at_ms_v1": None,
+                "ended_at_ms_v1": int(tw),
+                "elapsed_ms_v1": round(bms, 3) if bms is not None else None,
+                "timeout_hit_v1": False,
+                "note_v1": base_note,
+            }
+            self.rows.append(row)
+
+    def snapshot_for_audit_v1(self, *, missing_stages_v1: list[str]) -> dict[str, Any]:
+        root = _rm_preflight_root_cause_phase_v1(self.rows, missing_stages_v1=list(missing_stages_v1))
+        return {
+            "preflight_phase_audit_v1": list(self.rows),
+            "root_cause_phase_v1": root,
+            "preflight_decision_snapshot_budget_s_v1": float(self.budget_s_v1),
+        }
+
+
+def _rm_preflight_root_cause_phase_v1(
+    rows: list[dict[str, Any]],
+    *,
+    missing_stages_v1: list[str],
+) -> str:
+    if not rows:
+        return "preflight_unknown_no_phase_rows_v1"
+    if "preflight_timeout_decision_snapshot_v1" in missing_stages_v1:
+        for r in reversed(rows):
+            if bool(r.get("timeout_hit_v1")):
+                return str(r.get("phase") or "preflight_unknown_v1")
+        for r in reversed(rows):
+            if bool(r.get("entered_v1")) and r.get("ended_at_ms_v1") is None:
+                return str(r.get("phase") or "preflight_unknown_v1")
+        last = str(rows[-1].get("phase") or "preflight_unknown_v1")
+        return f"preflight_timeout_inter_phase_v1:after_{last}"
+    for r in reversed(rows):
+        if r.get("error_v1"):
+            return str(r.get("phase") or "preflight_unknown_v1")
+    return str(rows[-1].get("phase") or "preflight_unknown_v1")
+
+
 def _rm_preflight_merge_exam_lifecycle_into_packet_v1(
     pkt: dict[str, Any], ex_req: dict[str, Any] | None
 ) -> dict[str, Any]:
@@ -580,7 +688,8 @@ def run_rm_preflight_decision_snapshot_v1(
     Build causal packet → entry reasoning (+ unified router when mandated) → authority → stub seal
     with RM trace emits. Returns audit fragment for ``run_rm_preflight_wiring_v1`` merge.
 
-    On failure: ``ok_v1`` False, ``missing_stages_v1`` / ``human_message_v1`` populated.
+    On failure: ``ok_v1`` False, ``missing_stages_v1`` / ``human_message_v1`` populated, plus
+    ``preflight_phase_audit_v1`` / ``root_cause_phase_v1`` for RCA.
     """
     st = panel.setdefault("stages_v1", {})
     st["preflight_decision_snapshot_v1"] = True
@@ -589,6 +698,8 @@ def run_rm_preflight_decision_snapshot_v1(
     oba = operator_batch_audit if isinstance(operator_batch_audit, dict) else None
     scenario_id = str(scenario.get("scenario_id") or "unknown").strip()
     trade_id = PREFLIGHT_DECISION_SNAPSHOT_TRADE_ID_V1
+    budget_s_v1 = float(_rm_preflight_decision_snapshot_timeout_s_v1())
+    audit = _PreflightPhaseAuditCollectorV1(deadline_monotonic=float(deadline), budget_s_v1=budget_s_v1)
 
     def _timeout() -> bool:
         return time.monotonic() > float(deadline)
@@ -598,7 +709,16 @@ def run_rm_preflight_decision_snapshot_v1(
         missing: list[str],
         human: str,
         seam_audit: dict[str, Any] | None = None,
+        timeout_on_open_phase_v1: bool = False,
     ) -> dict[str, Any]:
+        if timeout_on_open_phase_v1 and audit.open_phase_v1() is not None:
+            audit.end(timeout_hit=True, error="preflight_deadline_monotonic_exceeded_v1")
+        else:
+            audit.end()
+        snap = audit.snapshot_for_audit_v1(missing_stages_v1=list(missing))
+        panel["preflight_phase_audit_v1"] = snap.get("preflight_phase_audit_v1")
+        panel["root_cause_phase_v1"] = snap.get("root_cause_phase_v1")
+        panel["preflight_decision_snapshot_budget_s_v1"] = snap.get("preflight_decision_snapshot_budget_s_v1")
         st["terminal_pass_v1"] = False
         panel["failure_reasons_display_v1"] = map_rm_preflight_missing_to_operator_display_v1(missing)
         if human and human not in panel["failure_reasons_display_v1"]:
@@ -611,15 +731,21 @@ def run_rm_preflight_decision_snapshot_v1(
             "seam_audit": seam_audit,
             "missing_stages_v1": missing,
             "human_message_v1": human,
+            **snap,
         }
 
     if _preflight_cancel_hit_v1(cancel_check):
         return _fail(missing=["cancelled_during_preflight_v1"], human="cancelled")
 
     if _timeout():
+        audit.append_skipped(
+            "preflight_budget_exhausted_before_snapshot_v1",
+            "monotonic_deadline_exceeded_before_snapshot_build_v1",
+        )
         return _fail(
             missing=["preflight_timeout_decision_snapshot_v1"],
             human="preflight_timeout_decision_snapshot_v1",
+            timeout_on_open_phase_v1=False,
         )
 
     profile = normalize_student_reasoning_mode_v1(
@@ -654,6 +780,7 @@ def run_rm_preflight_decision_snapshot_v1(
         mbp = resolve_memory_bundle_for_scenario(scenario, explicit_path=None)
 
     prep = None
+    audit.enter("snapshot_build_v1")
     try:
         prep = prepare_effective_manifest_for_replay(
             scenario["manifest_path"],
@@ -664,6 +791,7 @@ def run_rm_preflight_decision_snapshot_v1(
         )
         manifest = load_manifest_file(prep.replay_path)
     except Exception as e:
+        audit.end(error=f"{type(e).__name__}: {e}")
         if prep is not None:
             try:
                 prep.cleanup()
@@ -677,21 +805,21 @@ def run_rm_preflight_decision_snapshot_v1(
     mandate_tok = None
     try:
         if _timeout():
+            audit.end(timeout_hit=True, error="deadline_before_sqlite_slice_v1")
             return _fail(
                 missing=["preflight_timeout_decision_snapshot_v1"],
                 human="preflight_timeout_decision_snapshot_v1",
+                timeout_on_open_phase_v1=False,
             )
         sym_hint = _rm_preflight_symbol_from_manifest_v1(manifest)
         db_used = Path(str(DB_PATH)).resolve()
         sym_res, cut_ms, qerr = _rm_preflight_query_symbol_and_cut_ms_v1(db_used, sym_hint)
         if qerr or not sym_res or cut_ms is None:
+            audit.end(error=str(qerr or "no_market_slice"))
             return _fail(
                 missing=["preflight_decision_snapshot_no_market_slice_v1"],
                 human=qerr or "preflight_decision_snapshot_no_market_slice_v1",
             )
-
-        _rm_preflight_snapshot_progress_v1(panel, "snapshot_loaded")
-        _emit_rm_preflight_panel_v1(panel, progress_cb)
 
         c_tf = extract_candle_timeframe_minutes_for_replay(scenario)
         for cand in ((ex_req or {}).get("candle_timeframe_minutes"), (oba or {}).get("candle_timeframe_minutes")):
@@ -712,11 +840,16 @@ def run_rm_preflight_decision_snapshot_v1(
             notes="rm_preflight_decision_snapshot_v1",
         )
         if perr or pkt is None:
+            audit.end(error=str(perr or "packet_none"))
             return _fail(
                 missing=["preflight_decision_snapshot_packet_failed_v1"],
                 human=str(perr or "packet_none"),
             )
         pkt = _rm_preflight_merge_exam_lifecycle_into_packet_v1(pkt, ex_req)
+        audit.end()
+
+        _rm_preflight_snapshot_progress_v1(panel, "snapshot_loaded")
+        _emit_rm_preflight_panel_v1(panel, progress_cb)
 
         scorecard_entry_effective = find_scorecard_entry_by_job_id(jid)
         fp_emit = fingerprint_for_parallel_job_v1(
@@ -747,15 +880,19 @@ def run_rm_preflight_decision_snapshot_v1(
             )
 
             if _timeout():
+                audit.enter("rm_entry_reasoning_v1")
+                audit.end(timeout_hit=True, error="deadline_before_run_entry_reasoning_pipeline_v1_after_nexus")
                 return _fail(
                     missing=["preflight_timeout_decision_snapshot_v1"],
                     human="preflight_timeout_decision_snapshot_v1",
+                    timeout_on_open_phase_v1=False,
                 )
 
             rxx: list[dict[str, Any]] = []
             _rm_preflight_snapshot_progress_v1(panel, "rm_invoked")
             _emit_rm_preflight_panel_v1(panel, progress_cb)
 
+            audit.enter("rm_entry_reasoning_v1")
             ere, ere_err, _trace, pfm = run_entry_reasoning_pipeline_v1(
                 student_decision_packet=pkt,
                 retrieved_student_experience=rxx,
@@ -768,14 +905,27 @@ def run_rm_preflight_decision_snapshot_v1(
                 unified_agent_router=unified_router,
             )
             if ere is None:
+                audit.end(error="; ".join(ere_err) if ere_err else "entry_reasoning_none")
                 return _fail(
                     missing=["preflight_entry_reasoning_failed_v1"],
                     human="; ".join(ere_err) if ere_err else "entry_reasoning_none",
                 )
+            audit.end()
 
             if isinstance(ere, dict) and isinstance(pfm, dict):
                 ere["student_reasoning_fault_map_v1"] = pfm
 
+            _bundle_ms = ere.get("reasoning_router_bundle_wall_ms_v1") if isinstance(ere, dict) else None
+            audit.append_skipped(
+                "llm_inference_v1",
+                "preflight_no_ollama_emit_student_output_via_ollama_v1_not_called_stub_seal_v1",
+            )
+            audit.append_router_cost_rows_v1(
+                unified_router_ran_v1=bool(unified_router),
+                bundle_wall_ms_v1=float(_bundle_ms) if isinstance(_bundle_ms, (int, float)) else None,
+            )
+
+            audit.enter("student_decision_authority_v1")
             run_student_decision_authority_for_trade_v1(
                 job_id=jid,
                 fingerprint=fp_emit,
@@ -787,13 +937,16 @@ def run_rm_preflight_decision_snapshot_v1(
                 exam_run_contract_request_v1=ex_req,
                 mandate_active_v1=mandate_active_v1,
             )
+            audit.end()
 
+            audit.enter("output_seal_v1")
             so, soe = emit_shadow_stub_student_output_v1(
                 pkt,
                 graded_unit_id=trade_id,
                 decision_at_ms=cut_ms,
             )
             if soe or so is None:
+                audit.end(error="; ".join(soe) if soe else "stub_none")
                 return _fail(
                     missing=["preflight_shadow_stub_failed_v1"],
                     human="; ".join(soe) if soe else "stub_none",
@@ -805,6 +958,7 @@ def run_rm_preflight_decision_snapshot_v1(
                 allowed_memory_ids=frozenset(),
             )
             if so is None or auth_errs:
+                audit.end(error="; ".join(auth_errs) if auth_errs else "null_student_output")
                 return _fail(
                     missing=["preflight_engine_authority_merge_failed_v1"],
                     human="; ".join(auth_errs) if auth_errs else "null_student_output",
@@ -814,12 +968,14 @@ def run_rm_preflight_decision_snapshot_v1(
                 so = _rm_preflight_augment_stub_for_llm_thesis_v1(so, ere=ere, pkt=pkt)
                 v0 = validate_student_output_v1(so)
                 if v0:
+                    audit.end(error="; ".join(v0)[:2000])
                     return _fail(
                         missing=["preflight_llm_thesis_shape_failed_v1"],
                         human="; ".join(v0)[:2000],
                     )
                 te = validate_student_output_directional_thesis_required_for_llm_profile_v1(so)
                 if te:
+                    audit.end(error="; ".join(te)[:2000])
                     return _fail(
                         missing=["preflight_llm_thesis_shape_failed_v1"],
                         human="; ".join(te)[:2000],
@@ -835,7 +991,6 @@ def run_rm_preflight_decision_snapshot_v1(
                 if isinstance(so, dict) and isinstance(_bind, dict) and _bind.get("decision_source_v1"):
                     so["decision_source_v1"] = str(_bind["decision_source_v1"])
 
-            # Preflight seal is always stub/deterministic (no live Ollama call in this path).
             ulm = False
             _full_fm = merge_runtime_fault_nodes_v1(
                 pfm if isinstance(pfm, dict) else {},
@@ -887,6 +1042,11 @@ def run_rm_preflight_decision_snapshot_v1(
                 student_action_v1_echo=str(so.get("student_action_v1") or "").strip() or None,
                 decision_protocol_extras_v1=protocol_extras,
             )
+            audit.end()
+            audit.append_skipped(
+                "protocol_validation_v1",
+                "student_output_schema_and_thesis_checks_ran_inside_output_seal_v1_elapsed_ms_v1",
+            )
 
             if rm_preflight_early_exit_after_seal_active_v1():
                 emit_referee_used_student_output_batch_truth_v1(
@@ -903,9 +1063,12 @@ def run_rm_preflight_decision_snapshot_v1(
             _emit_rm_preflight_panel_v1(panel, progress_cb)
 
             if _timeout():
+                audit.enter("preflight_post_seal_v1")
+                audit.end(timeout_hit=True, error="deadline_after_student_output_sealed_emit_v1")
                 return _fail(
                     missing=["preflight_timeout_decision_snapshot_v1"],
                     human="preflight_timeout_decision_snapshot_v1",
+                    timeout_on_open_phase_v1=False,
                 )
 
             seam_audit = {
@@ -913,10 +1076,15 @@ def run_rm_preflight_decision_snapshot_v1(
                 "run_id": jid,
                 "rm_preflight_wiring_early_exit_v1": True,
                 "preflight_path_v1": "decision_snapshot_v1",
+                "preflight_worker_replay_invoked_v1": False,
+                "preflight_referee_replay_invoked_v1": False,
                 "trades_considered": 1,
                 "errors": [],
                 "student_emit_occurred": True,
             }
+            ok_snap = audit.snapshot_for_audit_v1(missing_stages_v1=[])
+            panel["preflight_phase_audit_v1"] = ok_snap.get("preflight_phase_audit_v1")
+            panel["preflight_decision_snapshot_budget_s_v1"] = ok_snap.get("preflight_decision_snapshot_budget_s_v1")
             return {
                 "ok_v1": True,
                 "scenario_id": scenario_id,
@@ -924,6 +1092,9 @@ def run_rm_preflight_decision_snapshot_v1(
                 "seam_audit": seam_audit,
                 "missing_stages_v1": [],
                 "human_message_v1": None,
+                "preflight_phase_audit_v1": ok_snap.get("preflight_phase_audit_v1"),
+                "root_cause_phase_v1": None,
+                "preflight_decision_snapshot_budget_s_v1": ok_snap.get("preflight_decision_snapshot_budget_s_v1"),
             }
         finally:
             if mandate_tok is not None:

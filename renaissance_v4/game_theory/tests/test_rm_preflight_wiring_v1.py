@@ -16,6 +16,7 @@ from renaissance_v4.game_theory.rm_preflight_wiring_v1 import (
     FAILED_PREFLIGHT_STATUS_V1,
     PREFLIGHT_DECISION_SNAPSHOT_TRADE_ID_V1,
     REQUIRED_RM_PREFLIGHT_STAGES_V1,
+    _rm_preflight_root_cause_phase_v1,
     _shrink_scenario_for_rm_preflight_v1,
     rm_preflight_enabled_v1,
     run_rm_preflight_wiring_v1,
@@ -312,6 +313,50 @@ def test_student_mandate_run_rm_preflight_fails_when_rm_preflight_env_off(
 def test_required_stages_include_router():
     assert "reasoning_router_decision_v1" in REQUIRED_RM_PREFLIGHT_STAGES_V1
     assert "reasoning_cost_governor_v1" in REQUIRED_RM_PREFLIGHT_STAGES_V1
+
+
+def test_rm_preflight_root_cause_timeout_prefers_timeout_hit_phase():
+    rows = [
+        {
+            "phase": "snapshot_build_v1",
+            "entered_v1": True,
+            "ended_at_ms_v1": 1,
+            "timeout_hit_v1": False,
+        },
+        {
+            "phase": "rm_entry_reasoning_v1",
+            "entered_v1": True,
+            "ended_at_ms_v1": 2,
+            "timeout_hit_v1": True,
+        },
+    ]
+    assert (
+        _rm_preflight_root_cause_phase_v1(
+            rows, missing_stages_v1=["preflight_timeout_decision_snapshot_v1"]
+        )
+        == "rm_entry_reasoning_v1"
+    )
+
+
+def test_rm_preflight_root_cause_timeout_inter_phase_suffix():
+    rows = [
+        {
+            "phase": "snapshot_build_v1",
+            "entered_v1": True,
+            "ended_at_ms_v1": 1,
+            "timeout_hit_v1": False,
+        },
+        {
+            "phase": "preflight_budget_exhausted_before_snapshot_v1",
+            "entered_v1": False,
+            "ended_at_ms_v1": None,
+            "timeout_hit_v1": False,
+        },
+    ]
+    root = _rm_preflight_root_cause_phase_v1(
+        rows, missing_stages_v1=["preflight_timeout_decision_snapshot_v1"]
+    )
+    assert root == "preflight_timeout_inter_phase_v1:after_preflight_budget_exhausted_before_snapshot_v1"
 
 
 def test_json_roundtrip_sink_event():
