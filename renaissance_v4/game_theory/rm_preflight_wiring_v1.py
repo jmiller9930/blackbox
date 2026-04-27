@@ -183,6 +183,8 @@ def validate_rm_preflight_memory_sink_detailed_v1(
         sev = sealed_rows[-1].get("evidence_payload") if isinstance(sealed_rows[-1].get("evidence_payload"), dict) else {}
         if sev.get("decision_source_v1") != DECISION_SOURCE_REASONING_MODEL_V1:
             missing.append("student_output_sealed.decision_source_v1_reasoning_model")
+        elif sev.get("student_decision_protocol_ok_v1") is not True:
+            missing.append("student_output_sealed.student_decision_protocol_incomplete_v1")
     missing_u = sorted(set(missing))
     job_id_binding_ok_v1 = bool(jid) and not any(
         m == "missing_job_id" or (isinstance(m, str) and m.startswith("job_id_not_bound_v1:")) for m in missing_u
@@ -345,6 +347,8 @@ def map_rm_preflight_missing_to_operator_display_v1(missing: list[str]) -> list[
             "student_output_sealed.decision_source_v1_reasoning_model",
         ):
             out.append("missing decision_source_v1: reasoning_model (sealed)")
+        elif s == "student_output_sealed.student_decision_protocol_incomplete_v1":
+            out.append("Student decision protocol incomplete on sealed output (RM preflight)")
         else:
             out.append(s)
     return out

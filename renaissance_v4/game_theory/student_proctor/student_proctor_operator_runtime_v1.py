@@ -34,6 +34,10 @@ from renaissance_v4.game_theory.exam_run_contract_v1 import (
     resolved_llm_for_exam_contract_v1,
     STUDENT_LLM_APPROVED_MODEL_V1,
 )
+from renaissance_v4.game_theory.student_proctor.contracts_v1 import (
+    THESIS_REQUIRED_FOR_LLM_PROFILE_V1,
+    validate_student_output_directional_thesis_required_for_llm_profile_v1,
+)
 from renaissance_v4.game_theory.student_proctor.shadow_student_v1 import (
     emit_shadow_stub_student_output_v1,
 )
@@ -870,6 +874,50 @@ def student_loop_seam_after_parallel_batch_v1(
                             f"{'; '.join(auth_errs) if auth_errs else 'null_student_output'}"
                         )
                         continue
+                    if (
+                        str(brain_prof or "").strip() == STUDENT_BRAIN_PROFILE_MEMORY_CONTEXT_LLM_STUDENT_V1
+                        and isinstance(so, dict)
+                    ):
+                        te_proto = validate_student_output_directional_thesis_required_for_llm_profile_v1(so)
+                        if te_proto:
+                            llm_student_output_rejections_v1 += 1
+                            msg = "; ".join(te_proto)
+                            errors.append(
+                                f"{sid} trade={o.trade_id}: llm_student_decision_protocol_incomplete: {msg}"
+                            )
+                            emit_llm_output_rejected_v1(
+                                job_id=str(run_id).strip(),
+                                fingerprint=fp_emit,
+                                scenario_id=sid,
+                                trade_id=str(o.trade_id),
+                                errors=list(te_proto)[:20],
+                            )
+                            _proto_fm = merge_runtime_fault_nodes_v1(
+                                pfm,
+                                use_llm_path=bool(
+                                    use_llm and llm_model_resolved and base_url_resolved and not over_cap
+                                ),
+                                llm_checked_pass=False,
+                                llm_error_codes=[str(x) for x in te_proto],
+                                llm_operator_message=(
+                                    "The Student line failed the mandatory decision protocol "
+                                    "(context → hypothesis → evidence → resolution → decision → invalidation)."
+                                ),
+                                student_sealed_pass=False,
+                                student_seal_error_codes=[],
+                                student_seal_message="Output was not sealed — decision protocol incomplete.",
+                                execution_intent_pass=False,
+                                execution_intent_error_codes=[],
+                                execution_intent_message="No execution handoff — protocol gate failed.",
+                            )
+                            emit_student_reasoning_fault_map_v1(
+                                job_id=str(run_id).strip(),
+                                fingerprint=fp_emit,
+                                scenario_id=sid,
+                                trade_id=str(o.trade_id),
+                                student_reasoning_fault_map_v1=_proto_fm,
+                            )
+                            continue
                     if mandate_active_v1:
                         _bind = ere.get("student_decision_authority_binding_v1") if isinstance(ere, dict) else None
                         if not isinstance(_bind, dict) or not _bind.get("learning_trace_persisted_v1"):
@@ -939,6 +987,16 @@ def student_loop_seam_after_parallel_batch_v1(
                         if over_cap
                         else ("ollama" if use_llm and llm_model_resolved and base_url_resolved else "shadow_stub")
                     )
+                    protocol_extras: dict[str, Any] | None = None
+                    if str(brain_prof or "").strip() == STUDENT_BRAIN_PROFILE_MEMORY_CONTEXT_LLM_STUDENT_V1:
+                        te_snap = validate_student_output_directional_thesis_required_for_llm_profile_v1(
+                            so if isinstance(so, dict) else {}
+                        )
+                        protocol_extras = {
+                            "student_decision_protocol_ok_v1": len(te_snap) == 0,
+                            "student_decision_protocol_errors_v1": te_snap[:20],
+                            "student_decision_protocol_keys_expected_v1": list(THESIS_REQUIRED_FOR_LLM_PROFILE_V1),
+                        }
                     emit_student_output_sealed_v1(
                         job_id=str(run_id).strip(),
                         fingerprint=fp_emit,
@@ -947,6 +1005,7 @@ def student_loop_seam_after_parallel_batch_v1(
                         via=via,
                         decision_source_v1=str(so.get("decision_source_v1") or "").strip() or None,
                         student_action_v1_echo=str(so.get("student_action_v1") or "").strip() or None,
+                        decision_protocol_extras_v1=protocol_extras,
                     )
                     if primary_trade_shadow_student_v1 is None and isinstance(so, dict):
                         primary_student_output_v1 = so

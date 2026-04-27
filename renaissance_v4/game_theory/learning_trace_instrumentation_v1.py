@@ -247,6 +247,15 @@ def emit_llm_output_rejected_v1(
     )
 
 
+_SEALED_RM_PROTOCOL_EXTRA_KEYS_V1: frozenset[str] = frozenset(
+    {
+        "student_decision_protocol_ok_v1",
+        "student_decision_protocol_errors_v1",
+        "student_decision_protocol_keys_expected_v1",
+    }
+)
+
+
 def emit_student_output_sealed_v1(
     *,
     job_id: str,
@@ -256,12 +265,23 @@ def emit_student_output_sealed_v1(
     via: str,
     decision_source_v1: str | None = None,
     student_action_v1_echo: str | None = None,
+    decision_protocol_extras_v1: dict[str, Any] | None = None,
 ) -> None:
     ev: dict[str, Any] = {"via": via}
     if decision_source_v1 is not None and str(decision_source_v1).strip():
         ev["decision_source_v1"] = str(decision_source_v1).strip()[:128]
     if student_action_v1_echo is not None and str(student_action_v1_echo).strip():
         ev["student_action_v1_echo"] = str(student_action_v1_echo).strip()[:64]
+    if isinstance(decision_protocol_extras_v1, dict):
+        for k, v in decision_protocol_extras_v1.items():
+            if k not in _SEALED_RM_PROTOCOL_EXTRA_KEYS_V1:
+                continue
+            if k == "student_decision_protocol_errors_v1" and isinstance(v, list):
+                ev[k] = v[:24]
+            elif k == "student_decision_protocol_keys_expected_v1" and isinstance(v, list):
+                ev[k] = [str(x) for x in v[:32]]
+            elif k == "student_decision_protocol_ok_v1":
+                ev[k] = bool(v)
     _emit(
         job_id=job_id,
         fingerprint=fingerprint,

@@ -85,13 +85,91 @@ def test_validate_rm_preflight_memory_sink_ok():
             producer="p",
             scenario_id=sid,
             trade_id=tid,
-            evidence_payload={"decision_source_v1": DECISION_SOURCE_REASONING_MODEL_V1},
+            evidence_payload={
+                "decision_source_v1": DECISION_SOURCE_REASONING_MODEL_V1,
+                "student_decision_protocol_ok_v1": True,
+                "student_decision_protocol_errors_v1": [],
+                "student_decision_protocol_keys_expected_v1": [],
+            },
         ),
     ]
     ok, miss = validate_rm_preflight_memory_sink_v1(
         rows, scenario_id=sid, trade_id=tid, job_id="j1"
     )
     assert ok and miss == []
+
+
+def test_validate_rm_preflight_memory_sink_fails_when_sealed_protocol_not_ok():
+    sid, tid = "scen_a", "t1"
+    rows = [
+        build_learning_trace_event_v1(
+            job_id="j1",
+            fingerprint=None,
+            stage="entry_reasoning_sealed_v1",
+            status="pass",
+            summary="s",
+            producer="p",
+            scenario_id=sid,
+            trade_id=tid,
+        ),
+        build_learning_trace_event_v1(
+            job_id="j1",
+            fingerprint=None,
+            stage="reasoning_router_decision_v1",
+            status="pass",
+            summary="s",
+            producer="p",
+            scenario_id=sid,
+            trade_id=tid,
+            evidence_payload={"reasoning_router_decision_v1": {"x": 1}},
+        ),
+        build_learning_trace_event_v1(
+            job_id="j1",
+            fingerprint=None,
+            stage="reasoning_cost_governor_v1",
+            status="pass",
+            summary="s",
+            producer="p",
+            scenario_id=sid,
+            trade_id=tid,
+        ),
+        build_learning_trace_event_v1(
+            job_id="j1",
+            fingerprint=None,
+            stage="student_decision_authority_v1",
+            status="pass",
+            summary="s",
+            producer="p",
+            scenario_id=sid,
+            trade_id=tid,
+            evidence_payload={
+                "student_decision_authority_v1": {
+                    "referee_safety_check_v1": {"passed_v1": True},
+                    "decision_source_v1": DECISION_SOURCE_REASONING_MODEL_V1,
+                }
+            },
+        ),
+        build_learning_trace_event_v1(
+            job_id="j1",
+            fingerprint=None,
+            stage="student_output_sealed",
+            status="pass",
+            summary="s",
+            producer="p",
+            scenario_id=sid,
+            trade_id=tid,
+            evidence_payload={
+                "decision_source_v1": DECISION_SOURCE_REASONING_MODEL_V1,
+                "student_decision_protocol_ok_v1": False,
+                "student_decision_protocol_errors_v1": ["directional_thesis_required_for_llm_profile: missing x"],
+            },
+        ),
+    ]
+    ok, miss = validate_rm_preflight_memory_sink_v1(
+        rows, scenario_id=sid, trade_id=tid, job_id="j1"
+    )
+    assert not ok
+    assert "student_output_sealed.student_decision_protocol_incomplete_v1" in miss
 
 
 def test_validate_rm_preflight_memory_sink_job_id_mismatch_fails():

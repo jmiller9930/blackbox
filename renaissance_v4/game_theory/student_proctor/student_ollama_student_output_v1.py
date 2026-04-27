@@ -62,7 +62,7 @@ def _ollama_chat_once_v1(
             "model": model,
             "messages": [{"role": "user", "content": user_prompt}],
             "stream": False,
-            "options": {"temperature": 0.15, "num_predict": 512},
+            "options": {"temperature": 0.15, "num_predict": 1024},
         }
     ).encode("utf-8")
     req = urllib.request.Request(
@@ -93,10 +93,20 @@ def _ollama_chat_once_v1(
 
 def _merge_optional_thesis_from_parsed_v1(parsed: dict[str, Any], out: dict[str, Any]) -> None:
     """
-    Copy optional §1.0 thesis keys from LLM JSON into ``out`` (only whitelisted keys).
+    Copy thesis + Student decision-protocol keys from LLM JSON into ``out`` (whitelisted only).
 
     Shapes are finalized by ``validate_student_output_v1`` on the full document.
     """
+    ci = parsed.get("context_interpretation_v1")
+    if isinstance(ci, str) and ci.strip():
+        out["context_interpretation_v1"] = ci.strip()[:2000]
+    hk = parsed.get("hypothesis_kind_v1")
+    if isinstance(hk, str) and hk.strip():
+        out["hypothesis_kind_v1"] = hk.strip().lower()
+    ht = parsed.get("hypothesis_text_v1")
+    if isinstance(ht, str) and ht.strip():
+        out["hypothesis_text_v1"] = ht.strip()[:512]
+
     cb = parsed.get("confidence_band")
     if isinstance(cb, str) and cb.strip():
         out["confidence_band"] = cb.strip().lower()
@@ -118,9 +128,13 @@ def _merge_optional_thesis_from_parsed_v1(parsed: dict[str, Any], out: dict[str,
         out["invalidation_text"] = inv.strip()[:4000]
     sa = parsed.get("student_action_v1")
     if isinstance(sa, str) and sa.strip():
-        raw = sa.strip().lower().replace("-", "_")
-        if raw in ("enter_long", "enter_short", "no_trade"):
-            out["student_action_v1"] = raw
+        raw = sa.strip().lower().replace("-", "_").replace(" ", "_")
+        if raw in ("long", "enter_long"):
+            out["student_action_v1"] = "enter_long"
+        elif raw in ("short", "enter_short"):
+            out["student_action_v1"] = "enter_short"
+        elif raw in ("no_trade", "no_trade_v1", "flat", "none"):
+            out["student_action_v1"] = "no_trade"
 
 
 def _extract_json_object_v1(text: str) -> dict[str, Any] | None:
@@ -157,28 +171,37 @@ def emit_student_output_via_ollama_v1(
     """
     pkt_json = json.dumps(packet, ensure_ascii=False, default=str)[:12000]
     thesis_lines = (
-        "- confidence_band: low | medium | high\n"
-        "- supporting_indicators: string[]\n"
-        "- conflicting_indicators: string[]\n"
-        "- context_fit: short string, e.g. trend | chop | reversal | breakout | exhaustion | unknown\n"
-        "- invalidation_text: what would prove the thesis wrong (no future prices or outcomes)\n"
-        "- student_action_v1: enter_long | enter_short | no_trade — MUST agree with act and direction "
-        "(no_trade requires act false; enter_long requires act true and direction long; enter_short "
-        "requires act true and direction short).\n"
+        "MANDATORY Student decision protocol (all keys below MUST appear in the JSON; no skipping steps; "
+        "no narrative-only answer — every value must be substantive, not placeholders like \"n/a\" unless "
+        "the field explicitly allows it):\n"
+        "1) Context interpretation — context_interpretation_v1: string, >=16 chars, summarize ONLY what "
+        "the packet gives (OHLCV / regime / signals / fusion / memory hooks). No invented bars.\n"
+        "2) Hypothesis — hypothesis_kind_v1: exactly one of trend_continuation | mean_reversion | no_clear_edge; "
+        "hypothesis_text_v1: one concise sentence stating the trade idea or explicit lack of edge.\n"
+        "3) Evidence — supporting_indicators: string[] (min 1); conflicting_indicators: string[] (min 1); "
+        "each entry a short label grounded in the packet (fusion, regime, indicator, structure).\n"
+        "4) Resolution — confidence_band: low | medium | high; context_fit: short string "
+        "(e.g. trend | chop | reversal | breakout | exhaustion | range | unknown).\n"
+        "5) Decision — student_action_v1: enter_long | enter_short | no_trade "
+        "(aliases LONG / SHORT / NO_TRADE accepted; MUST agree with act and direction: "
+        "no_trade => act false and direction flat; enter_long => act true and direction long; "
+        "enter_short => act true and direction short).\n"
+        "6) Invalidation — invalidation_text: concrete conditions that would void the thesis "
+        "(no future outcomes; for no_trade, state what would need to change to consider a trade).\n"
     )
     if require_directional_thesis_v1:
         thesis_block = (
-            "REQUIRED thesis keys (all MUST be present; use [] for an empty indicator list if honest; "
-            "do not invent post-hoc outcomes):\n" + thesis_lines
+            "REQUIRED decision-protocol keys (memory_context_llm_student — incomplete JSON is rejected):\n"
+            + thesis_lines
         )
     else:
         thesis_block = (
-            "Optional thesis keys (omit any you cannot justify from the packet only):\n" + thesis_lines
+            "Optional thesis / protocol keys (omit any you cannot justify from the packet only):\n" + thesis_lines
         )
     user = (
         "You are the Student (exam). You MUST output a single JSON object only — no markdown, no prose outside JSON.\n"
         "Keys required: act (boolean), direction (string: long | short | flat), confidence_01 (number 0..1), "
-        "pattern_recipe_ids (array of strings, non-empty), reasoning_text (short string).\n"
+        "pattern_recipe_ids (array of strings, non-empty), reasoning_text (short string; may echo protocol).\n"
         + thesis_block
         + f"prompt_version_echo: {prompt_version}\n"
         + f"graded_unit_id: {graded_unit_id}\n"

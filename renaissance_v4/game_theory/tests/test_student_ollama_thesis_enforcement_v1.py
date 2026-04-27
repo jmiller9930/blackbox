@@ -3,13 +3,17 @@
 from __future__ import annotations
 
 import json
+from collections.abc import Callable
 from pathlib import Path
+from typing import Any
 from unittest import mock
 
 import pytest
 
 from renaissance_v4.core.outcome_record import OutcomeRecord, outcome_record_to_jsonable
 from renaissance_v4.game_theory.student_proctor.contracts_v1 import (
+    legal_example_student_output_protocol_no_trade_v1,
+    legal_example_student_output_protocol_short_v1,
     legal_example_student_output_with_thesis_v1,
 )
 from renaissance_v4.game_theory.student_proctor.student_context_builder_v1 import (
@@ -33,6 +37,43 @@ def decision_packet(tmp_path: Path) -> dict:
     )
     assert err is None and isinstance(pkt, dict)
     return pkt
+
+
+def test_ollama_rejects_json_missing_decision_protocol_fields(decision_packet: dict) -> None:
+    """Legacy thesis-only JSON without context/hypothesis must fail LLM-profile gate."""
+    legacy_thesis_only = {
+        "act": True,
+        "direction": "long",
+        "confidence_01": 0.5,
+        "pattern_recipe_ids": ["x"],
+        "reasoning_text": "has old thesis keys only",
+        "student_decision_ref": "550e8400-e29b-41d4-a716-446655440000",
+        "confidence_band": "medium",
+        "supporting_indicators": ["a"],
+        "conflicting_indicators": ["b"],
+        "context_fit": "trend",
+        "invalidation_text": "inv",
+        "student_action_v1": "enter_long",
+    }
+
+    def fake_once(**_kwargs: object) -> tuple[str, str | None]:
+        return json.dumps(legacy_thesis_only), None
+
+    with mock.patch(
+        "renaissance_v4.game_theory.student_proctor.student_ollama_student_output_v1._ollama_chat_once_v1",
+        fake_once,
+    ):
+        out, err = emit_student_output_via_ollama_v1(
+            decision_packet,
+            graded_unit_id="tr_ollama_protocol_legacy",
+            decision_at_ms=5_000_000,
+            llm_model="stub-model",
+            ollama_base_url="http://127.0.0.1:11434",
+            prompt_version="test_pv",
+            require_directional_thesis_v1=True,
+        )
+    assert out is None
+    assert err and any("thesis" in e.lower() or "llm_profile" in e.lower() for e in err)
 
 
 def test_ollama_rejects_json_missing_thesis(decision_packet: dict) -> None:
@@ -92,6 +133,43 @@ def test_ollama_accepts_full_thesis_json(decision_packet: dict) -> None:
     assert not err and out is not None
     assert out.get("confidence_band") == "medium"
     assert out.get("student_action_v1") == "enter_long"
+    assert out.get("hypothesis_kind_v1") == "trend_continuation"
+
+
+@pytest.mark.parametrize(
+    "fixture_fn,expected_action",
+    [
+        (legal_example_student_output_protocol_short_v1, "enter_short"),
+        (legal_example_student_output_protocol_no_trade_v1, "no_trade"),
+    ],
+)
+def test_ollama_accepts_protocol_short_and_no_trade(
+    decision_packet: dict,
+    fixture_fn: Callable[[], dict[str, Any]],
+    expected_action: str,
+) -> None:
+    full = dict(fixture_fn())
+    for k in ("schema", "contract_version", "graded_unit_type", "graded_unit_id", "decision_at_ms"):
+        full.pop(k, None)
+
+    def fake_once(**_kwargs: object) -> tuple[str, str | None]:
+        return json.dumps(full), None
+
+    with mock.patch(
+        "renaissance_v4.game_theory.student_proctor.student_ollama_student_output_v1._ollama_chat_once_v1",
+        fake_once,
+    ):
+        out, err = emit_student_output_via_ollama_v1(
+            decision_packet,
+            graded_unit_id=f"tr_proto_{expected_action}",
+            decision_at_ms=5_000_000,
+            llm_model="stub-model",
+            ollama_base_url="http://127.0.0.1:11434",
+            prompt_version="test_pv",
+            require_directional_thesis_v1=True,
+        )
+    assert not err and out is not None
+    assert out.get("student_action_v1") == expected_action
 
 
 def test_ollama_thesis_optional_mode_allows_minimal(decision_packet: dict) -> None:

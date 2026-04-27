@@ -9,10 +9,12 @@ Versioned JSON-serializable artifacts:
 
 Graded unit v1: **closed trade** (see ``GRADED_UNIT_TYPE_V1``).
 
-**§1.0 thesis fields:** shape-validated when present on ``student_output_v1``. For
+**§1.0 thesis + decision protocol:** shape-validated when present on ``student_output_v1``. For
 ``memory_context_llm_student`` (Ollama), **all** keys in ``THESIS_REQUIRED_FOR_LLM_PROFILE_V1`` are **mandatory**
-(see ``validate_student_output_directional_thesis_required_for_llm_profile_v1``). Other profiles: same keys are
-optional; core required keys unchanged for backward compatibility.
+(see ``validate_student_output_directional_thesis_required_for_llm_profile_v1``): context interpretation,
+hypothesis (kind + text), evidence lists, resolution (confidence_band + context_fit), decision
+(``student_action_v1``), and invalidation. Other profiles: same keys are optional; core required keys
+unchanged for backward compatibility.
 """
 
 from __future__ import annotations
@@ -52,16 +54,23 @@ _THESIS_MAX_INDICATORS = 32
 _THESIS_MAX_INDICATOR_LEN = 128
 _THESIS_MAX_CONTEXT_FIT_LEN = 128
 _THESIS_MAX_INVALIDATION_LEN = 4000
+_THESIS_MAX_CONTEXT_INTERPRETATION_LEN = 2000
+_THESIS_MIN_CONTEXT_INTERPRETATION_LEN = 16
+_THESIS_MAX_HYPOTHESIS_TEXT_LEN = 512
+_HYPOTHESIS_KINDS_V1 = frozenset({"trend_continuation", "mean_reversion", "no_clear_edge"})
 
-# Precondition for **GT_DIRECTIVE_017**: LLM profile runs must seal a complete directional thesis
-# or reject before persist (see ``emit_student_output_via_ollama_v1`` + seam audit).
+# Precondition for **GT_DIRECTIVE_017** + Student decision protocol: LLM profile must seal a full
+# structured reasoning chain or reject before persist (see ``emit_student_output_via_ollama_v1``).
 THESIS_REQUIRED_FOR_LLM_PROFILE_V1: tuple[str, ...] = (
-    "student_action_v1",
-    "confidence_band",
+    "context_interpretation_v1",
+    "hypothesis_kind_v1",
+    "hypothesis_text_v1",
     "supporting_indicators",
     "conflicting_indicators",
+    "confidence_band",
     "context_fit",
     "invalidation_text",
+    "student_action_v1",
 )
 
 
@@ -80,6 +89,15 @@ def validate_student_output_directional_thesis_required_for_llm_profile_v1(doc: 
             continue
         if k in ("supporting_indicators", "conflicting_indicators") and not isinstance(doc.get(k), list):
             errs.append(f"directional_thesis_required_for_llm_profile: {k} must be a list")
+    if errs:
+        return errs
+    for k in ("supporting_indicators", "conflicting_indicators"):
+        v = doc.get(k)
+        if isinstance(v, list) and len(v) == 0:
+            errs.append(
+                f"directional_thesis_required_for_llm_profile: {k} must be non-empty "
+                "(name at least one concrete packet-derived label per side)"
+            )
     if errs:
         return errs
     return _validate_student_output_optional_thesis_v1(doc)
@@ -188,8 +206,39 @@ def validate_pre_reveal_bundle_v1(bundle: Any) -> list[str]:
 
 
 def _validate_student_output_optional_thesis_v1(doc: dict[str, Any]) -> list[str]:
-    """Validate optional §1.0 thesis fields when present on ``student_output_v1``."""
+    """Validate optional §1.0 thesis + decision-protocol fields when present on ``student_output_v1``."""
     errs: list[str] = []
+    ci = doc.get("context_interpretation_v1")
+    if ci is not None:
+        if not isinstance(ci, str) or not ci.strip():
+            errs.append("context_interpretation_v1 must be a non-empty string when present")
+        elif len(ci.strip()) < _THESIS_MIN_CONTEXT_INTERPRETATION_LEN:
+            errs.append(
+                f"context_interpretation_v1 must be at least {_THESIS_MIN_CONTEXT_INTERPRETATION_LEN} "
+                "characters (summarize OHLCV / regime / fusion from the packet only)"
+            )
+        elif len(ci) > _THESIS_MAX_CONTEXT_INTERPRETATION_LEN:
+            errs.append(
+                f"context_interpretation_v1 exceeds max length {_THESIS_MAX_CONTEXT_INTERPRETATION_LEN}"
+            )
+
+    hk = doc.get("hypothesis_kind_v1")
+    if hk is not None:
+        if not isinstance(hk, str) or not hk.strip():
+            errs.append("hypothesis_kind_v1 must be a non-empty string when present")
+        elif hk.strip().lower() not in _HYPOTHESIS_KINDS_V1:
+            errs.append(
+                "hypothesis_kind_v1 must be one of "
+                + ", ".join(sorted(_HYPOTHESIS_KINDS_V1))
+            )
+
+    ht = doc.get("hypothesis_text_v1")
+    if ht is not None:
+        if not isinstance(ht, str) or not ht.strip():
+            errs.append("hypothesis_text_v1 must be a non-empty string when present")
+        elif len(ht) > _THESIS_MAX_HYPOTHESIS_TEXT_LEN:
+            errs.append(f"hypothesis_text_v1 exceeds max length {_THESIS_MAX_HYPOTHESIS_TEXT_LEN}")
+
     cb = doc.get("confidence_band")
     if cb is not None:
         if not isinstance(cb, str) or not cb.strip():
@@ -404,14 +453,61 @@ def legal_example_student_output_v1() -> dict[str, Any]:
 
 
 def legal_example_student_output_with_thesis_v1() -> dict[str, Any]:
-    """Valid ``student_output_v1`` including optional §1.0 thesis extension."""
+    """Valid ``student_output_v1`` including full §1.0 thesis + decision protocol (LONG)."""
     base = legal_example_student_output_v1()
+    base["context_interpretation_v1"] = (
+        "Price above rising EMA20 on 5m; fusion directional long; RSI not extreme; regime suggests "
+        "trend continuation risk acceptable."
+    )
+    base["hypothesis_kind_v1"] = "trend_continuation"
+    base["hypothesis_text_v1"] = "Trend continuation likely while structure holds above last swing low."
     base["confidence_band"] = "medium"
     base["supporting_indicators"] = ["rsi_14", "ema_20_slope"]
     base["conflicting_indicators"] = ["atr_elevated"]
     base["context_fit"] = "trend"
     base["invalidation_text"] = "Close back below prior swing low."
     base["student_action_v1"] = "enter_long"
+    return base
+
+
+def legal_example_student_output_protocol_short_v1() -> dict[str, Any]:
+    """Example valid protocol output — SHORT (same schema as LONG with flipped action)."""
+    base = legal_example_student_output_v1()
+    base["act"] = True
+    base["direction"] = "short"
+    base["context_interpretation_v1"] = (
+        "Price rolled below VWAP after failed reclaim; fusion skewed short; momentum fading on "
+        "higher timeframe resistance test."
+    )
+    base["hypothesis_kind_v1"] = "mean_reversion"
+    base["hypothesis_text_v1"] = "Mean reversion likely from overbought stretch into supply."
+    base["confidence_band"] = "low"
+    base["supporting_indicators"] = ["rsi_14_overbought", "vwap_reject"]
+    base["conflicting_indicators"] = ["low_atr_chop"]
+    base["context_fit"] = "reversal"
+    base["invalidation_text"] = "Acceptance back above VWAP with expanding range invalidates short."
+    base["student_action_v1"] = "enter_short"
+    base["reasoning_text"] = "Protocol test SHORT — structured only."
+    return base
+
+
+def legal_example_student_output_protocol_no_trade_v1() -> dict[str, Any]:
+    """Example valid protocol output — NO_TRADE with full reasoning (no guessing)."""
+    base = legal_example_student_output_v1()
+    base["act"] = False
+    base["direction"] = "flat"
+    base["context_interpretation_v1"] = (
+        "Mixed signals: fusion flat, ADX low, price mid-range; no clear edge vs noise per packet."
+    )
+    base["hypothesis_kind_v1"] = "no_clear_edge"
+    base["hypothesis_text_v1"] = "No clear edge — refuse to force a directional thesis."
+    base["confidence_band"] = "low"
+    base["supporting_indicators"] = ["range_mid"]
+    base["conflicting_indicators"] = ["fusion_flat", "low_adx"]
+    base["context_fit"] = "chop"
+    base["invalidation_text"] = "N/A for no_trade: would trade only after fusion + structure align."
+    base["student_action_v1"] = "no_trade"
+    base["reasoning_text"] = "NO_TRADE per protocol — lists populated, not narrative-only."
     return base
 
 
