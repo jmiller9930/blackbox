@@ -224,6 +224,8 @@ def test_run_manifest_replay_default_has_no_student_intent() -> None:
     assert sig.parameters["student_execution_intent_v1"].default is None
     assert "student_full_control_lane_v1" in sig.parameters
     assert sig.parameters["student_full_control_lane_v1"].default is False
+    assert "replay_max_bars_v1" in sig.parameters
+    assert sig.parameters["replay_max_bars_v1"].default is None
 
 
 @patch("renaissance_v4.research.replay_runner.run_manifest_replay")

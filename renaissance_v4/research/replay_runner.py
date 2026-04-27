@@ -185,6 +185,7 @@ def load_replay_pre_loop_bars_v1(
     bar_window_calendar_months: int | None = None,
     candle_timeframe_minutes: int | None = None,
     verbose: bool = False,
+    replay_max_bars_v1: int | None = None,
 ) -> tuple[list[dict[str, Any]], dict[str, Any], int | None]:
     """
     **Referee executable** pre-loop market tape: same SQL, optional calendar window, and optional
@@ -198,6 +199,10 @@ def load_replay_pre_loop_bars_v1(
     matches ``build_student_decision_packet_v1`` (per-symbol all-5m then rollup) because sort order
     and chunk boundaries are identical when only one symbol is present. Use this for the in-repo
     e2e parity test; multi-symbol global ordering still differs from per-symbol Student fetch by design.
+
+    When ``replay_max_bars_v1`` is a positive int, keep only the **last** N bars (after calendar slice
+    and rollup). N is raised to at least ``MIN_ROWS_REQUIRED`` so replay invariants still hold.
+    Intended for **RM preflight** fail-fast wiring checks, not full operator batches.
     """
     from renaissance_v4.game_theory.candle_timeframe_runtime import (
         _row_dict,
@@ -258,6 +263,31 @@ def load_replay_pre_loop_bars_v1(
             )
 
     out_rows: list[dict[str, Any]] = [_row_dict(r) for r in rows]
+    eff_tail: int | None = None
+    if replay_max_bars_v1 is not None:
+        try:
+            eff_tail = int(replay_max_bars_v1)
+        except (TypeError, ValueError):
+            eff_tail = None
+    if eff_tail is not None and eff_tail > 0:
+        eff_tail = max(MIN_ROWS_REQUIRED, eff_tail)
+        if len(out_rows) > eff_tail:
+            dropped = len(out_rows) - eff_tail
+            out_rows = out_rows[-eff_tail:]
+            replay_data_audit = {
+                **replay_data_audit,
+                "replay_tail_bars_trim_v1": {
+                    "schema": "replay_tail_bars_trim_v1",
+                    "dropped_leading_bars_v1": dropped,
+                    "replay_max_bars_effective_v1": eff_tail,
+                    "dataset_bars_after_tail_trim_v1": len(out_rows),
+                },
+            }
+            if verbose:
+                print(
+                    f"[replay] replay_max_bars_v1 tail cap: dropped {dropped} leading bars → "
+                    f"{len(out_rows)} bars for decision loop"
+                )
     return out_rows, replay_data_audit, ctf
 
 
@@ -280,6 +310,7 @@ def run_manifest_replay(
     live_telemetry_callback: Callable[[dict[str, Any]], None] | None = None,
     student_execution_intent_v1: dict[str, Any] | None = None,
     student_full_control_lane_v1: bool = False,
+    replay_max_bars_v1: int | None = None,
 ) -> dict[str, Any]:
     """
     Execute one full deterministic replay using the manifest resolution rules in ``load_replay_manifest``.
@@ -316,6 +347,9 @@ def run_manifest_replay(
 
     When drill-down maxima are > 0, the replay keeps the **last** N windows matching each category
     (matched memory, fusion/signal bias applied, trade opened) for operator harness inspection.
+
+    When ``replay_max_bars_v1`` is set, the tape is trimmed to the last N bars after the calendar
+    window and candle rollup (see :func:`load_replay_pre_loop_bars_v1`).
     """
     connection = get_connection()
     rows, replay_data_audit, ctf = load_replay_pre_loop_bars_v1(
@@ -323,6 +357,7 @@ def run_manifest_replay(
         bar_window_calendar_months=bar_window_calendar_months,
         candle_timeframe_minutes=candle_timeframe_minutes,
         verbose=verbose,
+        replay_max_bars_v1=replay_max_bars_v1,
     )
 
     dataset_bars = len(rows)

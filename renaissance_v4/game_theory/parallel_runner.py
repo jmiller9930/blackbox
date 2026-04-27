@@ -235,6 +235,13 @@ def _worker_run_one(scenario: dict[str, Any]) -> dict[str, Any]:
             if cmem not in ("off", "read", "read_write"):
                 cmem = "off"
             mem_jsonl = scenario.get("context_signature_memory_path")
+            tail_raw = scenario.get("rm_preflight_replay_tail_bars_v1")
+            try:
+                replay_tail_bars = int(tail_raw) if tail_raw is not None else None
+            except (TypeError, ValueError):
+                replay_tail_bars = None
+            if replay_tail_bars is not None and replay_tail_bars < 50:
+                replay_tail_bars = 50
             out = run_pattern_game(
                 scenario["manifest_path"],
                 atr_stop_mult=scenario.get("atr_stop_mult"),
@@ -248,6 +255,7 @@ def _worker_run_one(scenario: dict[str, Any]) -> dict[str, Any]:
                 live_telemetry_callback=live_cb,
                 context_signature_memory_mode=cmem,
                 context_signature_memory_path=mem_jsonl,
+                replay_max_bars_v1=replay_tail_bars,
             )
         summ = json_summary(out, scenario=scenario)
         pfa = scenario.get("policy_framework_audit")

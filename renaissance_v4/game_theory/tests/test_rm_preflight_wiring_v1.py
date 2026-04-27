@@ -15,6 +15,7 @@ from renaissance_v4.game_theory.learning_trace_events_v1 import (
 from renaissance_v4.game_theory.rm_preflight_wiring_v1 import (
     FAILED_PREFLIGHT_STATUS_V1,
     REQUIRED_RM_PREFLIGHT_STAGES_V1,
+    _shrink_scenario_for_rm_preflight_v1,
     rm_preflight_enabled_v1,
     run_rm_preflight_wiring_v1,
     should_skip_rm_preflight_v1,
@@ -164,6 +165,23 @@ def test_memory_sink_no_file_write(tmp_path: Path, monkeypatch: pytest.MonkeyPat
 
 def test_rm_preflight_enabled_default():
     assert rm_preflight_enabled_v1() is True
+
+
+def test_rm_preflight_shrink_clamps_calendar_and_sets_tail_bars(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setenv("PATTERN_GAME_RM_PREFLIGHT_MAX_CALENDAR_MONTHS", "1")
+    monkeypatch.setenv("PATTERN_GAME_RM_PREFLIGHT_REPLAY_TAIL_BARS", "4444")
+    s = _shrink_scenario_for_rm_preflight_v1(
+        {
+            "manifest_path": "m.json",
+            "scenario_id": "s1",
+            "evaluation_window": {"calendar_months": 24},
+        }
+    )
+    assert s["evaluation_window"]["calendar_months"] == 1
+    assert s["rm_preflight_replay_tail_bars_v1"] == 4444
+    assert s["evaluation_window"].get("rm_preflight_window_clamp_v1") is True
 
 
 def test_student_mandate_should_skip_returns_fatal_when_rm_preflight_env_off(

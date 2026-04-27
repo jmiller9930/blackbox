@@ -200,6 +200,7 @@ def run_pattern_game(
     live_telemetry_callback: Callable[[dict[str, Any]], None] | None = None,
     context_signature_memory_mode: str | None = None,
     context_signature_memory_path: Path | str | None = None,
+    replay_max_bars_v1: int | None = None,
 ) -> dict[str, Any]:
     """
     Load manifest, optional **memory bundle** merge, optional ATR overlays, validate, replay.
@@ -214,6 +215,9 @@ def run_pattern_game(
     When ``context_signature_memory_mode`` is ``read`` or ``read_write``, Decision Context Recall
     is enabled for ``run_manifest_replay`` (same defaults as the operator harness when mode is not
     ``off``). Path defaults to ``context_signature_memory.default_memory_path`` when omitted.
+
+    When ``replay_max_bars_v1`` is set, only the last N bars of the resolved tape are replayed
+    (bounded wiring / RM preflight — see ``replay_runner.load_replay_pre_loop_bars_v1``).
     """
     prep = prepare_effective_manifest_for_replay(
         manifest_path,
@@ -253,6 +257,7 @@ def run_pattern_game(
             decision_context_recall_apply_bias=dcr_bias,
             decision_context_recall_apply_signal_bias_v2=dcr_sig_v2,
             decision_context_recall_memory_path=mem_jsonl_eff,
+            replay_max_bars_v1=replay_max_bars_v1,
         )
     finally:
         prep.cleanup()

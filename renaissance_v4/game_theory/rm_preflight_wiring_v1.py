@@ -1,7 +1,10 @@
 """
 RM preflight — bounded in-memory wiring validation before parallel batch (Directive: reasoning_model).
 
-* Shrinks calendar window for **one** in-process worker row (same ``_worker_run_one`` as production).
+* Shrinks the evaluation calendar window (default **1** month; ``PATTERN_GAME_RM_PREFLIGHT_MAX_CALENDAR_MONTHS``).
+* Caps the Referee tape to the **last N** bars (default **5000**; ``PATTERN_GAME_RM_PREFLIGHT_REPLAY_TAIL_BARS``)
+  so preflight stays **fail-fast** (seconds-scale), not a full operator replay.
+* Runs **one** in-process worker row (same ``_worker_run_one`` as production) on the clamped scenario.
 * Runs **one** Student seam pass with memory trace sink + early exit after first ``student_output_sealed``.
 * Validates required RM trace stages in the sink — **no** ``learning_trace_events_v1.jsonl`` writes.
 
@@ -83,11 +86,19 @@ def _env_seam_enabled() -> bool:
 
 
 def _shrink_scenario_for_rm_preflight_v1(scenario: dict[str, Any]) -> dict[str, Any]:
+    """
+    Tighten calendar window and attach a **tail bar cap** so preflight replay stays bounded.
+
+    Defaults target **seconds-scale** wiring checks (not full operator replays). Override with env:
+
+    * ``PATTERN_GAME_RM_PREFLIGHT_MAX_CALENDAR_MONTHS`` (default **1**)
+    * ``PATTERN_GAME_RM_PREFLIGHT_REPLAY_TAIL_BARS`` (default **5000**; min 50, max 250000)
+    """
     s = copy.deepcopy(scenario)
     try:
-        cap = int(os.environ.get("PATTERN_GAME_RM_PREFLIGHT_MAX_CALENDAR_MONTHS", "2"))
+        cap = int(os.environ.get("PATTERN_GAME_RM_PREFLIGHT_MAX_CALENDAR_MONTHS", "1"))
     except (TypeError, ValueError):
-        cap = 2
+        cap = 1
     cap = max(1, min(cap, 24))
     ew_prev = s.get("evaluation_window") if isinstance(s.get("evaluation_window"), dict) else {}
     ew = dict(ew_prev)
@@ -99,6 +110,12 @@ def _shrink_scenario_for_rm_preflight_v1(scenario: dict[str, Any]) -> dict[str, 
     ew["calendar_months"] = max(1, min(cur, cap))
     ew["rm_preflight_window_clamp_v1"] = True
     s["evaluation_window"] = ew
+    try:
+        tail = int(os.environ.get("PATTERN_GAME_RM_PREFLIGHT_REPLAY_TAIL_BARS", "5000"))
+    except (TypeError, ValueError):
+        tail = 5000
+    tail = max(50, min(tail, 250_000))
+    s["rm_preflight_replay_tail_bars_v1"] = tail
     return s
 
 
@@ -756,6 +773,11 @@ def run_rm_preflight_wiring_v1(
                 "preflight_trade_id_v1": trade_id,
                 "preflight_scenario_id_v1": scenario_id,
                 "rm_preflight_job_binding_audit_v1": jbind_ok,
+                "preflight_replay_bounds_v1": {
+                    "schema": "rm_preflight_replay_bounds_v1",
+                    "calendar_months_v1": (shrunk.get("evaluation_window") or {}).get("calendar_months"),
+                    "rm_preflight_replay_tail_bars_v1": shrunk.get("rm_preflight_replay_tail_bars_v1"),
+                },
             },
         )
 
