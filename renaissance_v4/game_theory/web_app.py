@@ -1939,6 +1939,62 @@ def create_app() -> Flask:
                     scenario_count=len(scenarios),
                 )
 
+            from renaissance_v4.game_theory.rm_preflight_wiring_v1 import (
+                FAILED_PREFLIGHT_STATUS_V1,
+                run_rm_preflight_wiring_v1,
+            )
+
+            pf_audit_block = run_rm_preflight_wiring_v1(
+                scenarios=scenarios,
+                job_id=job_id,
+                exam_run_contract_request_v1=exam_req_block if isinstance(exam_req_block, dict) else None,
+                operator_batch_audit=operator_batch_audit if isinstance(operator_batch_audit, dict) else None,
+            )
+            if not pf_audit_block.get("ok_v1"):
+                err_pb = str(
+                    pf_audit_block.get("human_message_v1")
+                    or (
+                        f"{FAILED_PREFLIGHT_STATUS_V1}: missing or invalid stages "
+                        f"{pf_audit_block.get('missing_stages_v1')}"
+                    )
+                )
+                exam_line_pb = _exam_run_line_meta_for_parallel_job_v1(
+                    exam_req=exam_req_block if isinstance(exam_req_block, dict) else None,
+                    fingerprint_preview=fp_prev_block if isinstance(fp_prev_block, str) else None,
+                    operator_batch_audit=operator_batch_audit,
+                    results=None,
+                    job_id=job_id,
+                    seam_audit=pf_audit_block.get("preflight_seam_audit_v1")
+                    if isinstance(pf_audit_block.get("preflight_seam_audit_v1"), dict)
+                    else None,
+                    error=err_pb,
+                )
+                if isinstance(exam_line_pb, dict):
+                    exam_line_pb["rm_preflight_audit_v1"] = pf_audit_block
+                    exam_line_pb["batch_terminal_status_v1"] = FAILED_PREFLIGHT_STATUS_V1
+                timing_pb = record_parallel_batch_finished(
+                    job_id=job_id,
+                    started_at_utc=started_iso,
+                    start_unix=start_unix,
+                    total_scenarios=len(scenarios),
+                    workers_used=workers_used,
+                    results=None,
+                    session_log_batch_dir=None,
+                    error=err_pb,
+                    operator_batch_audit=operator_batch_audit,
+                    exam_run_line_meta_v1=exam_line_pb,
+                )
+                return jsonify(
+                    {
+                        "ok": False,
+                        "error": err_pb,
+                        "job_id": job_id,
+                        "batch_timing": timing_pb,
+                        "rm_preflight_audit_v1": pf_audit_block,
+                        "status_v1": FAILED_PREFLIGHT_STATUS_V1,
+                    }
+                ), 400
+
             emit_referee_execution_started_v1(
                 job_id=job_id, fingerprint=lt_fp_block, scenario_total=len(scenarios)
             )
@@ -2041,6 +2097,7 @@ def create_app() -> Flask:
                 "session_log_batch_dir": session_batch_dir[0],
                 "batch_timing": timing,
                 "operator_batch_audit": operator_batch_audit,
+                "rm_preflight_audit_v1": pf_audit_block,
                 "learning_batch_audit_v1": timing.get("learning_batch_audit_v1"),
                 "batch_depth_v1": timing.get("batch_depth_v1"),
                 "batch_run_classification_v1": timing.get("batch_run_classification_v1"),
