@@ -18,6 +18,7 @@ from pathlib import Path
 from typing import Any
 
 from renaissance_v4.core.outcome_record import OutcomeRecord, outcome_record_from_jsonable
+from renaissance_v4.game_theory.rm_preflight_context_v1 import rm_preflight_early_exit_after_seal_active_v1
 from renaissance_v4.game_theory.student_proctor.reveal_layer_v1 import (
     build_reveal_v1_from_outcome_and_student,
 )
@@ -950,6 +951,56 @@ def student_loop_seam_after_parallel_batch_v1(
                         "student_decision_ref": so.get("student_decision_ref"),
                         "pattern_recipe_ids": list(pr_ids) if isinstance(pr_ids, list) else pr_ids,
                         "confidence_01": so.get("confidence_01"),
+                    }
+                if rm_preflight_early_exit_after_seal_active_v1():
+                    emit_referee_used_student_output_batch_truth_v1(
+                        job_id=str(run_id).strip(),
+                        fingerprint=fp_emit,
+                        student_influence_on_worker_replay_v1="false",
+                        detail=(
+                            "rm_preflight_wiring_v1: first sealed Student trade validated; "
+                            "early exit before reveal and learning store append."
+                        ),
+                    )
+                    out_fp_rm = (
+                        _student_output_fingerprint_v1(primary_student_output_v1)
+                        if primary_student_output_v1 is not None
+                        else None
+                    )
+                    student_emit_rm = primary_student_output_v1 is not None
+                    return {
+                        "schema": "student_loop_seam_audit_v1",
+                        "run_id": run_id,
+                        "rm_preflight_wiring_early_exit_v1": True,
+                        "student_decision_authority_mandate_enforced_v1": bool(mandate_active_v1),
+                        "candle_timeframe_minutes_effective_v1": int(c_tf),
+                        "student_learning_store_path": str(store.resolve()),
+                        "database_path_used": str(db.resolve()),
+                        "trades_considered": trades_seen,
+                        "student_learning_rows_appended": 0,
+                        "student_retrieval_matches": retrieval_matches_total,
+                        "student_output_fingerprint": out_fp_rm,
+                        "shadow_student_enabled": True,
+                        "primary_trade_shadow_student_v1": primary_trade_shadow_student_v1,
+                        "errors": list(errors),
+                        "soft_fail": bool(errors and trades_seen > 0),
+                        "phased_honesty_annotation_v1": _phased_honesty_annotation_v1(
+                            seam_attempted=True,
+                            student_emit_occurred=student_emit_rm,
+                            trades_seen=trades_seen,
+                        ),
+                        "wiring_honesty_annotation_v1": _wiring_honesty_annotation_v1(
+                            seam_attempted=True,
+                            trades_seen=trades_seen,
+                            first_packet_annex_present=first_packet_annex_present,
+                            retrieval_matches_total=retrieval_matches_total,
+                        ),
+                        "memory_semantics_annotation_v1": _memory_semantics_annotation_v1(seam_attempted=True),
+                        "deliverable_vocabulary_annotation_v1": _deliverable_vocabulary_annotation_v1(
+                            seam_attempted=True
+                        ),
+                        "llm_student_output_rejections_v1": llm_student_output_rejections_v1,
+                        "student_output_sealed_by_scenario_id_v1": dict(student_output_sealed_by_scenario_id_v1),
                     }
                 rev, re = build_reveal_v1_from_outcome_and_student(
                     student_output=so,

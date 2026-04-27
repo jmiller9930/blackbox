@@ -1362,6 +1362,68 @@ def create_app() -> Flask:
             results: list[dict[str, Any]] | None = None
             referee_parallel_completed_emit_v1 = False
             try:
+                from renaissance_v4.game_theory.rm_preflight_wiring_v1 import (
+                    FAILED_PREFLIGHT_STATUS_V1,
+                    run_rm_preflight_wiring_v1,
+                )
+
+                pf_audit = run_rm_preflight_wiring_v1(
+                    scenarios=scenarios,
+                    job_id=job_id,
+                    exam_run_contract_request_v1=exam_req if isinstance(exam_req, dict) else None,
+                    operator_batch_audit=operator_batch_audit if isinstance(operator_batch_audit, dict) else None,
+                )
+                if not pf_audit.get("ok_v1"):
+                    err_msg = str(
+                        pf_audit.get("human_message_v1")
+                        or (
+                            f"{FAILED_PREFLIGHT_STATUS_V1}: missing or invalid stages "
+                            f"{pf_audit.get('missing_stages_v1')}"
+                        )
+                    )
+                    exam_line_pf = _exam_run_line_meta_for_parallel_job_v1(
+                        exam_req=exam_req if isinstance(exam_req, dict) else None,
+                        fingerprint_preview=fp_prev if isinstance(fp_prev, str) else None,
+                        operator_batch_audit=operator_batch_audit,
+                        results=None,
+                        job_id=job_id,
+                        seam_audit=pf_audit.get("preflight_seam_audit_v1")
+                        if isinstance(pf_audit.get("preflight_seam_audit_v1"), dict)
+                        else None,
+                        error=err_msg,
+                    )
+                    if isinstance(exam_line_pf, dict):
+                        exam_line_pf["rm_preflight_audit_v1"] = pf_audit
+                        exam_line_pf["batch_terminal_status_v1"] = FAILED_PREFLIGHT_STATUS_V1
+                    timing_pf = record_parallel_batch_finished(
+                        job_id=job_id,
+                        started_at_utc=started_iso,
+                        start_unix=start_unix,
+                        total_scenarios=len(scenarios),
+                        workers_used=workers_used,
+                        results=None,
+                        session_log_batch_dir=None,
+                        error=err_msg,
+                        operator_batch_audit=operator_batch_audit,
+                        exam_run_line_meta_v1=exam_line_pf,
+                    )
+                    with _JOBS_LOCK:
+                        jpf = _JOBS.get(job_id)
+                        if jpf:
+                            jpf["status"] = "error"
+                            jpf["completed"] = 0
+                            jpf["error"] = err_msg
+                            jpf["batch_timing"] = timing_pf
+                            jpf["result"] = {
+                                "ok": False,
+                                "job_id": job_id,
+                                "error": err_msg,
+                                "rm_preflight_audit_v1": pf_audit,
+                                "batch_timing": timing_pf,
+                                "status_v1": FAILED_PREFLIGHT_STATUS_V1,
+                            }
+                    return
+
                 emit_referee_execution_started_v1(
                     job_id=job_id, fingerprint=lt_fp, scenario_total=len(scenarios)
                 )
@@ -1447,6 +1509,7 @@ def create_app() -> Flask:
                     "session_log_batch_dir": session_batch_dir[0],
                     "batch_timing": timing,
                     "operator_batch_audit": operator_batch_audit,
+                    "rm_preflight_audit_v1": pf_audit,
                     "learning_batch_audit_v1": timing.get("learning_batch_audit_v1"),
                     "batch_depth_v1": timing.get("batch_depth_v1"),
                     "batch_run_classification_v1": timing.get("batch_run_classification_v1"),

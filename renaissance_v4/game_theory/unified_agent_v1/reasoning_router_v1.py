@@ -292,12 +292,15 @@ def apply_unified_reasoning_router_v1(
     rng = random.Random(int(seed) if seed is not None else hash((job_id, fingerprint) or 0) & 0xFFFF)
 
     from renaissance_v4.game_theory.exam_run_contract_v1 import STUDENT_LLM_APPROVED_MODEL_V1
+    from renaissance_v4.game_theory.learning_trace_events_v1 import learning_trace_memory_sink_active_v1
     from renaissance_v4.game_theory.learning_trace_instrumentation_v1 import (
         emit_external_reasoning_review_v1,
         emit_reasoning_cost_governor_v1,
         emit_reasoning_router_decision_v1,
     )
     from renaissance_v4.game_theory.ollama_role_routing_v1 import student_ollama_base_url_v1
+
+    _emit_router_trace = bool(str(job_id or "").strip()) or learning_trace_memory_sink_active_v1()
 
     local_m = str(cfg.get("local_llm_model") or STUDENT_LLM_APPROVED_MODEL_V1)
     local_url = str(cfg.get("local_ollama_base_url") or student_ollama_base_url_v1())
@@ -341,7 +344,7 @@ def apply_unified_reasoning_router_v1(
             "model_resolved_v1": None,
             "response_status_v1": "not_called",
         }
-        if str(job_id or "").strip():
+        if _emit_router_trace:
             emit_reasoning_router_decision_v1(
                 job_id=job_id,
                 fingerprint=fingerprint,
@@ -577,7 +580,7 @@ def apply_unified_reasoning_router_v1(
     )
     decision["escalation_blockers_v1"] = sorted(set(blockers))
 
-    if str(job_id or "").strip():
+    if _emit_router_trace:
         emit_reasoning_router_decision_v1(
             job_id=job_id,
             fingerprint=fingerprint,

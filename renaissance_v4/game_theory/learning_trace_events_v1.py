@@ -10,12 +10,20 @@ Schema line: ``learning_trace_event_v1`` (one JSON object per append).
 
 from __future__ import annotations
 
+import copy
 import json
+from contextlib import contextmanager
+from contextvars import ContextVar
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import Any
+from typing import Any, Iterator
 
 from renaissance_v4.game_theory.memory_paths import default_learning_trace_events_jsonl
+
+# When set, ``append_learning_trace_event_v1`` appends deep-copied events here only — **no JSONL write**.
+_learning_trace_memory_sink: ContextVar[list[dict[str, Any]] | None] = ContextVar(
+    "learning_trace_memory_sink_v1", default=None
+)
 
 SCHEMA_EVENT = "learning_trace_event_v1"
 SCHEMA_VERSION = 1
@@ -101,6 +109,21 @@ def _utc_now_iso() -> str:
     return datetime.now(timezone.utc).replace(microsecond=0).isoformat().replace("+00:00", "Z")
 
 
+def learning_trace_memory_sink_active_v1() -> bool:
+    return _learning_trace_memory_sink.get() is not None
+
+
+@contextmanager
+def learning_trace_memory_sink_session_v1() -> Iterator[list[dict[str, Any]]]:
+    """Collect trace events in-memory only (RM preflight wiring validation)."""
+    buf: list[dict[str, Any]] = []
+    token = _learning_trace_memory_sink.set(buf)
+    try:
+        yield buf
+    finally:
+        _learning_trace_memory_sink.reset(token)
+
+
 def build_learning_trace_event_v1(
     *,
     job_id: str,
@@ -138,6 +161,10 @@ def append_learning_trace_event_v1(
     p = (path or default_learning_trace_events_jsonl()).expanduser().resolve()
     if str(event.get("schema") or "") != SCHEMA_EVENT:
         raise ValueError("event schema must be learning_trace_event_v1")
+    sink = _learning_trace_memory_sink.get()
+    if sink is not None:
+        sink.append(copy.deepcopy(event))
+        return p
     p.parent.mkdir(parents=True, exist_ok=True)
     line = json.dumps(event, ensure_ascii=False, separators=(",", ":")) + "\n"
     with p.open("a", encoding="utf-8") as fh:
@@ -359,6 +386,8 @@ __all__ = [
     "append_learning_trace_event_from_kwargs_v1",
     "build_learning_trace_event_v1",
     "count_learning_trace_terminal_integrity_v1",
+    "learning_trace_memory_sink_active_v1",
+    "learning_trace_memory_sink_session_v1",
     "merge_learning_trace_events_into_nodes_v1",
     "read_learning_trace_events_for_job_v1",
 ]

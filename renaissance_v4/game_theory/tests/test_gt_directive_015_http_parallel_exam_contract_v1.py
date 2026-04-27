@@ -41,6 +41,18 @@ def _minimal_outcome_json() -> dict:
     }
 
 
+def _fake_rm_preflight_pass_v1() -> dict:
+    """Web tests mock the parallel batch; RM preflight must be stubbed the same way."""
+    return {
+        "schema": "rm_preflight_wiring_audit_v1",
+        "ok_v1": True,
+        "skipped_v1": False,
+        "status_v1": "passed_rm_preflight_wiring_v1",
+        "missing_stages_v1": [],
+        "memory_sink_event_count_v1": 0,
+    }
+
+
 def _fake_parallel_row() -> dict:
     return {
         "ok": True,
@@ -104,36 +116,43 @@ def test_post_run_parallel_blocking_writes_lane_metadata(
 
     with patch.object(web_app_mod, "record_parallel_batch_finished", side_effect=fake_record):
         with patch(
-            "renaissance_v4.game_theory.web_app.run_scenarios_parallel",
-            return_value=[_fake_parallel_row()],
+            "renaissance_v4.game_theory.rm_preflight_wiring_v1.run_rm_preflight_wiring_v1",
+            return_value=_fake_rm_preflight_pass_v1(),
         ):
             with patch(
-                "renaissance_v4.game_theory.web_app.student_loop_seam_after_parallel_batch_v1",
-                return_value=fake_seam,
+                "renaissance_v4.game_theory.web_app.run_scenarios_parallel",
+                return_value=[_fake_parallel_row()],
             ):
                 with patch(
-                    "renaissance_v4.game_theory.web_app.promote_groundhog_bundle_from_parallel_scenarios_v1",
-                    return_value={},
+                    "renaissance_v4.game_theory.web_app.student_loop_seam_after_parallel_batch_v1",
+                    return_value=fake_seam,
                 ):
                     with patch(
-                        "renaissance_v4.game_theory.web_app.validate_reference_comparison_batch_results",
-                        return_value=None,
+                        "renaissance_v4.game_theory.web_app.promote_groundhog_bundle_from_parallel_scenarios_v1",
+                        return_value={},
                     ):
-                        with patch("renaissance_v4.game_theory.web_app.prune_pml_runtime_batch_dirs", return_value=None):
-                            r = flask_client.post(
-                                "/api/run-parallel",
-                                json={
-                                    "operator_recipe_id": "custom",
-                                    "scenarios_json": '[{"scenario_id":"s_gt015_http","manifest_path":"renaissance_v4/configs/manifests/baseline_v1_recipe.json","agent_explanation":{"hypothesis":"GT015 HTTP test"}}]',
-                                    "evaluation_window_mode": "12",
-                                    "exam_run_contract_v1": {
-                                        "student_reasoning_mode": STUDENT_REASONING_MODE_LLM_QWEN_V1,
-                                        "skip_cold_baseline_if_anchor": True,
-                                        "prompt_version": "gt015_http_test_v1",
-                                        "retrieved_context_ids": [],
+                        with patch(
+                            "renaissance_v4.game_theory.web_app.validate_reference_comparison_batch_results",
+                            return_value=None,
+                        ):
+                            with patch(
+                                "renaissance_v4.game_theory.web_app.prune_pml_runtime_batch_dirs",
+                                return_value=None,
+                            ):
+                                r = flask_client.post(
+                                    "/api/run-parallel",
+                                    json={
+                                        "operator_recipe_id": "custom",
+                                        "scenarios_json": '[{"scenario_id":"s_gt015_http","manifest_path":"renaissance_v4/configs/manifests/baseline_v1_recipe.json","agent_explanation":{"hypothesis":"GT015 HTTP test"}}]',
+                                        "evaluation_window_mode": "12",
+                                        "exam_run_contract_v1": {
+                                            "student_reasoning_mode": STUDENT_REASONING_MODE_LLM_QWEN_V1,
+                                            "skip_cold_baseline_if_anchor": True,
+                                            "prompt_version": "gt015_http_test_v1",
+                                            "retrieved_context_ids": [],
+                                        },
                                     },
-                                },
-                            )
+                                )
     assert r.status_code == 200, r.get_data(as_text=True)
     body = r.get_json()
     assert body.get("ok") is True
@@ -195,37 +214,41 @@ def test_post_run_parallel_start_returns_200_with_exam_contract(
     with patch.object(threading, "Thread", _ImmediateThread):
         with patch.object(web_app_mod, "record_parallel_batch_finished", side_effect=fake_record):
             with patch(
-                "renaissance_v4.game_theory.web_app.run_scenarios_parallel",
-                return_value=[_fake_parallel_row()],
+                "renaissance_v4.game_theory.rm_preflight_wiring_v1.run_rm_preflight_wiring_v1",
+                return_value=_fake_rm_preflight_pass_v1(),
             ):
                 with patch(
-                    "renaissance_v4.game_theory.web_app.student_loop_seam_after_parallel_batch_v1",
-                    return_value=fake_seam,
+                    "renaissance_v4.game_theory.web_app.run_scenarios_parallel",
+                    return_value=[_fake_parallel_row()],
                 ):
                     with patch(
-                        "renaissance_v4.game_theory.web_app.promote_groundhog_bundle_from_parallel_scenarios_v1",
-                        return_value={},
+                        "renaissance_v4.game_theory.web_app.student_loop_seam_after_parallel_batch_v1",
+                        return_value=fake_seam,
                     ):
                         with patch(
-                            "renaissance_v4.game_theory.web_app.validate_reference_comparison_batch_results",
-                            return_value=None,
+                            "renaissance_v4.game_theory.web_app.promote_groundhog_bundle_from_parallel_scenarios_v1",
+                            return_value={},
                         ):
                             with patch(
-                                "renaissance_v4.game_theory.web_app.prune_pml_runtime_batch_dirs",
+                                "renaissance_v4.game_theory.web_app.validate_reference_comparison_batch_results",
                                 return_value=None,
                             ):
-                                r = flask_client.post(
-                                    "/api/run-parallel/start",
-                                    json={
-                                        "operator_recipe_id": "custom",
-                                        "scenarios_json": '[{"scenario_id":"s_gt015_http","manifest_path":"renaissance_v4/configs/manifests/baseline_v1_recipe.json","agent_explanation":{"hypothesis":"GT015 start test"}}]',
-                                        "evaluation_window_mode": "12",
-                                        "exam_run_contract_v1": {
-                                            "student_reasoning_mode": STUDENT_REASONING_MODE_LLM_QWEN_V1,
-                                            "prompt_version": "gt015_start_test_v1",
+                                with patch(
+                                    "renaissance_v4.game_theory.web_app.prune_pml_runtime_batch_dirs",
+                                    return_value=None,
+                                ):
+                                    r = flask_client.post(
+                                        "/api/run-parallel/start",
+                                        json={
+                                            "operator_recipe_id": "custom",
+                                            "scenarios_json": '[{"scenario_id":"s_gt015_http","manifest_path":"renaissance_v4/configs/manifests/baseline_v1_recipe.json","agent_explanation":{"hypothesis":"GT015 start test"}}]',
+                                            "evaluation_window_mode": "12",
+                                            "exam_run_contract_v1": {
+                                                "student_reasoning_mode": STUDENT_REASONING_MODE_LLM_QWEN_V1,
+                                                "prompt_version": "gt015_start_test_v1",
+                                            },
                                         },
-                                    },
-                                )
+                                    )
     assert r.status_code == 200, r.get_data(as_text=True)
     st = r.get_json()
     assert st.get("ok") is True

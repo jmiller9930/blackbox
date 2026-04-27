@@ -40,7 +40,9 @@ def fingerprint_for_parallel_job_v1(
 
 
 def _emit(**kwargs: Any) -> None:
-    if not learning_trace_instrumentation_enabled_v1():
+    from renaissance_v4.game_theory.learning_trace_events_v1 import learning_trace_memory_sink_active_v1
+
+    if not learning_trace_instrumentation_enabled_v1() and not learning_trace_memory_sink_active_v1():
         return
     try:
         append_learning_trace_event_from_kwargs_v1(**kwargs)
