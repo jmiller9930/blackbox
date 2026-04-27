@@ -179,6 +179,73 @@ def read_learning_trace_events_for_job_v1(
     return out
 
 
+def count_learning_trace_terminal_integrity_v1(
+    job_id: str,
+    *,
+    path: Path | None = None,
+    max_lines: int = 2_000_000,
+) -> dict[str, Any]:
+    """
+    Single-pass scan of ``learning_trace_events_v1.jsonl`` for **this job only** — counts rows whose
+    ``stage`` is exactly ``student_decision_authority_v1`` or ``student_output_sealed``. No inference;
+    used for live Terminal integrity (authority vs sealed trade events).
+    """
+    jid = str(job_id or "").strip()
+    out: dict[str, Any] = {
+        "schema": "learning_trace_terminal_integrity_v1",
+        "job_id": jid or None,
+        "student_decision_authority_v1_count": 0,
+        "student_output_sealed_count": 0,
+        "integrity_ok": True,
+        "trace_file_exists": False,
+        "lines_scanned_total": 0,
+        "lines_matched_job": 0,
+    }
+    if not jid:
+        out["integrity_ok"] = True
+        return out
+    p = (path or default_learning_trace_events_jsonl()).expanduser().resolve()
+    if not p.is_file():
+        return out
+    out["trace_file_exists"] = True
+    auth_n = 0
+    sealed_n = 0
+    scanned = 0
+    matched = 0
+    try:
+        with p.open(encoding="utf-8", errors="replace") as fh:
+            for raw in fh:
+                if scanned >= max_lines:
+                    break
+                scanned += 1
+                line = raw.strip()
+                if not line:
+                    continue
+                try:
+                    obj = json.loads(line)
+                except json.JSONDecodeError:
+                    continue
+                if str(obj.get("schema") or "") != SCHEMA_EVENT:
+                    continue
+                if str(obj.get("job_id") or "").strip() != jid:
+                    continue
+                matched += 1
+                st = str(obj.get("stage") or "").strip()
+                if st == "student_decision_authority_v1":
+                    auth_n += 1
+                elif st == "student_output_sealed":
+                    sealed_n += 1
+    except OSError:
+        out["read_error_v1"] = True
+        return out
+    out["student_decision_authority_v1_count"] = auth_n
+    out["student_output_sealed_count"] = sealed_n
+    out["integrity_ok"] = auth_n == sealed_n
+    out["lines_scanned_total"] = scanned
+    out["lines_matched_job"] = matched
+    return out
+
+
 def _node_by_id(nodes: list[dict[str, Any]], node_id: str) -> dict[str, Any] | None:
     for n in nodes:
         if str(n.get("id") or "") == node_id:
@@ -291,6 +358,7 @@ __all__ = [
     "append_learning_trace_event_v1",
     "append_learning_trace_event_from_kwargs_v1",
     "build_learning_trace_event_v1",
+    "count_learning_trace_terminal_integrity_v1",
     "merge_learning_trace_events_into_nodes_v1",
     "read_learning_trace_events_for_job_v1",
 ]

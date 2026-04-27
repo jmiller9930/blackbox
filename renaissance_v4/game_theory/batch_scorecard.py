@@ -364,7 +364,7 @@ def record_parallel_batch_finished(
                 "before cancel; pending scenarios were not completed."
             ),
         }
-        cancel_msg = (error or "Cancelled by operator").strip() or "Cancelled by operator"
+        cancel_msg = (error or "Stopped by operator").strip() or "Stopped by operator"
         record = {
             "schema": SCHEMA_V1,
             "job_id": job_id,

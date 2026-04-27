@@ -55,7 +55,14 @@
     else tile.classList.add('rm-sig-amber');
   }
 
-  fetch('/api/reasoning-model/status')
+  var rmStatusUrl = '/api/reasoning-model/status';
+  try {
+    var infl = String(localStorage.getItem('patternGame.parallelInflightJobId') || '').trim();
+    if (infl && /^[a-f0-9]{32}$/i.test(infl)) {
+      rmStatusUrl += '?job_id=' + encodeURIComponent(infl);
+    }
+  } catch (_e) { /* */ }
+  fetch(rmStatusUrl)
     .then(function (r) {
       return r.json();
     })

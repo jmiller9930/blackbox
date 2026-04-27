@@ -150,6 +150,46 @@ def _aggregate_external_cost_from_trace_events(
     return total_in, total_out, est_usd
 
 
+def _parallel_job_runtime_from_web_app_v1(
+    requested_job_id: str | None,
+) -> tuple[str, dict[str, Any] | None, bool]:
+    """
+    Resolve ``(effective_job_id, job_row_or_none, auto_picked)`` from the Flask in-memory parallel store.
+
+    When ``requested_job_id`` is empty, picks the **newest** ``status=running`` job so
+    ``GET /api/reasoning-model/status`` can reflect live execution without ``?job_id=``.
+    """
+    req = (requested_job_id or "").strip()
+    try:
+        from renaissance_v4.game_theory import web_app as wapp
+    except Exception:
+        return req, None, False
+    lock = getattr(wapp, "_JOBS_LOCK", None)
+    store = getattr(wapp, "_JOBS", None)
+    if lock is None or not isinstance(store, dict):
+        return req, None, False
+    auto_picked = False
+    with lock:
+        if req:
+            row = store.get(req)
+            return req, (dict(row) if isinstance(row, dict) else None), False
+        best_id: str | None = None
+        best_t = -1.0
+        for k, v in list(store.items()):
+            if not isinstance(v, dict):
+                continue
+            if str(v.get("status") or "").strip().lower() != "running":
+                continue
+            t = float(v.get("created") or 0)
+            if t >= best_t:
+                best_t = t
+                best_id = str(k)
+        if best_id:
+            row = store.get(best_id)
+            return best_id, (dict(row) if isinstance(row, dict) else None), True
+    return "", None, False
+
+
 def _operator_block_message_v1(
     operator_blocks: bool,
     ext_effective: bool,
@@ -194,6 +234,11 @@ def get_reasoning_model_operator_snapshot_v1(job_id: str | None = None) -> dict[
     cfg = load_reasoning_router_config_v1(None)
     if not isinstance(cfg, dict):
         cfg = {}
+    req_jid_raw = (job_id or "").strip() or None
+    resolved_jid, parallel_rt, parallel_job_auto_scoped_v1 = _parallel_job_runtime_from_web_app_v1(
+        req_jid_raw
+    )
+    jid = (resolved_jid or "").strip()
     pref = read_operator_reasoning_model_preferences_v1()
     operator_blocks = pref.get("external_api_gateway_enabled") is False
     ext_effective = bool(cfg.get("external_api_enabled"))
@@ -225,7 +270,6 @@ def get_reasoning_model_operator_snapshot_v1(job_id: str | None = None) -> dict[
     total_in = 0
     total_out = 0
     est_usd = 0.0
-    jid = (job_id or "").strip()
     evs: list[dict[str, Any]] = []
     if jid:
         evs = read_learning_trace_events_for_job_v1(jid) or []
@@ -465,6 +509,47 @@ def get_reasoning_model_operator_snapshot_v1(job_id: str | None = None) -> dict[
     else:
         headline_badge_v1 = "Degraded"
 
+    server_running = bool(
+        parallel_rt is not None
+        and str(parallel_rt.get("status") or "").strip().lower() == "running"
+    )
+    run_kind = "unknown"
+    if isinstance(parallel_rt, dict):
+        rk0 = str(parallel_rt.get("reasoning_tile_run_kind_v1") or "").strip().lower()
+        if rk0 in ("student", "baseline", "unknown"):
+            run_kind = rk0
+        else:
+            orsf_rt = parallel_rt.get("operator_run_mode_surface_v1")
+            if orsf_rt == "student":
+                run_kind = "student"
+            elif orsf_rt == "baseline":
+                run_kind = "baseline"
+
+    if server_running and router_on:
+        fault_like = headline_badge_v1 in ("Fault", "Blocked", "Degraded", "Router off") or (
+            headline_badge_v1.startswith("Fault")
+        )
+        if (headline_badge_v1 == "Fault" or (jid and last_call == "failed" and ext_effective and key_ok)) and (
+            run_kind == "student"
+        ):
+            headline_badge_v1 = "Fault — Reasoning model unavailable or blocked"
+        elif not fault_like and headline_badge_v1 != "Router off":
+            if run_kind == "student":
+                headline_badge_v1 = "Active — Student reasoning in progress"
+            elif run_kind == "baseline":
+                headline_badge_v1 = "Active — baseline replay"
+            else:
+                headline_badge_v1 = "Active — parallel job running"
+
+    if not server_running or not router_on:
+        student_reasoning_execution_v1 = "idle"
+    elif headline_badge_v1.startswith("Fault"):
+        student_reasoning_execution_v1 = "fault"
+    elif headline_badge_v1.startswith("Active —"):
+        student_reasoning_execution_v1 = "active"
+    else:
+        student_reasoning_execution_v1 = "idle"
+
     headline = headline_badge_v1
     if not router_on:
         color = "blue"
@@ -488,11 +573,27 @@ def get_reasoning_model_operator_snapshot_v1(job_id: str | None = None) -> dict[
     else:
         color = "amber"
 
+    if headline_badge_v1.startswith("Active —") and color != "red":
+        color = "blue"
+
+    parallel_job_runtime_public_v1: dict[str, Any] | None = None
+    if isinstance(parallel_rt, dict):
+        parallel_job_runtime_public_v1 = {
+            "job_id": jid or None,
+            "status": parallel_rt.get("status"),
+            "reasoning_tile_run_kind_v1": parallel_rt.get("reasoning_tile_run_kind_v1"),
+            "operator_run_mode_surface_v1": parallel_rt.get("operator_run_mode_surface_v1"),
+        }
+
     return {
         "ok": True,
         "schema": SCHEMA_SNAPSHOT,
         "refreshed_at_utc": datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ"),
         "job_id_scoped": jid or None,
+        "job_id_requested_v1": req_jid_raw,
+        "parallel_job_auto_scoped_v1": bool(parallel_job_auto_scoped_v1),
+        "parallel_job_runtime_v1": parallel_job_runtime_public_v1,
+        "student_reasoning_execution_v1": student_reasoning_execution_v1,
         "tile_color_v1": color,
         "status_headline_v1": headline,
         "headline_badge_v1": headline_badge_v1,
@@ -534,6 +635,8 @@ def get_reasoning_model_operator_snapshot_v1(job_id: str | None = None) -> dict[
             "openai_secrets_path_v1": host_secrets_path_openai_v1(),
             "openai_secrets_plausible_key_line_in_file": host_secrets_file_has_plausible_openai_key_line_v1(),
             "block_reasons_v1": br,
+            "student_reasoning_execution_v1": student_reasoning_execution_v1,
+            "parallel_job_runtime_v1": parallel_job_runtime_public_v1,
         },
         "runtime_signals_v1": {
             "reasoning_router_config_effective": {

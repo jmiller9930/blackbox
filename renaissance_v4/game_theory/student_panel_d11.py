@@ -9,6 +9,7 @@ in the scorecard; Student-specific truth per decision is deep-dive when present.
 from __future__ import annotations
 
 import hashlib
+from datetime import datetime, timezone
 from typing import Any
 
 from renaissance_v4.game_theory.batch_scorecard import read_batch_scorecard_recent
@@ -52,6 +53,100 @@ def _str_or_none(v: Any) -> str | None:
 
 def _started_ts(row: dict[str, Any]) -> str:
     return str(row.get("started_at_utc") or row.get("ended_at_utc") or "")
+
+
+def _parse_utc_iso_to_aware(s: str | None) -> datetime | None:
+    raw = _str_or_none(s)
+    if raw is None:
+        return None
+    t = raw.replace("Z", "+00:00")
+    try:
+        dt = datetime.fromisoformat(t)
+    except ValueError:
+        return None
+    if dt.tzinfo is None:
+        dt = dt.replace(tzinfo=timezone.utc)
+    return dt.astimezone(timezone.utc)
+
+
+def _dt_to_iso_z(dt: datetime) -> str:
+    u = dt.astimezone(timezone.utc)
+    return u.strftime("%Y-%m-%dT%H:%M:%SZ")
+
+
+def _build_l1_operator_time_fields_v1(r: dict[str, Any], *, is_running: bool) -> dict[str, Any]:
+    """
+    L1 road time column: UTC headline, optional start/end ISO, job duration from wall clock when both
+    instants parse; otherwise ``duration_sec`` on the scorecard line when timestamps are present but
+    unparsed. Tooltip/gap strings identify missing or fallback sources.
+    """
+    started_raw = _str_or_none(r.get("started_at_utc"))
+    ended_raw = _str_or_none(r.get("ended_at_utc"))
+    st_dt = _parse_utc_iso_to_aware(started_raw)
+    en_dt = _parse_utc_iso_to_aware(ended_raw)
+    started_iso = _dt_to_iso_z(st_dt) if st_dt else started_raw
+    ended_iso = _dt_to_iso_z(en_dt) if en_dt else ended_raw
+
+    if is_running:
+        if st_dt is not None:
+            primary_iso = _dt_to_iso_z(st_dt)
+            primary_src = "started_at_utc"
+        elif started_raw:
+            primary_iso = started_raw
+            primary_src = "started_at_utc_unparsed"
+        else:
+            primary_iso = None
+            primary_src = "missing_started_at_utc"
+    else:
+        if en_dt is not None:
+            primary_iso = _dt_to_iso_z(en_dt)
+            primary_src = "ended_at_utc"
+        elif ended_raw:
+            primary_iso = ended_raw
+            primary_src = "ended_at_utc_unparsed"
+        elif st_dt is not None:
+            primary_iso = _dt_to_iso_z(st_dt)
+            primary_src = "started_at_utc"
+        elif started_raw:
+            primary_iso = started_raw
+            primary_src = "started_at_utc_unparsed"
+        else:
+            primary_iso = None
+            primary_src = "missing_timestamps"
+
+    duration_sec = _float(r.get("duration_sec"))
+    dur_elapsed: float | None = None
+    dur_basis: str | None = None
+    dur_gap: str | None = None
+
+    if st_dt is not None and en_dt is not None:
+        dur_elapsed = max(0.0, (en_dt - st_dt).total_seconds())
+        dur_basis = "wall_clock_started_at_ended_at_utc"
+    elif is_running:
+        dur_gap = "missing_ended_at_utc_job_running"
+    elif not started_raw and not ended_raw:
+        dur_gap = "missing_started_at_utc_missing_ended_at_utc"
+    elif not started_raw:
+        dur_gap = "missing_started_at_utc"
+    elif not ended_raw:
+        dur_gap = "missing_ended_at_utc"
+    elif st_dt is None or en_dt is None:
+        if duration_sec is not None and duration_sec >= 0:
+            dur_elapsed = float(duration_sec)
+            dur_basis = "scorecard_duration_sec_fallback"
+            dur_gap = "timestamps_unparsed_used_scorecard_duration_sec"
+        else:
+            dur_gap = "timestamps_unparsed"
+
+    return {
+        "l1_utc_primary_iso_v1": primary_iso,
+        "l1_utc_primary_source_v1": primary_src,
+        "l1_job_started_at_utc_iso_v1": started_iso,
+        "l1_job_completed_at_utc_iso_v1": ended_iso,
+        "l1_job_duration_seconds_v1": dur_elapsed,
+        "l1_job_duration_basis_v1": dur_basis,
+        "l1_job_duration_gap_v1": dur_gap,
+    }
 
 
 def _fingerprint_from_scorecard_line(row: dict[str, Any]) -> str | None:
@@ -349,6 +444,7 @@ def build_d11_run_rows_v1(
                 "run_progress": (
                     f"{_int(r.get('total_processed'), 0)}/{_int(r.get('total_scenarios'), 0)}"
                 ),
+                "parallel_cancel_requested_v1": bool(r.get("parallel_cancel_requested_v1")),
                 "is_inflight": True,
                 "data_gaps": [],
                 "status": "running",
@@ -359,6 +455,7 @@ def build_d11_run_rows_v1(
                 "exam_pass_v1": None,
                 "l1_e_value_source_v1": None,
                 "l1_p_value_source_v1": None,
+                **_build_l1_operator_time_fields_v1(r, is_running=True),
             }
             out.append(row_obj)
             continue
@@ -440,6 +537,7 @@ def build_d11_run_rows_v1(
             "exam_pass_v1": r.get("exam_pass_v1"),
             "l1_e_value_source_v1": r.get("l1_e_value_source_v1"),
             "l1_p_value_source_v1": r.get("l1_p_value_source_v1"),
+            **_build_l1_operator_time_fields_v1(r, is_running=False),
         }
         out.append(row_obj)
 

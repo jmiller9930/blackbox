@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import pytest
+
 from renaissance_v4.game_theory.student_panel_d11 import build_d11_run_rows_v1
 
 
@@ -58,3 +60,24 @@ def test_l1_tie_with_anchor_shows_equals() -> None:
     rows = build_d11_run_rows_v1([_row("job_new", tw=34.5), _row("job_old", tw=34.5)])
     by_id = {str(x["run_id"]): x for x in rows}
     assert by_id["job_new"]["beats_system_baseline_trade_win"] == "="
+
+
+def test_l1_operator_time_requires_end_for_duration() -> None:
+    rows = build_d11_run_rows_v1([_row("j1", tw=40.0)])
+    r = rows[0]
+    assert r["l1_utc_primary_source_v1"] == "started_at_utc"
+    assert r["l1_job_duration_seconds_v1"] is None
+    assert r["l1_job_duration_gap_v1"] == "missing_ended_at_utc"
+
+
+def test_l1_operator_time_wall_clock_duration() -> None:
+    line = _row("j2", tw=40.0)
+    line["ended_at_utc"] = "2026-04-20T12:22:14Z"
+    line["duration_sec"] = 999.0
+    rows = build_d11_run_rows_v1([line])
+    r = rows[0]
+    assert r["l1_utc_primary_source_v1"] == "ended_at_utc"
+    assert r["l1_utc_primary_iso_v1"] == "2026-04-20T12:22:14Z"
+    assert r["l1_job_duration_basis_v1"] == "wall_clock_started_at_ended_at_utc"
+    assert r["l1_job_duration_seconds_v1"] == pytest.approx(1334.0)
+    assert r["l1_job_duration_gap_v1"] is None

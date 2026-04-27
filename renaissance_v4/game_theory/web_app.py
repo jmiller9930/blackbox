@@ -9,6 +9,8 @@ Batches use **``POST /api/run-parallel/start``** + polling **``GET /api/run-para
 (or **``GET /api/run-status/<job_id>``**, same payload) so the UI shows **per-scenario progress** plus
 **``POST /api/run-parallel/cancel/<job_id>``** to request cancel (best-effort: pending scenarios are not scheduled; workers already running may finish),
 **live telemetry** (decision windows, trades, candidate phase) from worker-written JSON snapshots.
+Status JSON also exposes **``telemetry_dir``** (on-disk snapshot folder), **``job_created_unix``**, and **``telemetry_progress_v1``**
+(newest snapshot timestamp + row count) for curl/SSH checks without the browser.
 ``POST /api/run-parallel`` remains as a blocking API for scripts.
 
 Each completed batch also writes a **unique session folder** under the batch logs directory
@@ -126,7 +128,7 @@ _PATTERN_BANNER_WEBP_PATH = _RV4_ROOT / "assets" / "pattern.webp"
 _PATTERN_GAME_BANNER_BOOT_JS = _GAME_THEORY / "static" / "pattern_game_banner_boot.js"
 
 # Operator-visible web UI bundle version — bump when changing PAGE_HTML (HTML/CSS/JS) so deploys are provable.
-PATTERN_GAME_WEB_UI_VERSION = "2.19.95"
+PATTERN_GAME_WEB_UI_VERSION = "2.19.101"
 
 from renaissance_v4.game_theory.reasoning_model_operator_surface_v1 import (
     get_reasoning_model_operator_snapshot_v1,
@@ -298,6 +300,8 @@ from renaissance_v4.game_theory.live_telemetry_v1 import (
     default_telemetry_dir,
     read_job_telemetry_v1,
 )
+from renaissance_v4.game_theory.learning_trace_events_v1 import count_learning_trace_terminal_integrity_v1
+from renaissance_v4.game_theory.learning_trace_instrumentation_v1 import learning_trace_instrumentation_enabled_v1
 from renaissance_v4.game_theory.candle_timeframe_runtime import (
     annotate_scenarios_with_candle_timeframe,
     resolve_ui_trade_window,
@@ -417,6 +421,8 @@ def _merge_scorecard_with_inflight(
                 "scorecard_inflight": True,
                 "session_log_batch_dir": None,
             }
+            if bool(v.get("cancel_requested")):
+                entry["parallel_cancel_requested_v1"] = True
             inflight.append((float(v.get("created") or 0), entry))
     inflight.sort(key=lambda x: x[0], reverse=True)
     inflight_rows = [e for _, e in inflight]
@@ -426,6 +432,61 @@ def _merge_scorecard_with_inflight(
     rest = max(0, limit - n_inflight)
     merged = inflight_rows + file_rows[:rest]
     return merged, n_inflight
+
+
+def _parallel_status_learning_trace_terminal_v1(job_id: str, j: dict[str, Any], out: dict[str, Any]) -> None:
+    """
+    Trace-only Terminal banner for parallel status: authority vs sealed counts (Student runs), or
+    baseline / instrumentation-off messaging.
+    """
+    echo = j.get("telemetry_context_echo") if isinstance(j.get("telemetry_context_echo"), dict) else {}
+    orsf = j.get("operator_run_mode_surface_v1")
+    cmem = str(echo.get("context_signature_memory_mode") or "").strip().lower()
+    if orsf == "baseline":
+        is_baseline = True
+    elif orsf == "student":
+        is_baseline = False
+    else:
+        is_baseline = cmem == "off"
+    if is_baseline:
+        out["learning_trace_terminal_v1"] = {
+            "schema": "learning_trace_terminal_banner_v1",
+            "mode": "baseline",
+            "message": "Reasoning Model: not used — Baseline run",
+        }
+        return
+    if not learning_trace_instrumentation_enabled_v1():
+        out["learning_trace_terminal_v1"] = {
+            "schema": "learning_trace_terminal_banner_v1",
+            "mode": "trace_disabled",
+            "message": "Reasoning indicators unavailable (trace disabled)",
+        }
+        return
+    try:
+        snap = count_learning_trace_terminal_integrity_v1(job_id)
+    except (OSError, TypeError, ValueError, RuntimeError) as e:
+        out["learning_trace_terminal_v1"] = {
+            "schema": "learning_trace_terminal_banner_v1",
+            "mode": "trace_unavailable",
+            "message": "Reasoning indicators unavailable (trace disabled)",
+            "trace_terminal_error_v1": f"{type(e).__name__}: {e}",
+        }
+        return
+    if snap.get("read_error_v1"):
+        out["learning_trace_terminal_v1"] = {
+            "schema": "learning_trace_terminal_banner_v1",
+            "mode": "trace_unavailable",
+            "message": "Reasoning indicators unavailable (trace disabled)",
+        }
+        return
+    out["learning_trace_terminal_v1"] = {
+        "schema": "learning_trace_terminal_banner_v1",
+        "mode": "live",
+        "student_decision_authority_v1_count": int(snap.get("student_decision_authority_v1_count") or 0),
+        "student_output_sealed_count": int(snap.get("student_output_sealed_count") or 0),
+        "integrity_ok": bool(snap.get("integrity_ok")),
+        "trace_file_exists": bool(snap.get("trace_file_exists")),
+    }
 
 
 def _slug_preset_display_name(name: str) -> str:
@@ -844,7 +905,12 @@ def create_app() -> Flask:
 
     @app.get("/api/reasoning-model/status")
     def api_reasoning_model_status() -> Any:
-        """Live unified reasoning stack: router config merge, Ollama probe, optional ``job_id`` trace slice."""
+        """Live unified reasoning stack: router config merge, Ollama probe, optional ``job_id`` trace slice.
+
+        When ``job_id`` is omitted, the server may **auto-scope** the newest in-process
+        ``status=running`` parallel batch so the Reasoning Model tile reflects live Student execution
+        (see ``parallel_job_auto_scoped_v1`` on the JSON).
+        """
         jid = (request.args.get("job_id") or "").strip() or None
         return jsonify(get_reasoning_model_operator_snapshot_v1(jid))
 
@@ -1227,6 +1293,12 @@ def create_app() -> Flask:
         clear_job_telemetry_files(job_id, base=telem_dir)
         telemetry_ctx = _telemetry_context_for_parallel_job(operator_batch_audit)
         started_iso = utc_timestamp_iso()
+        orsf = operator_batch_audit.get("operator_run_mode_surface_v1")
+        reasoning_tile_run_kind_v1 = (
+            "student"
+            if orsf == "student"
+            else ("baseline" if orsf == "baseline" else "unknown")
+        )
         with _JOBS_LOCK:
             _JOBS[job_id] = {
                 "status": "running",
@@ -1244,6 +1316,8 @@ def create_app() -> Flask:
                 "telemetry_dir": str(telem_dir),
                 "telemetry_context_echo": telemetry_ctx,
                 "cancel_requested": False,
+                "operator_run_mode_surface_v1": orsf,
+                "reasoning_tile_run_kind_v1": reasoning_tile_run_kind_v1,
             }
 
         def run_job() -> None:
@@ -1400,7 +1474,7 @@ def create_app() -> Flask:
                 referee_parallel_completed_emit_v1 = True
                 partial = e.partial_results
                 err_s = (
-                    f"Cancelled by operator — {len(partial)}/{len(scenarios)} scenario result(s) "
+                    f"Stopped by operator — {len(partial)}/{len(scenarios)} scenario result(s) "
                     "returned before remaining work was stopped."
                 )
                 exam_line_err = _exam_run_line_meta_for_parallel_job_v1(
@@ -1487,6 +1561,16 @@ def create_app() -> Flask:
     @app.get("/api/run-parallel/status/<job_id>")
     @app.get("/api/run-status/<job_id>")
     def api_parallel_status(job_id: str) -> Any:
+        """
+        Poll in-process parallel job state.
+
+        For **operators / SSH**, non-interrupting progress checks:
+
+        - ``telemetry_dir`` — absolute directory of per-scenario JSON snapshots (``{job_id}__*.json``).
+        - ``job_created_unix`` — server monotonic-ish enqueue time (``time.time()`` when the job started).
+        - ``telemetry_progress_v1`` — compact heartbeat: snapshot file count and newest ``updated_at_unix``
+          across embedded ``telemetry.scenarios`` rows (same data the UI uses; safe to poll with curl).
+        """
         _prune_jobs()
         with _JOBS_LOCK:
             j = _JOBS.get(job_id)
@@ -1502,12 +1586,19 @@ def create_app() -> Flask:
             "last_ok": j.get("last_ok"),
             "last_message": j.get("last_message"),
         }
+        jc = j.get("created")
+        if jc is not None:
+            try:
+                out["job_created_unix"] = float(jc)
+            except (TypeError, ValueError):
+                pass
         if j.get("started_at_utc"):
             out["started_at_utc"] = j["started_at_utc"]
         if j.get("telemetry_context_echo") is not None:
             out["telemetry_context_echo"] = j["telemetry_context_echo"]
         td = j.get("telemetry_dir")
         if td:
+            out["telemetry_dir"] = str(td)
             try:
                 out["telemetry"] = read_job_telemetry_v1(job_id, base=Path(td))
             except OSError:
@@ -1517,12 +1608,29 @@ def create_app() -> Flask:
                     "scenarios": [],
                     "read_at_unix": time.time(),
                 }
+        tel = out.get("telemetry")
+        if isinstance(tel, dict):
+            sc = tel.get("scenarios")
+            if isinstance(sc, list) and sc:
+                newest = 0.0
+                for row in sc:
+                    if isinstance(row, dict):
+                        try:
+                            newest = max(newest, float(row.get("updated_at_unix") or 0.0))
+                        except (TypeError, ValueError):
+                            continue
+                out["telemetry_progress_v1"] = {
+                    "worker_snapshot_rows": len(sc),
+                    "newest_snapshot_unix": newest,
+                    "read_at_unix": float(tel.get("read_at_unix") or time.time()),
+                }
         if j.get("error"):
             out["error"] = j["error"]
         if j.get("batch_timing") is not None:
             out["batch_timing"] = j["batch_timing"]
         if j["status"] == "done" and j.get("result"):
             out["result"] = j["result"]
+        _parallel_status_learning_trace_terminal_v1(job_id, j, out)
         return jsonify(out)
 
     @app.post("/api/run-parallel/cancel/<job_id>")
@@ -3877,6 +3985,39 @@ PAGE_HTML = """<!DOCTYPE html>
       border-collapse: collapse;
       font-size: 0.74rem;
     }
+    /* L1 exam list — fixed layout so drag-resize column widths stick; preview tables omit this class. */
+    .pg-student-d11-table--l1-exam {
+      table-layout: fixed;
+    }
+    .pg-student-d11-table--l1-exam thead th {
+      position: relative;
+      overflow: visible;
+    }
+    .pg-d11-col-resizer {
+      position: absolute;
+      top: 0;
+      right: 0;
+      width: 8px;
+      margin-right: -4px;
+      cursor: col-resize;
+      z-index: 5;
+      height: 100%;
+      user-select: none;
+      touch-action: none;
+    }
+    .pg-d11-col-resizer:hover {
+      background: rgba(30, 214, 170, 0.22);
+    }
+    .pg-student-d11-table--l1-exam thead th:nth-child(1),
+    .pg-student-d11-table--l1-exam tbody td:nth-child(1) {
+      min-width: 6.5rem;
+    }
+    .pg-student-d11-table--l1-exam td:nth-child(1) code.pg-d11-runid {
+      word-break: break-all;
+      white-space: normal;
+      display: inline-block;
+      max-width: 100%;
+    }
     .pg-student-d11-table th,
     .pg-student-d11-table td {
       text-align: left;
@@ -3899,11 +4040,52 @@ PAGE_HTML = """<!DOCTYPE html>
       background: rgba(30, 214, 170, 0.1);
     }
     .pg-student-d11-table tr[data-run-row] { cursor: pointer; }
+    .pg-student-d11-table td.pg-l1-time-cell {
+      white-space: normal;
+      min-width: 10.5rem;
+      max-width: 24rem;
+    }
+    .pg-l1-time-stack { font-size: 0.68rem; line-height: 1.32; }
+    .pg-l1-time-stack__utc { font-weight: 600; }
+    .pg-l1-time-stack__local,
+    .pg-l1-time-stack__dur { color: var(--pg-muted); }
     tr[data-l1-band="A"] td { box-shadow: inset 0 0 0 2px rgba(46, 160, 67, 0.38); }
     tr[data-l1-band="B"] td { box-shadow: inset 0 0 0 2px rgba(218, 85, 85, 0.32); }
     tr[data-l1-band="baseline_ruler"] td { box-shadow: inset 0 0 0 2px rgba(139, 148, 158, 0.35); }
     .pg-student-l1-groups-preview { margin-top: 8px; }
     .pg-student-l1-groups-preview .pg-student-d11-table { font-size: 0.72rem; }
+    .pg-student-d11-row-actions {
+      display: inline-flex;
+      gap: 5px;
+      align-items: center;
+      flex-wrap: nowrap;
+    }
+    .pg-student-d11-row-stop {
+      min-width: 28px;
+      padding: 2px 5px;
+      font-size: 0.95rem;
+      line-height: 1;
+      border-radius: 6px;
+      border: 1px solid rgba(210, 153, 34, 0.55);
+      background: rgba(210, 153, 34, 0.14);
+      color: var(--pg-ink);
+      cursor: pointer;
+    }
+    .pg-student-d11-row-stop:hover:not(:disabled) {
+      border-color: #d29922;
+      background: rgba(210, 153, 34, 0.26);
+    }
+    .pg-student-d11-row-stop:disabled {
+      opacity: 0.45;
+      cursor: wait;
+    }
+    .pg-student-d11-row-stop-muted {
+      font-size: 0.95rem;
+      opacity: 0.75;
+      padding: 0 2px;
+      cursor: default;
+      user-select: none;
+    }
     .pg-student-d11-row-del {
       min-width: 28px;
       padding: 2px 6px;
@@ -5432,6 +5614,10 @@ PAGE_HTML = """<!DOCTYPE html>
       white-space: pre-wrap;
       word-break: break-word;
     }
+    .telemetry-rolling-log .telemetry-tick--err {
+      color: #ff7b72;
+      font-weight: 700;
+    }
     .live-telemetry-panel {
       margin: 0;
       font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
@@ -6259,6 +6445,7 @@ PAGE_HTML = """<!DOCTYPE html>
         if (jid) localStorage.setItem(PG_PARALLEL_INFLIGHT_JOB_LS, String(jid));
         else localStorage.removeItem(PG_PARALLEL_INFLIGHT_JOB_LS);
       } catch (e) { /* ignore quota / private mode */ }
+      if (typeof refreshReasoningModelBanner === 'function') void refreshReasoningModelBanner();
     }
     function pgGetInflightJobId() {
       try {
@@ -6613,6 +6800,98 @@ PAGE_HTML = """<!DOCTYPE html>
       return escapeHtml(n.toFixed(d != null ? d : 2));
     }
 
+    function l1FmtJobDurationSeconds(sec) {
+      if (sec == null || sec === '') return null;
+      const x = Number(sec);
+      if (!Number.isFinite(x) || x < 0) return null;
+      const n = Math.round(x);
+      const h = Math.floor(n / 3600);
+      let r = n % 3600;
+      const m = Math.floor(r / 60);
+      const s = r % 60;
+      if (h > 0) return h + 'h ' + m + 'm ' + s + 's';
+      if (m > 0) return m + 'm ' + s + 's';
+      return s + 's';
+    }
+
+    function l1OperatorLocalTimeLine(utcIso) {
+      const s = utcIso != null ? String(utcIso).trim() : '';
+      if (!s) return { line: 'Local: —', tzHint: '' };
+      const ms = Date.parse(s);
+      if (!Number.isFinite(ms)) return { line: 'Local: — (unparseable UTC headline)', tzHint: '' };
+      const d = new Date(ms);
+      var tzName = '';
+      try {
+        var shortPr = new Intl.DateTimeFormat(undefined, { timeZoneName: 'short' }).formatToParts(d);
+        var pz = shortPr.find(function (p) { return p.type === 'timeZoneName'; });
+        tzName = pz && pz.value ? String(pz.value) : '';
+      } catch (_e) {
+        tzName = '';
+      }
+      var core = new Intl.DateTimeFormat(undefined, {
+        year: 'numeric',
+        month: '2-digit',
+        day: '2-digit',
+        hour: 'numeric',
+        minute: '2-digit',
+        second: '2-digit',
+        hour12: true,
+      }).format(d);
+      var suf = tzName ? ' ' + tzName : '';
+      return { line: 'Local: ' + core + suf, tzHint: tzName };
+    }
+
+    function l1OperatorTimeCellInner(row) {
+      const utcIso0 =
+        row.l1_utc_primary_iso_v1 != null && String(row.l1_utc_primary_iso_v1).trim()
+          ? String(row.l1_utc_primary_iso_v1).trim()
+          : row.timestamp != null && String(row.timestamp).trim()
+            ? String(row.timestamp).trim()
+            : '';
+      const utcSrc =
+        row.l1_utc_primary_source_v1 != null && String(row.l1_utc_primary_source_v1).trim()
+          ? String(row.l1_utc_primary_source_v1).trim()
+          : 'timestamp_fallback';
+      const started = row.l1_job_started_at_utc_iso_v1;
+      const ended = row.l1_job_completed_at_utc_iso_v1;
+      const basis = row.l1_job_duration_basis_v1;
+      const gap = row.l1_job_duration_gap_v1;
+      const dsecs = row.l1_job_duration_seconds_v1;
+      const local0 = l1OperatorLocalTimeLine(utcIso0);
+      const dlab = l1FmtJobDurationSeconds(dsecs);
+      var durLine = 'Duration: unavailable';
+      if (dlab) durLine = 'Duration: ' + dlab;
+      var tip =
+        'L1 job timing — utc_headline_field: ' +
+        utcSrc +
+        '; started_at_utc: ' +
+        (started != null && String(started).trim() ? String(started) : '(none)') +
+        '; ended_at_utc: ' +
+        (ended != null && String(ended).trim() ? String(ended) : '(none)') +
+        '; duration_basis: ' +
+        (basis != null && String(basis).trim() ? String(basis) : '(none)') +
+        '; duration_gap: ' +
+        (gap != null && String(gap).trim() ? String(gap) : '(none)') +
+        '. Local line uses browser/OS timezone';
+      tip += local0.tzHint ? ' (' + local0.tzHint + ').' : '.';
+      const utcLine = utcIso0 ? 'UTC: ' + utcIso0 : 'UTC: —';
+      return {
+        html:
+          '<div class="pg-l1-time-stack">' +
+          '<div class="pg-l1-time-stack__utc">' +
+          escapeHtml(utcLine) +
+          '</div>' +
+          '<div class="pg-l1-time-stack__local">' +
+          escapeHtml(local0.line) +
+          '</div>' +
+          '<div class="pg-l1-time-stack__dur">' +
+          escapeHtml(durLine) +
+          '</div>' +
+          '</div>',
+        title: tip,
+      };
+    }
+
     function studentPanelD11ShortRunId(rid) {
       const s = rid != null ? String(rid) : '';
       return s.length > 18 ? s.slice(0, 16) + '…' : s;
@@ -6821,6 +7100,108 @@ PAGE_HTML = """<!DOCTYPE html>
         };
         next.onclick = function () {};
       }
+    }
+
+    function studentPanelD11WireL1ExamColumnResize(root) {
+      const wrap = root && root.querySelector && root.querySelector('.pg-student-d11-table-wrap');
+      const table = root && root.querySelector('.pg-student-d11-table--l1-exam');
+      if (!wrap || !table) return;
+      const LS_KEY = 'patternGame.d11L1ExamColWidthsV1';
+      const thList = Array.prototype.slice.call(table.querySelectorAll('thead tr th'));
+      const n = thList.length;
+      if (!n) return;
+      function loadWidths() {
+        try {
+          const raw = localStorage.getItem(LS_KEY);
+          if (!raw) return null;
+          const arr = JSON.parse(raw);
+          if (!Array.isArray(arr) || arr.length !== n) return null;
+          return arr;
+        } catch (_e) {
+          return null;
+        }
+      }
+      function saveWidths(arr) {
+        try {
+          localStorage.setItem(LS_KEY, JSON.stringify(arr));
+        } catch (_e) { /* */ }
+      }
+      function applyWidths(widths) {
+        for (let i = 0; i < n; i++) {
+          const w = widths && widths[i] != null ? Number(widths[i]) : 0;
+          const usable = w >= 32 && Number.isFinite(w);
+          const cells = table.querySelectorAll(
+            'thead tr th:nth-child(' + (i + 1) + '), tbody tr td:nth-child(' + (i + 1) + ')'
+          );
+          for (let j = 0; j < cells.length; j++) {
+            const cell = cells[j];
+            if (usable) {
+              cell.style.width = w + 'px';
+              cell.style.minWidth = w + 'px';
+              cell.style.maxWidth = 'none';
+            } else {
+              cell.style.width = '';
+              cell.style.minWidth = '';
+              cell.style.maxWidth = '';
+            }
+          }
+        }
+      }
+      let wCur = loadWidths();
+      if (!wCur) {
+        wCur = new Array(n);
+        for (let z = 0; z < n; z++) wCur[z] = 0;
+      }
+      applyWidths(wCur);
+      for (let ix = 0; ix < thList.length; ix++) {
+        const th = thList[ix];
+        if (th.classList.contains('pg-student-d11-sticky-actions')) continue;
+        if (th.querySelector('.pg-d11-col-resizer')) continue;
+        const h = document.createElement('span');
+        h.className = 'pg-d11-col-resizer';
+        h.setAttribute('data-d11-col', String(ix));
+        h.title = 'Drag to widen · double-click to reset column';
+        th.appendChild(h);
+        h.addEventListener('dblclick', function (ev) {
+          ev.preventDefault();
+          ev.stopPropagation();
+          wCur[ix] = 0;
+          applyWidths(wCur);
+          saveWidths(wCur);
+        });
+      }
+      if (wrap.dataset.d11ColResizeBound === '1') return;
+      wrap.dataset.d11ColResizeBound = '1';
+      wrap.addEventListener('pointerdown', function (ev) {
+        const handle = ev.target && ev.target.closest && ev.target.closest('.pg-d11-col-resizer');
+        if (!handle || !wrap.contains(handle)) return;
+        ev.preventDefault();
+        ev.stopPropagation();
+        const idx = parseInt(handle.getAttribute('data-d11-col') || '-1', 10);
+        if (idx < 0 || idx >= n) return;
+        const th0 = thList[idx];
+        const r = th0.getBoundingClientRect();
+        const startX = ev.clientX;
+        const startW = Math.max(32, Math.round(r.width));
+        function onMove(e) {
+          const dw = e.clientX - startX;
+          const nw = Math.min(720, Math.max(32, Math.round(startW + dw)));
+          wCur[idx] = nw;
+          applyWidths(wCur);
+        }
+        function onUp() {
+          document.removeEventListener('pointermove', onMove);
+          document.removeEventListener('pointerup', onUp);
+          document.removeEventListener('pointercancel', onUp);
+          saveWidths(wCur);
+        }
+        document.addEventListener('pointermove', onMove);
+        document.addEventListener('pointerup', onUp);
+        document.addEventListener('pointercancel', onUp);
+        try {
+          if (ev.pointerId != null) handle.setPointerCapture(ev.pointerId);
+        } catch (_e) { /* */ }
+      });
     }
 
     function studentPanelD11WireChrome() {
@@ -7588,9 +7969,10 @@ PAGE_HTML = """<!DOCTYPE html>
         (leg.band_b ? ' | ' + String(leg.band_b).slice(0, 160) : '');
       let scroll =
         '<p class="pg-student-d11-legend" style="margin-top:0"><strong title="Level 1 (L1): list of exam runs from the scorecard">Level 1 — exam list</strong> — Each row is one exam attempt (<code title="API schema name for one run row">student_panel_run_row_v2</code> + <code title="D14 aggregate block on the same response">d14_run_row_v1</code>). Referee rollups and harness signals. Click a row (not ×) for Level 2. <strong title="Remove this scorecard line only">×</strong> removes this scorecard line only. <strong title="Sys BL: system baseline trade win percent — oldest same-fingerprint anchor">Sys BL %</strong> = system baseline trade win % (oldest same-fingerprint anchor). <strong title="Run TW: this run trade win percent from the Referee batch">Run TW %</strong> = this exam&rsquo;s trade win %. <strong title="Greater than baseline: strict beat vs Sys BL; not on anchor row">&gt;BL</strong> = strict beat vs Sys BL (not on anchor). <strong title="L1 road: fingerprint-group band vs baseline">Road</strong> / <strong title="Anchor: baseline ruler vs compare row role">Anchor</strong> / <strong title="Road gaps: merge-time data gap codes">Road gaps</strong> come from <code title="Embedded L1 road payload on this API response">l1_road_v1</code> on this response (same aggregation as <code>GET /api/student-panel/l1-road</code>). Full <code>l1_road_v1.legend</code> copy is in native browser tooltips (<code>title</code>) on column headers and on Profile / LLM / Road cells and the fingerprint table — not a separate on-page legend block. <a href="/docs/student-panel-dictionary" onclick="return pgOpenStudentPanelDictionaryPopout();" title="Glossary in a resizable pop-out">Dictionary</a> · <a href="/api/student-panel/l1-road" target="_blank" rel="noopener noreferrer">L1 road JSON</a></p>' +
-        '<div class="pg-student-d11-table-wrap"><table class="pg-student-d11-table"><thead><tr>' +
+        '<div class="pg-student-d11-table-wrap" title="Drag the right edge of a column header to widen it; double-click the grip to reset that column.">' +
+        '<table class="pg-student-d11-table pg-student-d11-table--l1-exam"><thead><tr>' +
         '<th title="Run id: unique parallel batch job identifier">run_id</th>' +
-        '<th title="UTC timestamp for this scorecard row">time</th>' +
+        '<th title="L1 time cell (stacked): line 1 = UTC audit headline (job completion time when ended_at_utc exists, else start); line 2 = same instant in browser local timezone; line 3 = job wall duration from scorecard started_at_utc→ended_at_utc when both parse, else Duration unavailable with gap in tooltip. See l1_* fields on student_panel_run_row_v2.">time</th>' +
         '<th title="Pattern: operator recipe or policy label">pattern</th>' +
         '<th title="Window: evaluation calendar span (e.g. months of data)">window</th>' +
         '<th title="#tr: trade count for this run, or progress numerator/denominator while running">#tr</th>' +
@@ -7640,8 +8022,19 @@ PAGE_HTML = """<!DOCTYPE html>
             ? ' data-l1-band="' + escapeHtml(bandForAttr) + '"'
             : '';
         scroll += '<tr' + bandAttr + trCls + (infl ? '' : ' data-run-row') + ' data-run-id="' + escapeHtml(rid) + '">';
-        scroll += '<td title="' + escapeHtml(rid) + '"><code style="font-size:0.7rem">' + escapeHtml(rid.length > 14 ? rid.slice(0, 12) + '…' : rid) + '</code></td>';
-        scroll += '<td>' + escapeHtml(String(row.timestamp || '—')) + '</td>';
+        scroll +=
+          '<td title="' +
+          escapeHtml(rid) +
+          '"><code class="pg-d11-runid" style="font-size:0.7rem">' +
+          escapeHtml(rid) +
+          '</code></td>';
+        const tCell = l1OperatorTimeCellInner(row);
+        scroll +=
+          '<td class="pg-l1-time-cell" title="' +
+          escapeHtml(tCell.title) +
+          '">' +
+          tCell.html +
+          '</td>';
         scroll += '<td>' + escapeHtml(String(row.pattern || '—')) + '</td>';
         scroll += '<td>' + escapeHtml(String(row.evaluation_window || '—')) + '</td>';
         scroll +=
@@ -7767,14 +8160,28 @@ PAGE_HTML = """<!DOCTYPE html>
           '<td title="Promoted memory / harness tier for this run">' +
           escapeHtml(String(row.groundhog_state || '—')) +
           '</td>';
-        scroll +=
-          '<td class="pg-student-d11-sticky-actions">' +
-          (infl
-            ? '<button type="button" class="pg-student-d11-row-del" disabled title="Cannot delete until this exam completes">×</button>'
-            : '<button type="button" class="pg-student-d11-row-del" data-run-id="' +
+        const cancelReq = row.parallel_cancel_requested_v1 === true;
+        scroll += '<td class="pg-student-d11-sticky-actions">';
+        if (infl) {
+          scroll += '<span class="pg-student-d11-row-actions">';
+          if (cancelReq) {
+            scroll +=
+              '<span class="pg-student-d11-row-stop-muted" title="Stop requested — workers finishing; row updates when the batch ends">⏳</span>';
+          } else {
+            scroll +=
+              '<button type="button" class="pg-student-d11-row-stop" data-run-id="' +
               escapeHtml(rid) +
-              '" title="Remove run from scorecard only (promoted bundle file unchanged)">×</button>') +
-          '</td>';
+              '" title="Stop running exam (same as batch cancel — pending scenarios will not start)">⛔</button>';
+          }
+          scroll +=
+            '<button type="button" class="pg-student-d11-row-del" disabled title="Cannot delete until this exam completes">×</button></span>';
+        } else {
+          scroll +=
+            '<button type="button" class="pg-student-d11-row-del" data-run-id="' +
+            escapeHtml(rid) +
+            '" title="Remove run from scorecard only (promoted bundle file unchanged)">×</button>';
+        }
+        scroll += '</td>';
         scroll += '</tr>';
       }
       scroll += '</tbody></table></div>';
@@ -7786,6 +8193,7 @@ PAGE_HTML = """<!DOCTYPE html>
       }
       root.innerHTML = studentPanelD11Layout(chrome1, scroll);
       studentPanelD11WireChrome();
+      studentPanelD11WireL1ExamColumnResize(root);
       if (softRefresh && (prevScrollTop > 0 || prevScrollLeft > 0)) {
         requestAnimationFrame(function () {
           const wrapNext = root.querySelector('.pg-student-d11-table-wrap');
@@ -7798,12 +8206,54 @@ PAGE_HTML = """<!DOCTYPE html>
       const trs = root.querySelectorAll('tr[data-run-row]');
       trs.forEach(function (tr) {
         tr.addEventListener('click', function (ev) {
-          if (ev && ev.target && ev.target.closest && ev.target.closest('.pg-student-d11-row-del')) return;
+          if (ev && ev.target && ev.target.closest) {
+            if (ev.target.closest('.pg-student-d11-row-del')) return;
+            if (ev.target.closest('.pg-student-d11-row-stop')) return;
+          }
           const id = tr.getAttribute('data-run-id');
           if (id) {
             studentPanelD11.lastVisitedRunId = id;
             void studentPanelD11GotoLevel2(id);
           }
+        });
+      });
+      root.querySelectorAll('.pg-student-d11-row-stop').forEach(function (btn) {
+        btn.addEventListener('click', function (ev) {
+          ev.preventDefault();
+          ev.stopPropagation();
+          if (btn.disabled) return;
+          const rid = btn.getAttribute('data-run-id');
+          if (!rid) return;
+          if (
+            !confirm(
+              'Stop this running exam?\\n\\nPending scenarios will not start; workers already running may still finish. The scorecard will show Stopped by operator when the batch ends.'
+            )
+          ) {
+            return;
+          }
+          btn.disabled = true;
+          fetch('/api/run-parallel/cancel/' + encodeURIComponent(rid), { method: 'POST' })
+            .then(function (r) {
+              return r.json().then(function (j) {
+                return { r: r, j: j };
+              });
+            })
+            .then(function (o) {
+              if (!o.r.ok || !o.j || !o.j.ok) {
+                alert((o.j && o.j.error) || ('Stop failed HTTP ' + o.r.status));
+                btn.disabled = false;
+                return;
+              }
+              if (typeof setRunFeedbackToast === 'function') {
+                setRunFeedbackToast('Stop requested — exam will show as stopped when workers finish.');
+              }
+              void refreshStudentPanelD11({ soft: true });
+              if (typeof refreshScorecardHistory === 'function') void refreshScorecardHistory();
+            })
+            .catch(function () {
+              alert('Stop failed (network)');
+              btn.disabled = false;
+            });
         });
       });
       root.querySelectorAll('.pg-student-d11-row-del').forEach(function (btn) {
@@ -8050,6 +8500,28 @@ PAGE_HTML = """<!DOCTYPE html>
             'Trades (closed): ' + (hot.trades_closed_so_far != null ? hot.trades_closed_so_far : '0') +
               ' · entry attempts: ' + (hot.entries_attempted_so_far != null ? hot.entries_attempted_so_far : '0')
           );
+          const ltTerm = pj && pj.learning_trace_terminal_v1 ? pj.learning_trace_terminal_v1 : null;
+          if (ltTerm) {
+            lines.push('');
+            if (ltTerm.mode === 'baseline') {
+              lines.push(String(ltTerm.message || 'Reasoning Model: not used — Baseline run'));
+            } else if (ltTerm.mode === 'trace_disabled' || ltTerm.mode === 'trace_unavailable') {
+              lines.push(String(ltTerm.message || 'Reasoning indicators unavailable (trace disabled)'));
+            } else if (ltTerm.mode === 'live') {
+              const ac = ltTerm.student_decision_authority_v1_count;
+              const sc = ltTerm.student_output_sealed_count;
+              lines.push(
+                'Authority events (trace): ' + (ac != null ? String(ac) : '—') +
+                  ' · Sealed trades (trace): ' + (sc != null ? String(sc) : '—')
+              );
+              if (ac != null && sc != null && Number(ac) !== Number(sc)) {
+                lines.push('ERROR: authority mismatch (A vs S)');
+                lines.push('Counts: authority=' + String(ac) + ' sealed=' + String(sc));
+              } else if (ac != null && sc != null) {
+                lines.push('Integrity: authority count equals sealed trade count.');
+              }
+            }
+          }
           lines.push('');
           lines.push(
             'Candidates tested (search progress): ' +
@@ -8083,6 +8555,18 @@ PAGE_HTML = """<!DOCTYPE html>
         _lastTelemetryDetailText = detailText;
       }
       const dwKey = hot ? String(hot.decision_windows_processed || 0) : '0';
+      const ltA = pj && pj.learning_trace_terminal_v1 ? pj.learning_trace_terminal_v1 : null;
+      const ltAstr =
+        ltA && ltA.mode === 'live'
+          ? '|lt:' +
+            String(ltA.student_decision_authority_v1_count != null ? ltA.student_decision_authority_v1_count : '') +
+            ':' +
+            String(ltA.student_output_sealed_count != null ? ltA.student_output_sealed_count : '') +
+            ':' +
+            String(ltA.integrity_ok === false ? '0' : '1')
+          : ltA
+            ? '|ltm:' + String(ltA.mode || '')
+            : '';
       const streamKey =
         (running ? 'run' : 'idle') +
         '|' +
@@ -8094,13 +8578,14 @@ PAGE_HTML = """<!DOCTYPE html>
         '|' +
         String(hot && hot.recall_match_windows_so_far != null ? hot.recall_match_windows_so_far : '') +
         '|' +
-        String(hot && hot.candidate_phase != null ? hot.candidate_phase : '');
+        String(hot && hot.candidate_phase != null ? hot.candidate_phase : '') +
+        ltAstr;
       if (running && streamKey !== _lastTelemetryStreamKey && roll) {
         _lastTelemetryStreamKey = streamKey;
         const tick = document.createElement('div');
         tick.className = 'telemetry-tick';
         const ts = new Date().toISOString().slice(11, 19);
-        tick.textContent =
+        var tickLine =
           '[' +
           ts +
           '] dw=' +
@@ -8113,7 +8598,21 @@ PAGE_HTML = """<!DOCTYPE html>
           completed +
           '/' +
           total;
+        if (ltA && ltA.mode === 'live') {
+          tickLine +=
+            ' auth=' +
+            (ltA.student_decision_authority_v1_count != null ? ltA.student_decision_authority_v1_count : '—') +
+            ' sealed=' +
+            (ltA.student_output_sealed_count != null ? ltA.student_output_sealed_count : '—');
+        }
+        tick.textContent = tickLine;
         roll.appendChild(tick);
+        if (ltA && ltA.mode === 'live' && ltA.integrity_ok === false) {
+          const tick2 = document.createElement('div');
+          tick2.className = 'telemetry-tick telemetry-tick--err';
+          tick2.textContent = '[' + ts + '] ERROR: authority mismatch (A vs S)';
+          roll.appendChild(tick2);
+        }
         while (roll.children.length > 100) {
           roll.removeChild(roll.firstChild);
         }
@@ -8594,6 +9093,11 @@ PAGE_HTML = """<!DOCTYPE html>
     }
 
     function askDataPreferredJobId() {
+      /* In-flight parallel batch wins: scorecard selection / last-run id may be stale while a run is active. */
+      if (typeof pgGetInflightJobId === 'function') {
+        const infl = String(pgGetInflightJobId() || '').trim();
+        if (infl) return infl;
+      }
       if (selectedScorecardJobId && String(selectedScorecardJobId).trim()) {
         return String(selectedScorecardJobId).trim();
       }
@@ -9870,6 +10374,7 @@ PAGE_HTML = """<!DOCTYPE html>
             });
             void refreshScorecardHistory();
             void refreshStudentPanelD11({ soft: true });
+            if (typeof refreshReasoningModelBanner === 'function') void refreshReasoningModelBanner();
             return false;
           }
           if (pj.status === 'error') {
@@ -10261,7 +10766,7 @@ PAGE_HTML = """<!DOCTYPE html>
       });
     })();
     refreshReasoningModelBanner();
-    setInterval(refreshReasoningModelBanner, 45000);
+    setInterval(refreshReasoningModelBanner, 20000);
 
     function openModuleModal(m) {
       const d = document.getElementById('moduleDetailDialog');
@@ -11389,6 +11894,7 @@ PAGE_HTML = """<!DOCTYPE html>
       if (pj0.status === 'running') {
         document.body.classList.add('pg-run-active');
         resetStudentTriangleStarting();
+        if (typeof refreshReasoningModelBanner === 'function') void refreshReasoningModelBanner();
         void refreshStudentPanelD11({ soft: true });
         updateRunStatusLine('Resuming — batch still running (page was refreshed)…');
         const resumeT0 = Date.now();
@@ -11485,6 +11991,7 @@ PAGE_HTML = """<!DOCTYPE html>
           });
           void refreshStudentPanelD11({ soft: true });
           refreshScorecardHistory();
+          if (typeof refreshReasoningModelBanner === 'function') void refreshReasoningModelBanner();
           await new Promise(function (r) {
             setTimeout(r, 1500);
           });
