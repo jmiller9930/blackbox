@@ -1829,7 +1829,16 @@ def create_app() -> Flask:
         with _JOBS_LOCK:
             j = _JOBS.get(job_id)
         if not j:
-            return jsonify({"ok": False, "error": "Unknown or expired job_id"}), 404
+            return jsonify(
+                {
+                    "ok": False,
+                    "error": (
+                        "Unknown or expired job_id — in-memory batch state is gone "
+                        "(Flask restart/deploy, process replaced, or stale job id). "
+                        "Hard-refresh the page and start a new exam."
+                    ),
+                }
+            ), 404
         out: dict[str, Any] = {
             "ok": True,
             "status": j["status"],
@@ -1910,7 +1919,15 @@ def create_app() -> Flask:
         with _JOBS_LOCK:
             j = _JOBS.get(jid)
             if not j:
-                return jsonify({"ok": False, "error": "Unknown or expired job_id"}), 404
+                return jsonify(
+                    {
+                        "ok": False,
+                        "error": (
+                            "Unknown or expired job_id — no in-memory job (restart or stale id). "
+                            "Hard-refresh and start a new exam."
+                        ),
+                    }
+                ), 404
             st = str(j.get("status") or "").strip().lower()
             if st not in ("running", "preflight"):
                 return jsonify(
@@ -6040,6 +6057,10 @@ PAGE_HTML = """<!DOCTYPE html>
       color: #ff7b72;
       font-weight: 700;
     }
+    .telemetry-rolling-log .telemetry-tick--rm-preflight {
+      color: #d8e3ee;
+      font-weight: 600;
+    }
     .live-telemetry-panel {
       margin: 0;
       font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
@@ -6050,6 +6071,7 @@ PAGE_HTML = """<!DOCTYPE html>
       min-height: 6rem;
       max-height: 12rem;
       overflow: auto;
+      color: #c5d0db;
     }
     .pg-runtime-stack .pg-panel-score {
       flex: 1 1 auto;
@@ -10867,7 +10889,9 @@ PAGE_HTML = """<!DOCTYPE html>
         runWorkersCap = startJ.workers_used != null ? startJ.workers_used : null;
         const ltp = document.getElementById('liveTelemetryPanel');
         if (ltp) {
-          ltp.textContent = 'Live telemetry — waiting for worker snapshots…';
+          ltp.textContent =
+            'RM preflight: waiting for first /api/run-parallel/status response…\\n' +
+            'If this stays blank and Results shows \"expired job_id\", the server lost in-memory jobs (restart) — hard-refresh and run again.';
           _lastTelemetryDetailText = ltp.textContent;
         }
         showBatchConcurrencyBanner(total, runWorkersCap, 'run');
@@ -10887,6 +10911,20 @@ PAGE_HTML = """<!DOCTYPE html>
           parallelCancelBtn.style.display = 'inline-block';
           parallelCancelBtn.disabled = false;
         }
+        (function appendClientPreflightHint() {
+          const roll0 = document.getElementById('telemetryRollingLog');
+          if (!roll0 || !jobId) return;
+          const t0 = document.createElement('div');
+          t0.className = 'telemetry-tick telemetry-tick--rm-preflight';
+          t0.textContent =
+            '[' +
+            new Date().toISOString().slice(11, 19) +
+            '] Client: batch accepted — polling /api/run-parallel/status/' +
+            jobId.slice(0, 8) +
+            '… every 1.5s. RM preflight lines appear once the server returns status.';
+          roll0.appendChild(t0);
+          roll0.scrollTop = roll0.scrollHeight;
+        })();
 
         const pollOnce = async () => {
           const pr = await fetch('/api/run-parallel/status/' + jobId);
@@ -10901,7 +10939,17 @@ PAGE_HTML = """<!DOCTYPE html>
             );
           }
           if (!pr.ok) {
-            throw new Error(pj.error || 'status failed');
+            const ex0 = String((pj && pj.error) || 'status failed');
+            if (pr.status === 404 && ex0.indexOf('expired') >= 0) {
+              throw new Error(
+                'Server has no in-memory record for this job (HTTP 404). Typical causes: the Pattern Game ' +
+                  'process restarted during RM preflight (deploy/restart), you opened an old tab with a stale job id, ' +
+                  'or a proxy hit a different backend. Fix: hard-refresh this page, then click Run exam again. ' +
+                  'Detail: ' +
+                  ex0
+              );
+            }
+            throw new Error(ex0);
           }
           const elapsed = Math.floor((Date.now() - t0) / 1000);
           const elapsedStr = elapsed >= 60 ? (Math.floor(elapsed / 60) + 'm ' + (elapsed % 60) + 's') : (elapsed + 's');
