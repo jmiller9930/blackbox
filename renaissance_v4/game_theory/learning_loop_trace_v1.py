@@ -336,6 +336,9 @@ def build_learning_loop_trace_v1(job_id: str) -> dict[str, Any]:
     elif status == "cancelled":
         ns = "partial"
         sm = "Batch cancelled mid-flight — aggregates may be partial."
+    elif status == "preflight":
+        ns = "unknown"
+        sm = "RM preflight gate — parallel workers have not started yet."
     elif status == "running":
         ns = "unknown"
         sm = "Run still in flight — scorecard line may be incomplete."

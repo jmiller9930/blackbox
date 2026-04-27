@@ -6,7 +6,9 @@ is merged into each scenario and drives **calendar tape slicing**; trade window 
 ``market_bars_5m``** before ``run_manifest_replay`` (see ``replay_data_audit`` / ``candle_timeframe_rollup_v1``).
 
 Batches use **``POST /api/run-parallel/start``** + polling **``GET /api/run-parallel/status/<job_id>``**
-(or **``GET /api/run-status/<job_id>``**, same payload) so the UI shows **per-scenario progress** plus
+(or **``GET /api/run-status/<job_id>``**, same payload). New jobs begin with **``status: preflight``** until
+``run_rm_preflight_wiring_v1`` passes, then **``status: running``** while ``run_scenarios_parallel`` executes.
+The UI shows **per-scenario progress** plus
 **``POST /api/run-parallel/cancel/<job_id>``** to request cancel (best-effort: pending scenarios are not scheduled; workers already running may finish),
 **live telemetry** (decision windows, trades, candidate phase) from worker-written JSON snapshots.
 Status JSON also exposes **``telemetry_dir``** (on-disk snapshot folder), **``job_created_unix``**, and **``telemetry_progress_v1``**
@@ -108,6 +110,7 @@ import html
 import json
 import os
 import re
+import sys
 import threading
 import time
 import uuid
@@ -128,7 +131,7 @@ _PATTERN_BANNER_WEBP_PATH = _RV4_ROOT / "assets" / "pattern.webp"
 _PATTERN_GAME_BANNER_BOOT_JS = _GAME_THEORY / "static" / "pattern_game_banner_boot.js"
 
 # Operator-visible web UI bundle version — bump when changing PAGE_HTML (HTML/CSS/JS) so deploys are provable.
-PATTERN_GAME_WEB_UI_VERSION = "2.19.102"
+PATTERN_GAME_WEB_UI_VERSION = "2.19.103"
 
 from renaissance_v4.game_theory.reasoning_model_operator_surface_v1 import (
     get_reasoning_model_operator_snapshot_v1,
@@ -384,13 +387,28 @@ def _parallel_job_cancel_requested(job_id: str) -> bool:
         return bool(j and j.get("cancel_requested"))
 
 
+def _parallel_job_append_rm_preflight_line_v1(job_id: str, line: str) -> None:
+    """Append operator-visible RM preflight line (mirrored in status JSON + UI terminal)."""
+    jid = str(job_id or "").strip()
+    msg = str(line or "").strip()
+    if not jid or not msg:
+        return
+    with _JOBS_LOCK:
+        j = _JOBS.get(jid)
+        if not isinstance(j, dict):
+            return
+        j.setdefault("rm_preflight_terminal_lines_v1", []).append(msg)
+        j["last_message"] = msg
+    print(f"[pattern_game_parallel] job_id={jid} {msg}", file=sys.stderr, flush=True)
+
+
 def _merge_scorecard_with_inflight(
     file_rows: list[dict[str, Any]],
     *,
     limit: int,
 ) -> tuple[list[dict[str, Any]], int]:
     """
-    Prepend **running** parallel jobs so operators see **start time** before JSONL append.
+    Prepend **preflight** and **running** parallel jobs so operators see **start time** before JSONL append.
 
     Completed batches appear only from ``batch_scorecard.jsonl`` (one line at end of run).
     """
@@ -398,7 +416,8 @@ def _merge_scorecard_with_inflight(
     inflight: list[tuple[float, dict[str, Any]]] = []
     with _JOBS_LOCK:
         for jid, v in list(_JOBS.items()):
-            if v.get("status") != "running":
+            st_j = str(v.get("status") or "").strip().lower()
+            if st_j not in ("running", "preflight"):
                 continue
             started = str(v.get("started_at_utc") or "").strip()
             if not started:
@@ -418,7 +437,7 @@ def _merge_scorecard_with_inflight(
                 "ok_count": None,
                 "failed_count": None,
                 "workers_used": v.get("workers_used"),
-                "status": "running",
+                "status": st_j,
                 "scorecard_inflight": True,
                 "session_log_batch_dir": None,
             }
@@ -1310,7 +1329,7 @@ def create_app() -> Flask:
         )
         with _JOBS_LOCK:
             _JOBS[job_id] = {
-                "status": "running",
+                "status": "preflight",
                 "created": time.time(),
                 "started_at_utc": started_iso,
                 "total": len(scenarios),
@@ -1327,6 +1346,7 @@ def create_app() -> Flask:
                 "cancel_requested": False,
                 "operator_run_mode_surface_v1": orsf,
                 "reasoning_tile_run_kind_v1": reasoning_tile_run_kind_v1,
+                "rm_preflight_terminal_lines_v1": [],
             }
 
         def run_job() -> None:
@@ -1371,6 +1391,7 @@ def create_app() -> Flask:
             results: list[dict[str, Any]] | None = None
             referee_parallel_completed_emit_v1 = False
             try:
+                _parallel_job_append_rm_preflight_line_v1(job_id, "RM PREFLIGHT START")
                 from renaissance_v4.game_theory.rm_preflight_wiring_v1 import (
                     FAILED_PREFLIGHT_STATUS_V1,
                     run_rm_preflight_wiring_v1,
@@ -1389,6 +1410,10 @@ def create_app() -> Flask:
                             f"{FAILED_PREFLIGHT_STATUS_V1}: missing or invalid stages "
                             f"{pf_audit.get('missing_stages_v1')}"
                         )
+                    )
+                    _parallel_job_append_rm_preflight_line_v1(
+                        job_id,
+                        "RM PREFLIGHT FAIL: " + (err_msg[:900] if len(err_msg) > 900 else err_msg),
                     )
                     exam_line_pf = _exam_run_line_meta_for_parallel_job_v1(
                         exam_req=exam_req if isinstance(exam_req, dict) else None,
@@ -1433,6 +1458,14 @@ def create_app() -> Flask:
                             }
                     return
 
+                pass_msg = "RM PREFLIGHT PASS"
+                if pf_audit.get("skipped_v1"):
+                    pass_msg += " (skipped: " + str(pf_audit.get("skip_reason_v1") or "policy") + ")"
+                _parallel_job_append_rm_preflight_line_v1(job_id, pass_msg)
+                with _JOBS_LOCK:
+                    j_go = _JOBS.get(job_id)
+                    if j_go:
+                        j_go["status"] = "running"
                 emit_referee_execution_started_v1(
                     job_id=job_id, fingerprint=lt_fp, scenario_total=len(scenarios)
                 )
@@ -1752,6 +1785,9 @@ def create_app() -> Flask:
             out["error"] = j["error"]
         if j.get("batch_timing") is not None:
             out["batch_timing"] = j["batch_timing"]
+        rpl = j.get("rm_preflight_terminal_lines_v1")
+        if isinstance(rpl, list) and rpl:
+            out["rm_preflight_terminal_lines_v1"] = list(rpl)
         if j["status"] == "done" and j.get("result"):
             out["result"] = j["result"]
         _parallel_status_learning_trace_terminal_v1(job_id, j, out)
@@ -1776,7 +1812,7 @@ def create_app() -> Flask:
             if not j:
                 return jsonify({"ok": False, "error": "Unknown or expired job_id"}), 404
             st = str(j.get("status") or "").strip().lower()
-            if st != "running":
+            if st not in ("running", "preflight"):
                 return jsonify(
                     {"ok": False, "error": f"Job is not running (status={j.get('status')!r})"}
                 ), 400
@@ -1859,7 +1895,7 @@ def create_app() -> Flask:
                         telemetry_echo=echo,
                     )
                     job_res = "live_job_terminal"
-                elif st == "running":
+                elif st in ("running", "preflight"):
                     return jsonify(
                         {
                             "ok": False,
@@ -2005,6 +2041,11 @@ def create_app() -> Flask:
                 run_rm_preflight_wiring_v1,
             )
 
+            print(
+                f"[pattern_game_parallel] job_id={job_id} RM PREFLIGHT START (blocking /api/run-parallel)",
+                file=sys.stderr,
+                flush=True,
+            )
             pf_audit_block = run_rm_preflight_wiring_v1(
                 scenarios=scenarios,
                 job_id=job_id,
@@ -2033,6 +2074,11 @@ def create_app() -> Flask:
                 if isinstance(exam_line_pb, dict):
                     exam_line_pb["rm_preflight_audit_v1"] = pf_audit_block
                     exam_line_pb["batch_terminal_status_v1"] = FAILED_PREFLIGHT_STATUS_V1
+                print(
+                    f"[pattern_game_parallel] job_id={job_id} RM PREFLIGHT FAIL (blocking): {err_pb[:800]}",
+                    file=sys.stderr,
+                    flush=True,
+                )
                 timing_pb = record_parallel_batch_finished(
                     job_id=job_id,
                     started_at_utc=started_iso,
@@ -2056,6 +2102,10 @@ def create_app() -> Flask:
                     }
                 ), 400
 
+            _bp_pass = "RM PREFLIGHT PASS (blocking)"
+            if pf_audit_block.get("skipped_v1"):
+                _bp_pass += " (skipped: " + str(pf_audit_block.get("skip_reason_v1") or "policy") + ")"
+            print(f"[pattern_game_parallel] job_id={job_id} {_bp_pass}", file=sys.stderr, flush=True)
             emit_referee_execution_started_v1(
                 job_id=job_id, fingerprint=lt_fp_block, scenario_total=len(scenarios)
             )
@@ -6892,6 +6942,8 @@ PAGE_HTML = """<!DOCTYPE html>
 
     let _lastTelemetryDetailText = '';
     let _lastTelemetryStreamKey = '';
+    let _pgRmPreflightJobId = '';
+    let _pgRmPreflightLineIdx = 0;
 
     function _memoryModeLabelFromEcho(modeRaw) {
       const m = String(modeRaw || '').trim().toLowerCase();
@@ -6907,7 +6959,7 @@ PAGE_HTML = """<!DOCTYPE html>
       return '—';
     }
 
-    function updateMemoryStatusCardFromPanel(panel, echo, hot, running) {
+    function updateMemoryStatusCardFromPanel(panel, echo, hot, running, preflightPhase) {
       const narr = document.getElementById('memoryStatusNarrative');
       const mMode = document.getElementById('memStMode');
       const mSaved = document.getElementById('memStSaved');
@@ -6919,6 +6971,18 @@ PAGE_HTML = """<!DOCTYPE html>
         mMode.textContent = echo && echo.context_signature_memory_mode != null
           ? _memoryModeLabelFromEcho(echo.context_signature_memory_mode)
           : _memoryModeLabelFromEcho(CONTEXT_SIGNATURE_MEMORY_MODE_PRODUCT);
+      }
+      if (preflightPhase) {
+        if (narr) {
+          narr.textContent =
+            'RM preflight — Reasoning Model wiring gate in progress. Parallel workers have not started yet.';
+        }
+        if (mSaved) mSaved.textContent = '—';
+        if (mLoaded) mLoaded.textContent = '—';
+        if (mRec) mRec.textContent = '0';
+        if (mMatch) mMatch.textContent = '0';
+        if (mBias) mBias.textContent = '0';
+        return;
       }
       if (panel && typeof panel === 'object') {
         if (narr) narr.textContent = String(panel.narrative || '').trim() || (running ? 'Run in progress — memory counters update live from the busiest worker.' : '');
@@ -8347,7 +8411,8 @@ PAGE_HTML = """<!DOCTYPE html>
       for (let i = 0; i < rows.length; i++) {
         const row = rows[i] || {};
         const rid = row.run_id != null ? String(row.run_id) : '';
-        const infl = row.is_inflight === true || row.status === 'running';
+        const infl =
+          row.is_inflight === true || row.status === 'running' || row.status === 'preflight';
         const trCls = infl ? ' data-run-inflight="1" style="opacity:0.92"' : '';
         const rv = infl ? null : l1RoadRowMeta(rid, ov);
         const bandForAttr = rv && rv.band ? String(rv.band) : '';
@@ -8769,7 +8834,16 @@ PAGE_HTML = """<!DOCTYPE html>
       const total = pj && pj.total != null ? pj.total : 0;
       const elapsed = opts && opts.elapsedSec != null ? opts.elapsedSec : 0;
       const lm = (pj && pj.last_message) || '';
+      const preflight = pj && pj.status === 'preflight';
       const running = pj && pj.status === 'running';
+      const batchActive = !!(pj && (pj.status === 'running' || pj.status === 'preflight'));
+      const jidForPf = (opts && opts.parallelJobId) ? String(opts.parallelJobId) : '';
+      if (jidForPf && jidForPf !== _pgRmPreflightJobId) {
+        _pgRmPreflightJobId = jidForPf;
+        _pgRmPreflightLineIdx = 0;
+      }
+      const rpl =
+        pj && Array.isArray(pj.rm_preflight_terminal_lines_v1) ? pj.rm_preflight_terminal_lines_v1 : [];
       let hot = null;
       if (rows.length) {
         rows.sort(
@@ -8777,7 +8851,7 @@ PAGE_HTML = """<!DOCTYPE html>
         );
         hot = rows[0];
       }
-      updateMemoryStatusCardFromPanel(null, echo, hot, running);
+      updateMemoryStatusCardFromPanel(null, echo, hot, running, preflight);
 
       const recipe =
         echo.operator_recipe_label || echo.operator_recipe_id || (opts && opts.recipeLabel) || '—';
@@ -8789,7 +8863,13 @@ PAGE_HTML = """<!DOCTYPE html>
       const winStr =
         winM != null ? String(winM) + ' months' : ((opts && opts.windowLabel) ? opts.windowLabel : '—');
       const lines = [];
-      if (running) {
+      if (rpl.length) {
+        for (let ri = 0; ri < rpl.length; ri++) {
+          lines.push(String(rpl[ri]));
+        }
+        lines.push('');
+      }
+      if (batchActive) {
         lines.push('Run: ' + recipe);
         lines.push('Framework: ' + fw);
         lines.push('Window: ' + winStr);
@@ -8870,6 +8950,10 @@ PAGE_HTML = """<!DOCTYPE html>
             'Elapsed: ' + fmtTelemetryHMS(elapsed) +
               (rate != null ? ' · ~' + rate + ' decision windows/s (busiest worker)' : '')
           );
+        } else if (preflight) {
+          lines.push('');
+          lines.push('RM preflight gate — parallel workers have not started yet (see rolling log below).');
+          lines.push('Elapsed: ' + fmtTelemetryHMS(elapsed));
         } else {
           lines.push('');
           lines.push('Workers starting — counters appear when the first decision windows are processed.');
@@ -8879,7 +8963,7 @@ PAGE_HTML = """<!DOCTYPE html>
           lines.push('');
           lines.push('(' + rows.length + ' telemetry file(s); busiest worker shown by decision window count.)');
         }
-      } else {
+      } else if (!batchActive) {
         lines.push('No active batch job in this browser session (or job already finished).');
         lines.push('Last snapshot area below stays for the previous run until a new one starts.');
       }
@@ -8902,7 +8986,7 @@ PAGE_HTML = """<!DOCTYPE html>
             ? '|ltm:' + String(ltA.mode || '')
             : '';
       const streamKey =
-        (running ? 'run' : 'idle') +
+        (batchActive ? 'run' : 'idle') +
         '|' +
         String(completed) +
         '|' +
@@ -8913,7 +8997,22 @@ PAGE_HTML = """<!DOCTYPE html>
         String(hot && hot.recall_match_windows_so_far != null ? hot.recall_match_windows_so_far : '') +
         '|' +
         String(hot && hot.candidate_phase != null ? hot.candidate_phase : '') +
+        '|pf:' +
+        String(rpl.length) +
         ltAstr;
+      if (roll && rpl.length > _pgRmPreflightLineIdx) {
+        for (let ri = _pgRmPreflightLineIdx; ri < rpl.length; ri++) {
+          const tpf = document.createElement('div');
+          tpf.className = 'telemetry-tick telemetry-tick--rm-preflight';
+          tpf.textContent = '[' + new Date().toISOString().slice(11, 19) + '] ' + String(rpl[ri]);
+          roll.appendChild(tpf);
+        }
+        _pgRmPreflightLineIdx = rpl.length;
+        while (roll.children.length > 100) {
+          roll.removeChild(roll.firstChild);
+        }
+        roll.scrollTop = roll.scrollHeight;
+      }
       if (running && streamKey !== _lastTelemetryStreamKey && roll) {
         _lastTelemetryStreamKey = streamKey;
         const tick = document.createElement('div');
@@ -8953,7 +9052,7 @@ PAGE_HTML = """<!DOCTYPE html>
         roll.scrollTop = roll.scrollHeight;
       }
       updateTerminalCompactSummary(
-        pj, running, completed, total, elapsed, hot, winStr, lm, echo, recipe
+        pj, batchActive, completed, total, elapsed, hot, winStr, lm, echo, recipe
       );
       updateFocusTerminalOverviewTile();
     }
@@ -9034,14 +9133,18 @@ PAGE_HTML = """<!DOCTYPE html>
       );
     }
 
-    function updateTerminalCompactSummary(pj, running, completed, total, elapsed, hot, winStr, lm, echo, recipe) {
+    function updateTerminalCompactSummary(pj, batchActive, completed, total, elapsed, hot, winStr, lm, echo, recipe) {
       const st = document.getElementById('tcsStatus');
       const bat = document.getElementById('tcsBatch');
       const win = document.getElementById('tcsWindow');
       const dwEl = document.getElementById('tcsDw');
       const elp = document.getElementById('tcsElapsed');
       if (!st || !bat || !win || !dwEl || !elp) return;
-      const status = running
+      const preflightSt = pj && pj.status === 'preflight';
+      const runningSt = pj && pj.status === 'running';
+      const status = preflightSt
+        ? 'Preflight'
+        : runningSt
         ? 'Running'
         : pj && pj.status === 'done'
           ? 'Done'
@@ -9052,12 +9155,18 @@ PAGE_HTML = """<!DOCTYPE html>
               : 'Idle';
       st.textContent = status;
       bat.textContent =
-        total > 0 ? completed + ' / ' + total + ' scenarios' : (pj && pj.status ? String(pj.status) : '—');
+        preflightSt
+          ? '0 / ' + total + ' (RM preflight gate)'
+          : total > 0
+            ? completed + ' / ' + total + ' scenarios'
+            : (pj && pj.status ? String(pj.status) : '—');
       win.textContent = winStr || '—';
-      if (hot && running) {
+      if (preflightSt) {
+        dwEl.textContent = lm ? String(lm).slice(0, 80) : 'RM preflight…';
+      } else if (hot && runningSt) {
         const dw = Number(hot.decision_windows_processed || 0);
         dwEl.textContent = dw.toLocaleString() + (lm ? ' · ' + String(lm).slice(0, 40) : '');
-      } else if (!running && echo && echo.evaluation_window_calendar_months != null) {
+      } else if (!batchActive && echo && echo.evaluation_window_calendar_months != null) {
         dwEl.textContent = '—';
       } else {
         dwEl.textContent = hot ? Number(hot.decision_windows_processed || 0).toLocaleString() : '—';
@@ -9070,6 +9179,8 @@ PAGE_HTML = """<!DOCTYPE html>
       if (roll) roll.innerHTML = '';
       _lastTelemetryStreamKey = '';
       _lastTelemetryDetailText = '';
+      _pgRmPreflightJobId = '';
+      _pgRmPreflightLineIdx = 0;
     }
 
     function hideLiveTelemetryPanel() {
@@ -9724,7 +9835,9 @@ PAGE_HTML = """<!DOCTYPE html>
           return;
         }
         for (const e of rows) {
-          const inflightRow = !!(e.scorecard_inflight || e.status === 'running');
+          const inflightRow = !!(
+            e.scorecard_inflight || e.status === 'running' || e.status === 'preflight'
+          );
           const tr = document.createElement('tr');
           tr.className = 'scorecard-row' + (inflightRow ? ' scorecard-row-inflight' : '');
           const jid = (e.job_id != null && e.job_id !== undefined) ? String(e.job_id) : '';
@@ -9733,7 +9846,9 @@ PAGE_HTML = """<!DOCTYPE html>
             tr.classList.add('selected');
           }
           const st = inflightRow
-            ? '<span class="st-running" title="Still running — JSONL line appears when the batch completes">running</span>'
+            ? '<span class="st-running" title="In flight — JSONL line appears when the batch completes">' +
+              escapeHtml(e.status === 'preflight' ? 'preflight' : 'running') +
+              '</span>'
             : (e.status === 'done'
               ? '<span class="st-ok">done</span>'
               : '<span class="st-err">' + escapeHtml(e.status || '—') + '</span>');
@@ -10657,10 +10772,10 @@ PAGE_HTML = """<!DOCTYPE html>
         }
         showBatchConcurrencyBanner(total, runWorkersCap, 'run');
         updateRunStatusLine(
-          'Running — ' + total + ' scenario(s) · up to ' + (runWorkersCap != null ? runWorkersCap : '?') +
-          ' parallel process(es) (min of batch size and slider) · updates every 1.5s below.'
+          'Preflight — RM wiring gate runs first; then up to ' + (runWorkersCap != null ? runWorkersCap : '?') +
+          ' parallel worker(s) for ' + total + ' scenario(s). Status updates every 1.5s.'
         );
-        setProgressUI(0, total, 'Queued — up to ' + (runWorkersCap != null ? runWorkersCap : '?') + ' process(es) · waiting for first replay to finish…');
+        setProgressUI(0, total, 'RM preflight (Reasoning Model wiring gate) — workers start only after PASS…');
         void refreshScorecardHistory();
         setRunFeedbackToast(
           'Batch started — job ' + jobId + ' · ' + total + ' scenario(s). Header shows Running; scorecard adds an in-flight row with start time (refreshes while this page polls).'
@@ -10691,20 +10806,26 @@ PAGE_HTML = """<!DOCTYPE html>
           const elapsed = Math.floor((Date.now() - t0) / 1000);
           const elapsedStr = elapsed >= 60 ? (Math.floor(elapsed / 60) + 'm ' + (elapsed % 60) + 's') : (elapsed + 's');
           const wCap = pj.workers_used != null ? pj.workers_used : runWorkersCap;
-          if (pj.status === 'running') {
+          if (pj.status === 'running' || pj.status === 'preflight') {
             const c = pj.completed || 0;
             const t = statusPollTotal(pj, total);
             const lm = pj.last_message || '';
-            const sub = (lm ? (lm + ' · ') : '') + 'up to ' + (wCap != null ? wCap : '?') + ' parallel · ' + elapsedStr;
+            const sub =
+              pj.status === 'preflight'
+                ? (lm ? lm + ' · ' : 'RM preflight… · ') + elapsedStr
+                : (lm ? lm + ' · ' : '') + 'up to ' + (wCap != null ? wCap : '?') + ' parallel · ' + elapsedStr;
             setProgressUI(c, t, sub);
             updateRunStatusLine(
-              'Running — ' + c + '/' + t + ' scenario(s) finished · up to ' + (wCap != null ? wCap : '?') +
-              ' parallel process(es) · ' + elapsedStr + ' elapsed'
+              pj.status === 'preflight'
+                ? 'Preflight — RM wiring gate (workers not started) · ' + elapsedStr + ' elapsed'
+                : 'Running — ' + c + '/' + t + ' scenario(s) finished · up to ' + (wCap != null ? wCap : '?') +
+                  ' parallel process(es) · ' + elapsedStr + ' elapsed'
             );
             renderLiveTelemetryPanel(pj, {
               elapsedSec: elapsed,
               recipeLabel: recipeLabelFromDom(),
               windowLabel: evaluationWindowLabelFromDom(),
+              parallelJobId: jobId,
             });
             void refreshScorecardHistory();
             void refreshStudentPanelD11({ soft: true });
@@ -10725,6 +10846,7 @@ PAGE_HTML = """<!DOCTYPE html>
               elapsedSec: elapsed,
               recipeLabel: recipeLabelFromDom(),
               windowLabel: evaluationWindowLabelFromDom(),
+              parallelJobId: jobId,
             });
             showBatchConcurrencyBanner(total, wCap, 'error');
             if (pj.batch_timing) updateLastBatchRunLine(pj.batch_timing);
@@ -10745,6 +10867,7 @@ PAGE_HTML = """<!DOCTYPE html>
               elapsedSec: elapsed,
               recipeLabel: recipeLabelFromDom(),
               windowLabel: evaluationWindowLabelFromDom(),
+              parallelJobId: jobId,
             });
             showBatchConcurrencyBanner(total, wCap, 'error');
             if (pj.batch_timing) updateLastBatchRunLine(pj.batch_timing);
@@ -10821,6 +10944,7 @@ PAGE_HTML = """<!DOCTYPE html>
               elapsedSec: elapsed,
               recipeLabel: recipeLabelFromDom(),
               windowLabel: evaluationWindowLabelFromDom(),
+              parallelJobId: jobId,
             });
             return true;
           }
@@ -12225,17 +12349,22 @@ PAGE_HTML = """<!DOCTYPE html>
       } catch (e) {
         return;
       }
-      if (pj0.status === 'running') {
+      if (pj0.status === 'running' || pj0.status === 'preflight') {
         document.body.classList.add('pg-run-active');
         resetStudentTriangleStarting();
         if (typeof refreshReasoningModelBanner === 'function') void refreshReasoningModelBanner();
         void refreshStudentPanelD11({ soft: true });
-        updateRunStatusLine('Resuming — batch still running (page was refreshed)…');
+        updateRunStatusLine(
+          pj0.status === 'preflight'
+            ? 'Resuming — RM preflight or batch still active (page was refreshed)…'
+            : 'Resuming — batch still running (page was refreshed)…'
+        );
         const resumeT0 = Date.now();
         renderLiveTelemetryPanel(pj0, {
           elapsedSec: 0,
           recipeLabel: recipeLabelFromDom(),
           windowLabel: evaluationWindowLabelFromDom(),
+          parallelJobId: jid,
         });
         const resumeCancelBtn = document.getElementById('parallelCancelBtn');
         if (resumeCancelBtn) {
@@ -12264,6 +12393,7 @@ PAGE_HTML = """<!DOCTYPE html>
               elapsedSec: resumeElapsedErr,
               recipeLabel: recipeLabelFromDom(),
               windowLabel: evaluationWindowLabelFromDom(),
+              parallelJobId: jid,
             });
             renderStudentTriangleBatchFailed(pj.error || 'Job failed');
             if (pj.batch_timing) updateLastBatchRunLine(pj.batch_timing);
@@ -12284,6 +12414,7 @@ PAGE_HTML = """<!DOCTYPE html>
               elapsedSec: resumeElapsedCan,
               recipeLabel: recipeLabelFromDom(),
               windowLabel: evaluationWindowLabelFromDom(),
+              parallelJobId: jid,
             });
             if (pj.batch_timing) updateLastBatchRunLine(pj.batch_timing);
             await show(null, null, String(pj.error || 'Batch cancelled.'));
@@ -12305,6 +12436,7 @@ PAGE_HTML = """<!DOCTYPE html>
               elapsedSec: resumeElapsedDone,
               recipeLabel: recipeLabelFromDom(),
               windowLabel: evaluationWindowLabelFromDom(),
+              parallelJobId: jid,
             });
             if (pj.result) {
               updateMemoryStatusFromBatchResultPayload(pj.result);
@@ -12322,6 +12454,7 @@ PAGE_HTML = """<!DOCTYPE html>
             elapsedSec: resumeElapsedPoll,
             recipeLabel: recipeLabelFromDom(),
             windowLabel: evaluationWindowLabelFromDom(),
+            parallelJobId: jid,
           });
           void refreshStudentPanelD11({ soft: true });
           refreshScorecardHistory();
@@ -12342,6 +12475,7 @@ PAGE_HTML = """<!DOCTYPE html>
             elapsedSec: Math.floor(RUN_TIMEOUT_MS / 1000),
             recipeLabel: recipeLabelFromDom(),
             windowLabel: evaluationWindowLabelFromDom(),
+            parallelJobId: jid,
           }
         );
         await show(

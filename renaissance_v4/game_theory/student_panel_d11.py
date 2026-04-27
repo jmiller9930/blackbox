@@ -404,7 +404,7 @@ def build_d11_run_rows_v1(
     chronological = list(reversed(entries_newest_first))
     by_fp: dict[str, list[dict[str, Any]]] = {}
     for r in chronological:
-        if str(r.get("status") or "") == "running" or r.get("scorecard_inflight"):
+        if str(r.get("status") or "") in ("running", "preflight") or r.get("scorecard_inflight"):
             continue
         fp = _fingerprint_from_scorecard_line(r) or "__no_fp__"
         by_fp.setdefault(fp, []).append(r)
@@ -421,7 +421,7 @@ def build_d11_run_rows_v1(
 
         job_id = str(r.get("job_id") or "")
         st = str(r.get("status") or "")
-        is_running = st == "running" or bool(r.get("scorecard_inflight"))
+        is_running = st in ("running", "preflight") or bool(r.get("scorecard_inflight"))
 
         if is_running:
             row_obj: dict[str, Any] = {
@@ -440,14 +440,14 @@ def build_d11_run_rows_v1(
                 "behavior_changed": "—",
                 "evidence": None,
                 "outcome_improved": "—",
-                "groundhog_state": "RUNNING",
+                "groundhog_state": "PREFLIGHT" if st == "preflight" else "RUNNING",
                 "run_progress": (
                     f"{_int(r.get('total_processed'), 0)}/{_int(r.get('total_scenarios'), 0)}"
                 ),
                 "parallel_cancel_requested_v1": bool(r.get("parallel_cancel_requested_v1")),
                 "is_inflight": True,
                 "data_gaps": [],
-                "status": "running",
+                "status": st if st in ("running", "preflight") else "running",
                 "fingerprint": _fingerprint_from_scorecard_line(r),
                 "baseline_run_id": None,
                 "exam_e_score_v1": None,

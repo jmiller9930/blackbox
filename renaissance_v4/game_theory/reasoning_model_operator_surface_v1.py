@@ -156,7 +156,7 @@ def _parallel_job_runtime_from_web_app_v1(
     """
     Resolve ``(effective_job_id, job_row_or_none, auto_picked)`` from the Flask in-memory parallel store.
 
-    When ``requested_job_id`` is empty, picks the **newest** ``status=running`` job so
+    When ``requested_job_id`` is empty, picks the **newest** ``status`` in ``running`` / ``preflight`` so
     ``GET /api/reasoning-model/status`` can reflect live execution without ``?job_id=``.
     """
     req = (requested_job_id or "").strip()
@@ -178,7 +178,7 @@ def _parallel_job_runtime_from_web_app_v1(
         for k, v in list(store.items()):
             if not isinstance(v, dict):
                 continue
-            if str(v.get("status") or "").strip().lower() != "running":
+            if str(v.get("status") or "").strip().lower() not in ("running", "preflight"):
                 continue
             t = float(v.get("created") or 0)
             if t >= best_t:
@@ -509,10 +509,12 @@ def get_reasoning_model_operator_snapshot_v1(job_id: str | None = None) -> dict[
     else:
         headline_badge_v1 = "Degraded"
 
-    server_running = bool(
-        parallel_rt is not None
-        and str(parallel_rt.get("status") or "").strip().lower() == "running"
+    parallel_st = (
+        str(parallel_rt.get("status") or "").strip().lower()
+        if isinstance(parallel_rt, dict)
+        else ""
     )
+    server_running = bool(parallel_rt is not None and parallel_st in ("running", "preflight"))
     run_kind = "unknown"
     if isinstance(parallel_rt, dict):
         rk0 = str(parallel_rt.get("reasoning_tile_run_kind_v1") or "").strip().lower()
@@ -535,7 +537,11 @@ def get_reasoning_model_operator_snapshot_v1(job_id: str | None = None) -> dict[
             headline_badge_v1 = "Fault — Reasoning model unavailable or blocked"
         elif not fault_like and headline_badge_v1 != "Router off":
             if run_kind == "student":
-                headline_badge_v1 = "Active — Student reasoning in progress"
+                headline_badge_v1 = (
+                    "Active — RM preflight (wiring gate)"
+                    if parallel_st == "preflight"
+                    else "Active — Student reasoning in progress"
+                )
             elif run_kind == "baseline":
                 headline_badge_v1 = "Active — baseline replay"
             else:
