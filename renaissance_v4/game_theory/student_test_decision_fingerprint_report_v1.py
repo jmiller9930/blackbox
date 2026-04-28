@@ -28,6 +28,7 @@ STUDENT_TEST_LLM_TURN_V1 = "student_test_llm_turn_v1"
 STUDENT_TEST_SEALED_SNAPSHOT_V1 = "student_test_sealed_output_snapshot_v1"
 STUDENT_TEST_PRE_REVEAL_STRUCTURED_V1 = "student_test_pre_reveal_structured_context_v1"
 PATTERN_MEMORY_EVALUATED_V1 = "pattern_memory_evaluated_v1"
+EXPECTED_VALUE_RISK_COST_EVALUATED_V1 = "expected_value_risk_cost_evaluated_v1"
 
 
 def _fence_md(label: str, body: str, *, lang: str = "") -> str:
@@ -250,6 +251,44 @@ def write_student_test_decision_fingerprint_report_md_v1(
                 "- **RM — Pattern memory:** _(no `pattern_memory_evaluated_v1` trace row for this trade — "
                 "disabled env, missing trace, or path did not emit)._"
             )
+
+        ev_rows = [x for x in by_st.get(EXPECTED_VALUE_RISK_COST_EVALUATED_V1) or []]
+        ev_ev = ev_rows[-1] if ev_rows else {}
+        ep_ev = ev_ev.get("evidence_payload") if isinstance(ev_ev.get("evidence_payload"), dict) else {}
+        ev_doc = ep_ev.get("expected_value_risk_cost_v1")
+        lines.append("#### Expected Value / Risk Cost (RM — Directive 4)\n")
+        if isinstance(ev_doc, dict) and ev_doc:
+            lines.append(
+                f"- **`expected_value_risk_cost_evaluated_v1` trace:** present "
+                f"(available_v1=`{ev_doc.get('available_v1')!s}`)."
+            )
+            lines.append(
+                f"- **EV long / short / no-trade:** `{ev_doc.get('ev_long_v1')!s}` / "
+                f"`{ev_doc.get('ev_short_v1')!s}` / `{ev_doc.get('ev_no_trade_v1')!s}`"
+            )
+            lines.append(f"- **preferred_action_v1:** `{ev_doc.get('preferred_action_v1')!s}`")
+            lines.append(f"- **sample_count_v1:** `{ev_doc.get('sample_count_v1')!s}`")
+            rc = ev_doc.get("risk_costs_v1")
+            if isinstance(rc, dict):
+                lines.append(
+                    f"- **risk penalties:** vol=`{rc.get('volatility_penalty_v1')!s}`; "
+                    f"funding=`{rc.get('funding_cost_v1')!s}`; liq=`{rc.get('liquidation_risk_penalty_v1')!s}`"
+                )
+            evsa = ep_ev.get("ev_score_adjustment_v1")
+            lines.append(f"- **EV score adjustment (bounded, synthesis):** `{evsa!s}`")
+            rsn = ev_doc.get("reason_codes_v1")
+            if isinstance(rsn, list) and rsn:
+                lines.append(f"- **reason_codes_v1:** `{json.dumps(rsn, ensure_ascii=False)}`")
+            try:
+                ev_blob = json.dumps(ev_doc, indent=2, ensure_ascii=False, default=str)
+            except TypeError:
+                ev_blob = str(ev_doc)
+            lines.append(_fence_md("expected_value_risk_cost_v1", ev_blob[:24000], lang="json"))
+        else:
+            lines.append(
+                "- _(No `expected_value_risk_cost_evaluated_v1` trace row for this trade.)_"
+            )
+
         mem_ev = (by_st.get("memory_retrieval_completed") or [{}])[-1]
         ep_mem = mem_ev.get("evidence_payload") if isinstance(mem_ev.get("evidence_payload"), dict) else {}
         rm = ep_mem.get("student_retrieval_matches")

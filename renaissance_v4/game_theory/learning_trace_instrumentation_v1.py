@@ -757,6 +757,79 @@ def emit_pattern_memory_evaluated_directive_v1(
         print(f"[learning_trace_instrumentation_v1] emit_pattern_memory_evaluated_directive_v1 failed: {e}", file=sys.stderr)
 
 
+def emit_expected_value_risk_cost_evaluated_directive_v1(
+    *,
+    job_id: str,
+    fingerprint: str | None,
+    scenario_id: str | None,
+    trade_id: str | None,
+    expected_value_risk_cost_v1: dict[str, Any] | None,
+    ev_score_adjustment_v1: float = 0.0,
+) -> None:
+    """GT_DIRECTIVE_032 — EV / risk-cost evaluated (deterministic RM layer)."""
+    from renaissance_v4.game_theory.learning_trace_events_v1 import learning_trace_memory_sink_active_v1
+    from renaissance_v4.game_theory.student_rm_trace_contract_v1 import student_rm_trace_mandate_emit_active_v1
+    from renaissance_v4.game_theory.student_test_mode_v1 import student_test_mode_isolation_active_v1
+
+    if (
+        not learning_trace_instrumentation_enabled_v1()
+        and not learning_trace_memory_sink_active_v1()
+        and not student_rm_trace_mandate_emit_active_v1()
+        and not student_test_mode_isolation_active_v1()
+    ):
+        return
+    ev = expected_value_risk_cost_v1 if isinstance(expected_value_risk_cost_v1, dict) else {}
+    try:
+        ev_adj = float(ev_score_adjustment_v1)
+    except (TypeError, ValueError):
+        ev_adj = 0.0
+    ev_adj = max(-0.12, min(0.12, ev_adj))
+    trace_extensions_v1: dict[str, Any] = {
+        "event_type": "expected_value_risk_cost_evaluated_v1",
+        "timestamp_ms": int(time.time() * 1000),
+        "ev_long_v1": ev.get("ev_long_v1"),
+        "ev_short_v1": ev.get("ev_short_v1"),
+        "ev_no_trade_v1": ev.get("ev_no_trade_v1"),
+        "preferred_action_v1": ev.get("preferred_action_v1"),
+        "sample_count_v1": ev.get("sample_count_v1"),
+        "risk_costs_v1": ev.get("risk_costs_v1"),
+        "ev_score_adjustment_v1": ev_adj,
+        "reason_codes_v1": ev.get("reason_codes_v1"),
+        "available_v1": ev.get("available_v1"),
+    }
+    sid = str(scenario_id).strip() if scenario_id and str(scenario_id).strip() else None
+    tid = str(trade_id).strip() if trade_id and str(trade_id).strip() else None
+    try:
+        append_learning_trace_event_from_kwargs_v1(
+            job_id=job_id,
+            fingerprint=fingerprint,
+            stage="expected_value_risk_cost_evaluated_v1",
+            status="pass",
+            summary="entry_reasoning_engine_v1: expected_value_risk_cost_evaluated_v1",
+            producer="entry_reasoning_engine_v1",
+            scenario_id=sid,
+            trade_id=tid,
+            evidence_payload={
+                "entry_reasoning_stage": "expected_value_risk_cost_evaluated_v1",
+                "expected_value_risk_cost_v1": ev,
+                "ev_long_v1": ev.get("ev_long_v1"),
+                "ev_short_v1": ev.get("ev_short_v1"),
+                "ev_no_trade_v1": ev.get("ev_no_trade_v1"),
+                "preferred_action_v1": ev.get("preferred_action_v1"),
+                "sample_count_v1": ev.get("sample_count_v1"),
+                "risk_costs_v1": ev.get("risk_costs_v1"),
+                "ev_score_adjustment_v1": ev_adj,
+                "reason_codes_v1": list(ev.get("reason_codes_v1") or []),
+            },
+            trace_extensions_v1=trace_extensions_v1,
+        )
+    except Exception as e:
+        print(
+            f"[learning_trace_instrumentation_v1] emit_expected_value_risk_cost_evaluated_directive_v1 failed: {e}",
+            file=sys.stderr,
+        )
+
+
 def emit_entry_reasoning_pipeline_stage_v1(
     *,
     job_id: str,
@@ -956,6 +1029,7 @@ __all__ = [
     "emit_026c_learning_scoring_completed_v1",
     "emit_candle_timeframe_nexus_v1",
     "emit_entry_reasoning_pipeline_stage_v1",
+    "emit_expected_value_risk_cost_evaluated_directive_v1",
     "emit_pattern_memory_evaluated_directive_v1",
     "emit_perps_state_model_evaluated_directive_v1",
     "emit_lifecycle_reasoning_stage_v1",

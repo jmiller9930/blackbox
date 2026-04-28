@@ -155,8 +155,9 @@ def test_trace_stages_order() -> None:
     ic_ix = names.index("indicator_context_eval_v1")
     ps_ix = names.index("perps_state_model_evaluated_v1")
     pm_ix = names.index("pattern_memory_evaluated_v1")
+    ev_ix = names.index("expected_value_risk_cost_evaluated_v1")
     ds_ix = names.index("decision_synthesis_v1")
-    assert ic_ix < ps_ix < pm_ix < ds_ix
+    assert ic_ix < ps_ix < pm_ix < ev_ix < ds_ix
     assert "entry_reasoning_sealed_v1" in names
 
 

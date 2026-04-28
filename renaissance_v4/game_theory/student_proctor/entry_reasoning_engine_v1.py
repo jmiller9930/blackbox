@@ -36,6 +36,10 @@ from renaissance_v4.game_theory.student_proctor.student_reasoning_fault_map_v1 i
 )
 from renaissance_v4.utils.math_utils import ema as ema_last, safe_mean
 
+from renaissance_v4.game_theory.reasoning_model.expected_value_risk_cost_v1 import (
+    compute_ev_score_adjustment_v1,
+    compute_expected_value_risk_cost_v1,
+)
 from renaissance_v4.game_theory.reasoning_model.pattern_memory_v1 import evaluate_pattern_memory_v1
 from renaissance_v4.game_theory.reasoning_model.perps_state_model_v1 import compute_perps_state_model_v1
 from renaissance_v4.game_theory.student_test_mode_v1 import student_test_mode_isolation_active_v1
@@ -652,7 +656,56 @@ def run_entry_reasoning_pipeline_v1(
         )
     )
 
+    # Risk inputs (needed before Directive 4 EV layer — uses same causal bar window).
     last_close = float(bars[-1]["close"])
+    atr = float(ictx.get("atr_last") or 0.0)
+    ema_l = float(ictx.get("ema_last") or 0.0)
+    fl = ictx.get("support_flags_v1") or {}
+    if bool(fl.get("long")) and not bool(fl.get("short")):
+        long_bias = True
+    elif bool(fl.get("short")) and not bool(fl.get("long")):
+        long_bias = False
+    else:
+        long_bias = last_close >= ema_l
+    risk = build_risk_inputs_v1(last_close=last_close, atr=atr, long_bias=long_bias)
+    risk_defined = bool(
+        str(risk.get("invalidation_condition_v1") or "").strip()
+        and str(risk.get("stop_basis_v1") or "").strip()
+        and str(risk.get("target_basis_v1") or "").strip()
+    )
+    _t("risk_reward_evaluated", {"atr": atr, "long_bias": long_bias}, risk, {"risk_defined_v1": risk_defined})
+    if not risk_defined:
+        fnodes.append(
+            make_fault_node_v1(
+                "risk_reward_evaluated",
+                STATUS_FAIL,
+                input_summary_v1="Planned entry and exit story.",
+                output_summary_v1="Stop and target basis missing or incomplete.",
+                blocking_rule_v1="No live entry without a full risk picture under exam rules.",
+                error_codes_v1=["risk_not_defined_v1"],
+                evidence_fields_v1=["risk_defined_v1"],
+                evidence_values_v1={"risk_defined_v1": False},
+                operator_message_v1="Risk strings must be present before a directional score can justify an entry.",
+            )
+        )
+    else:
+        fnodes.append(
+            make_fault_node_v1(
+                "risk_reward_evaluated",
+                STATUS_PASS,
+                input_summary_v1="Price, range, and chosen direction hint.",
+                output_summary_v1="Invalidation, stop, and target lines described when applicable.",
+                evidence_fields_v1=["risk_defined_v1"],
+                evidence_values_v1={"risk_defined_v1": True},
+                operator_message_v1="Concrete risk basis is available for synthesis.",
+            )
+        )
+
+    expected_value_risk_cost_v1 = compute_expected_value_risk_cost_v1(
+        perps_state_model_v1=perps_state_model_v1,
+        pattern_memory_eval_v1=pattern_mem_eval,
+        risk_inputs_v1=risk,
+    )
 
     scored = score_memory_records_v1(
         rse,
@@ -711,23 +764,6 @@ def run_entry_reasoning_pipeline_v1(
         )
     )
 
-    atr = float(ictx.get("atr_last") or 0.0)
-    ema_l = float(ictx.get("ema_last") or 0.0)
-    fl = ictx.get("support_flags_v1") or {}
-    if bool(fl.get("long")) and not bool(fl.get("short")):
-        long_bias = True
-    elif bool(fl.get("short")) and not bool(fl.get("long")):
-        long_bias = False
-    else:
-        long_bias = last_close >= ema_l
-    risk = build_risk_inputs_v1(last_close=last_close, atr=atr, long_bias=long_bias)
-    risk_defined = bool(
-        str(risk.get("invalidation_condition_v1") or "").strip()
-        and str(risk.get("stop_basis_v1") or "").strip()
-        and str(risk.get("target_basis_v1") or "").strip()
-    )
-    _t("risk_reward_evaluated", {"atr": atr, "long_bias": long_bias}, risk, {"risk_defined_v1": risk_defined})
-
     ind_s = indicator_score_v1(ictx)
     prior_s = float(poe.get("prior_outcome_confidence_delta_v1", 0.0))
     fin = ind_s + mscore + prior_s
@@ -737,8 +773,75 @@ def run_entry_reasoning_pipeline_v1(
         fin = -0.3
 
     pat_eff = float(pattern_mem_eval.get("pattern_effect_to_score_v1") or 0.0)
-    fin = fin + pat_eff
+    fin_part = fin + pat_eff
 
+    action = "no_trade"
+    if fin_part >= long_threshold:
+        action = "enter_long"
+    elif fin_part <= short_threshold:
+        action = "enter_short"
+    if mclass == "conflict" and mscore < -0.2:
+        action = "no_trade"
+        fin_part = min(fin_part, 0.0)
+    if action != "no_trade" and not risk_defined:
+        errs.append("hard_fail:no_risk_no_trade")
+        action = "no_trade"
+
+    ev_adj = compute_ev_score_adjustment_v1(
+        expected_value_risk_cost_v1=expected_value_risk_cost_v1,
+        synthesized_action_v1=action,
+    )
+    ev_adj = max(-0.12, min(0.12, float(ev_adj)))
+    fin = fin_part + ev_adj
+
+    _ev_trace_payload = dict(expected_value_risk_cost_v1)
+    _ev_trace_payload["ev_score_adjustment_v1"] = round(ev_adj, 6)
+    trace.append(
+        {
+            "stage": "expected_value_risk_cost_evaluated_v1",
+            "inputs": {"symbol": sym},
+            "outputs": _ev_trace_payload,
+            "evidence": {
+                "available_v1": expected_value_risk_cost_v1.get("available_v1"),
+                "ev_score_adjustment_v1": ev_adj,
+            },
+        }
+    )
+    _emit_ev = bool(str(job_id).strip()) and (emit_traces or student_test_mode_isolation_active_v1())
+    if _emit_ev:
+        from renaissance_v4.game_theory.learning_trace_instrumentation_v1 import (
+            emit_expected_value_risk_cost_evaluated_directive_v1,
+        )
+
+        emit_expected_value_risk_cost_evaluated_directive_v1(
+            job_id=str(job_id).strip(),
+            fingerprint=fingerprint,
+            scenario_id=scenario_id,
+            trade_id=trade_id,
+            expected_value_risk_cost_v1=expected_value_risk_cost_v1,
+            ev_score_adjustment_v1=float(ev_adj),
+        )
+    fnodes.append(
+        make_fault_node_v1(
+            "expected_value_risk_cost_evaluated_v1",
+            STATUS_PASS,
+            input_summary_v1="Pattern-memory outcomes + perps volatility + risk inputs (Directive 4).",
+            output_summary_v1=(
+                f"available={expected_value_risk_cost_v1.get('available_v1')!s}; "
+                f"preferred={expected_value_risk_cost_v1.get('preferred_action_v1')!s}; "
+                f"ev_adj={ev_adj!s}"
+            ),
+            evidence_fields_v1=["available_v1", "preferred_action_v1", "ev_score_adjustment_v1"],
+            evidence_values_v1={
+                "available_v1": expected_value_risk_cost_v1.get("available_v1"),
+                "preferred_action_v1": expected_value_risk_cost_v1.get("preferred_action_v1"),
+                "ev_score_adjustment_v1": ev_adj,
+            },
+            operator_message_v1="Deterministic EV/risk-cost layer — bounded; does not replace core synthesis math.",
+        )
+    )
+
+    # Re-evaluate thresholds after bounded EV nudge (Directive 4).
     action = "no_trade"
     if fin >= long_threshold:
         action = "enter_long"
@@ -748,33 +851,22 @@ def run_entry_reasoning_pipeline_v1(
         action = "no_trade"
         fin = min(fin, 0.0)
     if action != "no_trade" and not risk_defined:
-        errs.append("hard_fail:no_risk_no_trade")
+        if "hard_fail:no_risk_no_trade" not in errs:
+            errs.append("hard_fail:no_risk_no_trade")
         action = "no_trade"
 
     if "hard_fail:no_risk_no_trade" in errs:
         fnodes.append(
             make_fault_node_v1(
-                "risk_reward_evaluated",
+                "decision_blocked_no_risk_v1",
                 STATUS_FAIL,
-                input_summary_v1="Planned entry and exit story.",
-                output_summary_v1="Stop and target basis must be available before a real entry is allowed.",
+                input_summary_v1="Provisional entry blocked — incomplete risk.",
+                output_summary_v1="hard_fail:no_risk_no_trade",
                 blocking_rule_v1="No live entry without a full risk picture under exam rules.",
                 error_codes_v1=["hard_fail:no_risk_no_trade"],
                 evidence_fields_v1=["risk_defined_v1"],
                 evidence_values_v1={"risk_defined_v1": False},
                 operator_message_v1="The trade was blocked because the stop, target, and exit rules were not complete enough to justify an entry here.",
-            )
-        )
-    else:
-        fnodes.append(
-            make_fault_node_v1(
-                "risk_reward_evaluated",
-                STATUS_PASS,
-                input_summary_v1="Price, range, and chosen direction hint.",
-                output_summary_v1="Invalidation, stop, and target lines are all described when a trade is live.",
-                evidence_fields_v1=["risk_defined_v1"],
-                evidence_values_v1={"risk_defined_v1": bool(risk_defined)},
-                operator_message_v1="Reward versus risk is written in concrete terms whenever the engine contemplates a live entry; otherwise the side stays flat.",
             )
         )
 
@@ -783,6 +875,7 @@ def run_entry_reasoning_pipeline_v1(
         "memory_score": round(mscore, 6),
         "prior_outcome_score": round(prior_s, 6),
         "pattern_memory_score": round(pat_eff, 6),
+        "ev_score_adjustment_v1": round(ev_adj, 6),
         "risk_adjustment": round(float(ictx.get("confidence_effect_v1", {}).get("atr_adjustment", 0.0)), 6),
         "final_score": round(fin, 6),
         "action": action,
@@ -794,7 +887,13 @@ def run_entry_reasoning_pipeline_v1(
         {
             "scores": {
                 k: ds[k]
-                for k in ("indicator_score", "memory_score", "prior_outcome_score", "pattern_memory_score")
+                for k in (
+                    "indicator_score",
+                    "memory_score",
+                    "prior_outcome_score",
+                    "pattern_memory_score",
+                    "ev_score_adjustment_v1",
+                )
             }
         },
         ds,
@@ -804,7 +903,7 @@ def run_entry_reasoning_pipeline_v1(
         make_fault_node_v1(
             "decision_synthesis_v1",
             STATUS_PASS,
-            input_summary_v1="Indicator, memory, prior outcomes, and pattern-memory scores.",
+            input_summary_v1="Indicator, memory, prior, pattern-memory, and EV adjustment scores.",
             output_summary_v1="Engine action: " + str(ds.get("action") or "no_trade") + ".",
             evidence_fields_v1=["action", "final_score"],
             evidence_values_v1={"action": ds.get("action"), "final_score": ds.get("final_score")},
@@ -824,6 +923,7 @@ def run_entry_reasoning_pipeline_v1(
         "perps_state_model_v1": perps_state_model_v1,
         "perps_pattern_signature_v1": pattern_mem_eval.get("perps_pattern_signature_v1"),
         "pattern_memory_eval_v1": pattern_mem_eval,
+        "expected_value_risk_cost_v1": expected_value_risk_cost_v1,
         "memory_context_eval_v1": mctx,
         "prior_outcome_eval_v1": poe,
         "risk_inputs_v1": risk,

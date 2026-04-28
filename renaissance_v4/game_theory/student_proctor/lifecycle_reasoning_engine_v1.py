@@ -96,6 +96,8 @@ def _synthetic_entry_for_router_v1(
             "indicator_score": 0.0,
             "memory_score": 0.0,
             "prior_outcome_score": 0.0,
+            "pattern_memory_score": 0.0,
+            "ev_score_adjustment_v1": 0.0,
             "risk_adjustment": 0.0,
             "final_score": conf - 0.5,
             "action": "no_trade",
