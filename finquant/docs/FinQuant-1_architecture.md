@@ -5,6 +5,43 @@
 
 ---
 
+## Final product story — agent + FinQuant as one system
+
+In the **target architecture**, the trading agent and FinQuant are **not two products**. They are **components of one agentic crypto-perps decision system**.
+
+**Mechanical / probabilistic agent layer** (state and candidate actions), including:
+
+- **HMM / regime state**
+- **EV scoring**
+- **Funding / open interest / liquidation risk**
+- **Exit pressure**
+- **Temporal coherence**
+
+**FinQuant** is the **specialized quant-finance reasoning layer inside that same system**. It:
+
+- **Interprets** the setup
+- **Checks** the math
+- **Challenges** the decision
+- **Recommends or blocks** (second measure — not ungated execution)
+- **Explains** what **DATA** must prove before trust
+
+**Product sentence (canonical):**
+
+> The product is an **agentic crypto-perps decision system** where **deterministic/probabilistic modules** generate **state and action candidates**, **FinQuant** provides **specialized quant-finance reasoning** over those candidates, and **DATA** gates any **final** action with **evidence**.
+
+FinQuant is therefore **not** “some side model.” It is **part of the agent’s brain** for quant reasoning — still **narrow** in mission (verifier-shaped outputs), and still **subordinate** to **DATA** for proof.
+
+**Build order** (aligned with that story):
+
+1. **Improve agent mechanics** (regime, EV, funding/OI/liq, exit pressure, coherence).
+2. **Train FinQuant** on its verifier dataset **separately** (specialized adapter / serve path).
+3. **Plug FinQuant in** as **second-measure reasoning** over candidates the mechanical layer produces.
+4. Let **DATA** remain the **proof gate** for anything that must be evidenced before a final action.
+
+The **general LLM / foundation role** and the **agent runtime** are likewise **not separate end products** in this story — they are **parts of the same decision system**, with **governance** and **DATA** defining what may proceed.
+
+---
+
 ## Intelligence model (not a dumb rules checker)
 
 FinQuant-1 is **not** a brittle template matcher or a purely symbolic rules engine.
@@ -52,6 +89,7 @@ For each suitable task, it answers:
 | A **general-purpose assistant** | Routing and mission keep scope finite; it is **not** “build anything / answer anything.” |
 | A **strategy generator** | It critiques and verifies; it does not invent strategies as an authority. |
 | An **execution agent** | No orders, positions, or live trading actions. |
+| A **standalone product beside the agent** | In the **unified system**, it is **integrated reasoning**, not a separate “FinQuant app.” It is still **not** the primary builder or truth layer for the whole org. |
 | A **replacement** for **Qwen**, **DeepSeek**, **DATA**, or **GPT-5.5** | It is a **specialist verifier** in the stack, not the primary builder or truth layer. |
 
 **Capability vs role:** It may **use code and math** as tools **inside verification**; that does **not** make it the organization’s general coding model — **Qwen** / pipeline builders remain the default for unrelated implementation work.
@@ -60,11 +98,14 @@ For each suitable task, it answers:
 
 ## Model roles in the stack
 
+**Unified product:** mechanical/probabilistic **agent** modules propose **candidates**; **FinQuant-1** reasons over them; **DATA** proves what must be proved before a **final** action.
+
 | Role | System | Responsibility |
 |------|--------|----------------|
+| **Agent mechanics (candidates)** | **Agent runtime** | Regime, EV, funding/OI/liq, exit pressure, temporal coherence — **state and action candidates** (no substitute for DATA proof). |
 | **Primary builder / general reasoning** | **Qwen** | Implementation, drafting, broad reasoning where not finance-verifier-specific. |
 | **General adversarial reviewer** | **DeepSeek R1** | Adversarial review across domains as configured. |
-| **Narrow quant-finance verifier** | **FinQuant-1** | Focused review: math, risk/PnL logic, leakage/overfit signals, policy vs implementation. |
+| **Narrow quant-finance verifier** | **FinQuant-1** | Second-measure reasoning: math, risk/PnL logic, leakage/overfit signals, policy vs implementation; **recommend / block** signals are **advisory** until DATA/evidence gates apply. |
 | **Truth / proof layer** | **DATA** | Authoritative verification — models suggest; DATA proves. |
 | **External escalation only** | **GPT-5.5** | Escalation path when policy requires; not default routing. |
 
@@ -79,9 +120,9 @@ For each suitable task, it answers:
 - **Primary modeling target:** **7B-class base** + **QLoRA adapter**, with a path to **export / quantize** for **lightweight serving** while preserving useful verifier performance.
 - **Operational mantra:**
 
-  **Train on strong hardware. Serve on lesser hardware. Keep the model narrow. Keep the task narrow. Keep the output structured. Do not let it make decisions.**
+  **Train on strong hardware. Serve on lesser hardware. Keep the model narrow. Keep the task narrow. Keep the output structured. Do not grant ungated authority.**
 
-“Decisions” here includes **trading actions**, **policy promotion**, and **anything that bypasses DATA** for claims that require proof.
+“Ungated authority” here means **unsupervised trading actions**, **policy promotion**, or **anything that bypasses DATA** for claims that require proof. **Second-measure recommend/block** outputs inside the agent stack are **in scope** for the unified product; they still flow through **DATA** and execution policy for **final** action.
 
 ---
 
@@ -131,3 +172,4 @@ QLoRA (or equivalent adapter training) should optimize **verifier behavior** whi
 |---------|------|---------|
 | v1.1 | 2026-04-28 | Narrow single-job mission; train-strong/serve-weak; mandatory output contract; explicit non-goals. |
 | v1.2 | 2026-04-28 | Not a rules checker: retain base reasoning; hyper-specialized FinTech verification; base model + anti-template training principles. |
+| v1.3 | 2026-04-28 | Final product story: agent + FinQuant as one system; mechanical layer vs FinQuant reasoning vs DATA gate; build order; stack table + runtime wording for second measure vs ungated authority. |

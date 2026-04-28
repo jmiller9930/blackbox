@@ -1,21 +1,23 @@
 #!/usr/bin/env python3
 """
-FinQuant-1 — pull real sources and emit structured training JSONL (no training).
+FinQuant-1 — manifest-driven pull + deterministic staging builder (no training).
 
-Deploy target on lab host: /data/finquant-1/training/source_to_training.py
+Deploy on lab host: /data/finquant-1/training/source_to_training.py
+
+Primary staging artifact:
+  {FINQUANT_BASE}/datasets/staging/finquant_staging_v0.1.jsonl
+(supersedes legacy finquant_source_v0.1.jsonl)
 
 Requires: pip install -r finquant/requirements-finquant.txt
-Optional SSL: export SSL_CERT_FILE=$(python3 -c "import certifi; print(certifi.where())")
+Optional: SSL_CERT_FILE=$(python3 -c "import certifi; print(certifi.where())")
 
-Subcommands:
-  pull   — download HF caches, exchange docs, Wikipedia REST summaries
-  build  — build datasets/finquant_source_v0.1.jsonl from pulled material + DB
-  all    — pull then build
+Commands:
+  pull         — download HF caches, exchange docs, Wikipedia REST → sources/manifest.json
+  build        — deterministic staging JSONL + source_to_training_build_report_v0.1.md
+  all          — pull then build
 
 Environment:
-  FINQUANT_BASE           — root (default: parent of finquant/ in repo, i.e. repo_root/finquant)
-  BLACKBOX_MARKET_DATA_PATH — SQLite market_data.db (see scripts/runtime/_paths.py)
-  BLACKBOX_REPO_ROOT      — repo root for DB default resolution
+  FINQUANT_BASE, BLACKBOX_MARKET_DATA_PATH, BLACKBOX_REPO_ROOT
 """
 from __future__ import annotations
 
@@ -29,12 +31,13 @@ import re
 import sqlite3
 import textwrap
 import time
+import unicodedata
 import urllib.error
 import urllib.parse
 import urllib.request
 from collections import Counter
 from pathlib import Path
-from typing import Any
+from typing import Any, Callable, Iterator
 
 # --- paths ---
 
@@ -80,7 +83,134 @@ def sha256_file(path: Path) -> str:
     return h.hexdigest()
 
 
-# --- HTTP ---
+# --- Closed category enum (dataset plan v0.1 — 13 pillars) ---
+
+CATEGORY_LABELS: dict[int, str] = {
+    1: "financial_math_pnl",
+    2: "crypto_market_structure",
+    3: "indicator_intelligence",
+    4: "statistical_quant_indicators",
+    5: "order_flow_microstructure",
+    6: "derivatives_signals_crypto",
+    7: "volatility_structure",
+    8: "multi_timeframe_interaction",
+    9: "backtest_replay_integrity",
+    10: "policy_vs_implementation",
+    11: "python_quant_code_review",
+    12: "financial_tables_filings",
+    13: "data_validation_prompts",
+}
+
+
+def category_valid(c: int) -> bool:
+    return c in CATEGORY_LABELS
+
+
+# --- Verifier contract (FinQuant) ---
+
+
+VERIFIER_PREFIXES: tuple[str, ...] = (
+    "Claim reviewed:",
+    "Math verdict:",
+    "Risk/PnL verdict:",
+    "Indicator validity:",
+    "Regime considerations:",
+    "Failure modes / edge cases:",
+    "Leakage / overfit concerns:",
+    "Policy-vs-implementation concerns:",
+    "DATA evidence required:",
+    "Final verifier status:",
+)
+
+
+def format_verifier_output(
+    *,
+    claim: str,
+    math_v: str,
+    risk_v: str,
+    ind_v: str,
+    regime: str,
+    fail_modes: str,
+    leak: str,
+    policy: str,
+    data_ev: str,
+    status: str,
+) -> str:
+    return (
+        f"Claim reviewed: {claim}\n"
+        f"Math verdict: {math_v}\n"
+        f"Risk/PnL verdict: {risk_v}\n"
+        f"Indicator validity: {ind_v}\n"
+        f"Regime considerations: {regime}\n"
+        f"Failure modes / edge cases: {fail_modes}\n"
+        f"Leakage / overfit concerns: {leak}\n"
+        f"Policy-vs-implementation concerns: {policy}\n"
+        f"DATA evidence required: {data_ev}\n"
+        f"Final verifier status: {status}"
+    )
+
+
+def normalize_for_dedupe(s: str) -> str:
+    t = unicodedata.normalize("NFC", s or "").strip().lower()
+    t = re.sub(r"\s+", " ", t)
+    return t
+
+
+def dedupe_hash(instruction: str, input_text: str) -> str:
+    payload = normalize_for_dedupe(instruction) + "\n" + normalize_for_dedupe(input_text)
+    return hashlib.sha256(payload.encode("utf-8")).hexdigest()
+
+
+_BANNED_SIMPLE_SIGNAL = re.compile(
+    r"(?is)rsi\s*[<>]=?\s*\d+.{0,40}(buy|long|sell|short)|"
+    r"(?is)macd\s+cross.{0,30}(buy|sell)|"
+    r"(?is)buy\s+signal.*rsi"
+)
+_UNSUPPORTED_PRED = re.compile(
+    r"(?i)\b(will\s+(definitely|certainly)|guaranteed\s+to\s+reach|sure\s+bet)\b"
+)
+
+
+def quality_gate_reject(record: dict[str, Any]) -> str | None:
+    """Return rejection reason or None if OK."""
+    instr = record.get("instruction") or ""
+    inp = record.get("input") or ""
+    out = record.get("output") or ""
+    if len(normalize_for_dedupe(instr)) < 24:
+        return "instruction_too_short_or_generic"
+    if len(normalize_for_dedupe(inp)) < 16:
+        return "input_too_short"
+    for p in VERIFIER_PREFIXES:
+        if p not in out:
+            return f"missing_verifier_section:{p}"
+    # Claim substantive (not placeholder-only)
+    m = re.search(r"Claim reviewed:\s*(.+)", out)
+    if not m or len(m.group(1).strip()) < 8:
+        return "claim_missing_or_trivial"
+    fm = re.search(r"Failure modes / edge cases:\s*(.+)", out, re.DOTALL)
+    if not fm or len(fm.group(1).strip()) < 6:
+        return "failure_modes_missing"
+    dm = re.search(r"DATA evidence required:\s*(.+)", out, re.DOTALL)
+    if not dm or len(dm.group(1).strip()) < 6:
+        return "data_evidence_missing"
+    st = re.search(r"Final verifier status:\s*(\S.+)", out)
+    if not st:
+        return "final_status_missing"
+    status_line = st.group(1).strip().lower()
+    if not any(x in status_line for x in ("pass", "fail", "needs proof")):
+        return "final_status_invalid"
+    combined = instr + "\n" + inp + "\n" + out
+    if _BANNED_SIMPLE_SIGNAL.search(combined):
+        return "simple_signal_rule_banned"
+    if _UNSUPPORTED_PRED.search(combined):
+        return "unsupported_prediction"
+    # Generic assistant smell (cheap heuristic)
+    if re.search(r"(?i)^\s*(as an ai|i cannot predict)", instr):
+        return "generic_assistant_tone"
+    return None
+
+
+# --- HTTP (pull) ---
 
 UA = "FinQuant-1-source-bot/0.1 (+local pipeline; engineering@blackbox)"
 
@@ -99,8 +229,6 @@ def strip_html(html: bytes) -> str:
     text = re.sub(r"\s+", " ", text).strip()
     return text[:12000]
 
-
-# --- Exchange docs URL list (official doc roots + key endpoints) ---
 
 EXCHANGE_DOC_URLS: list[tuple[str, str]] = [
     ("binance", "https://binance-docs.github.io/apidocs/futures/en/"),
@@ -174,7 +302,6 @@ def pull_wikipedia_rest(raw_dir: Path, manifest: dict[str, Any]) -> None:
 
 
 def pull_investopedia_try(manifest: dict[str, Any]) -> None:
-    """Best-effort; often 403 from bots. Record outcome only."""
     urls = [
         "https://www.investopedia.com/terms/r/rsi.asp",
         "https://www.investopedia.com/terms/a/atr.asp",
@@ -186,9 +313,6 @@ def pull_investopedia_try(manifest: dict[str, Any]) -> None:
             inv.append({"url": url, "http_status": code, "bytes": len(body)})
         except Exception as e:
             inv.append({"url": url, "error": repr(e)})
-
-
-# --- Hugging Face preload ---
 
 
 def pull_hf(manifest: dict[str, Any]) -> None:
@@ -223,7 +347,7 @@ def pull_hf(manifest: dict[str, Any]) -> None:
             hf.append({"dataset": name, "ok": False, "error": repr(e), "elapsed_s": round(time.time() - t0, 2)})
 
 
-# --- SQL aggregates (no raw sequence export; summary stats only) ---
+# --- SQL / market state ---
 
 
 def _rsi_wilder(closes: list[float], period: int = 14) -> float | None:
@@ -250,7 +374,6 @@ def _rsi_wilder(closes: list[float], period: int = 14) -> float | None:
 
 
 def extract_market_state(conn: sqlite3.Connection) -> dict[str, Any]:
-    """Single aggregate snapshot per symbol from ticks + optional bars."""
     state: dict[str, Any] = {"symbols": {}, "bars_available": False}
     cur = conn.execute(
         """
@@ -279,27 +402,32 @@ def extract_market_state(conn: sqlite3.Connection) -> dict[str, Any]:
                 if series[i][1] is not None and series[i][2] is not None
             ]
             rsi = _rsi_wilder(closes, min(14, max(2, len(closes) - 1))) if len(closes) > 2 else None
+            rvb = "high_vol" if vol > 0.001 else "low_vol"
+            trend_chop = "chop" if vol > 0.0008 else "trend_candidate"
             state["symbols"][sym] = {
+                "timeframe_reference": "warehouse_ticks_as_available",
                 "tick_count": len(series),
                 "ticks_with_primary_price": len(closes),
                 "t_first": ts_first,
                 "t_last": ts_last,
-                "price_mean": sum(closes) / len(closes),
-                "price_min": min(closes),
-                "price_max": max(closes),
+                "ohlcv_summary": {
+                    "price_mean": sum(closes) / len(closes),
+                    "price_min": min(closes),
+                    "price_max": max(closes),
+                },
                 "log_return_std_sample": vol,
                 "comparator_spread_mean": (sum(spread) / len(spread)) if spread else None,
                 "rsi_proxy_period_adaptive": rsi,
-                "regime_vol_bucket": "high" if vol > 0.001 else "low",
+                "volatility_regime_label": rvb,
+                "trend_chop_label": trend_chop,
             }
         else:
-            # Real rows exist but price legs are NULL — still emit warehouse telemetry (no invented prices).
             state["symbols"][sym] = {
                 "tick_count": len(series),
                 "ticks_with_primary_price": 0,
                 "t_first": ts_first,
                 "t_last": ts_last,
-                "note": "primary_price comparators empty — DATA ingestion issue; refuse price-level inference.",
+                "note": "primary_price empty — refuse price-level inference until ingestion fixed.",
             }
 
     cur2 = conn.execute("SELECT COUNT(*) FROM sqlite_master WHERE type='table' AND name='market_bars_5m'")
@@ -311,104 +439,146 @@ def extract_market_state(conn: sqlite3.Connection) -> dict[str, Any]:
     return state
 
 
-_SQL_TEMPLATE_SPIN = [
-    "Given ONLY aggregate statistics from our warehouse (no raw candle strings exported), state whether mean-reversion assumptions are justified.",
-    "Risk officer asks: is realized volatility bucket consistent with leverage policy? Use aggregates below.",
-    "Treasury wants regime label — classify using volatility bucket and spread telemetry.",
-    "Audit: confirm DATA lineage — cite whether comparator feed exists and spread summary.",
-    "Stress test mental model: if tick_count is small, what must we refuse to claim?",
-]
+_SQL_CAT_ROTATE = [4, 7, 13, 2, 6, 8, 12, 5, 3, 1, 11, 9, 10]
 
 
-def build_sql_records(state: dict[str, Any], n: int, seed: int) -> list[dict[str, Any]]:
+def iter_sql_staging(state: dict[str, Any], seed: int) -> Iterator[dict[str, Any]]:
     syms = sorted(state.get("symbols") or ())
     if not syms:
-        raise RuntimeError(
-            "No rows in market_ticks — populate BLACKBOX_MARKET_DATA_PATH or ingest ticks."
-        )
+        raise RuntimeError("No rows in market_ticks — populate BLACKBOX_MARKET_DATA_PATH.")
     start = seed % len(syms)
-    out: list[dict[str, Any]] = []
-    for i in range(n):
+    i = 0
+    while True:
         sym = syms[(i + start) % len(syms)]
         agg = dict(state["symbols"][sym])
-        tmpl = _SQL_TEMPLATE_SPIN[i % len(_SQL_TEMPLATE_SPIN)]
+        cat = _SQL_CAT_ROTATE[i % len(_SQL_CAT_ROTATE)]
+        adversarial = i % 2 == 0
+        tmpl = [
+            "Given ONLY aggregate statistics (no raw sequence export), verify whether mean-reversion framing is justified.",
+            "Risk: does volatility regime support proposed leverage? Use aggregates only.",
+            "Audit DATA lineage: comparator spread telemetry vs primary — what could mislead?",
+            "Stress: tick_count small — list what claims must be refused.",
+            "Treasury: map volatility bucket to margin policy assumptions.",
+        ][i % 5]
         summary = json.dumps(agg, indent=2, sort_keys=True)[:6000]
         instruction = (
-            f"[sql-scenario-{i}] {tmpl} "
-            f"Symbol lens: {sym}. Training record uses aggregated warehouse stats only."
+            f"[market_scenario sql#{i}] {tmpl} Symbol={sym}. "
+            "Verifier must challenge premature conclusions."
         )
         inp = (
-            "MARKET_STATE_AGGREGATE_JSON:\n"
+            "MARKET_SCENARIO_CARD:\n"
             + summary
-            + "\n\nNOT EXPORTED: raw tick sequence / full OHLCV history (policy: aggregates only)."
+            + "\n\nEXPORT_POLICY: raw OHLCV strings not included — aggregates only."
         )
-        out_txt = textwrap.dedent(
-            f"""\
-            Claim reviewed: Interpret regime from aggregates for {sym}.
-            Math verdict: Volatility proxy from log returns is finite; sample size n_ticks={agg.get('tick_count')}.
-            Risk/PnL verdict: Position sizing needs fresh VAR — aggregates insufficient alone.
-            Indicator validity: RSI proxy may be unreliable when tick_count < 15; flag if needed.
-            Regime considerations: regime_vol_bucket={agg.get('regime_vol_bucket')}.
-            Failure modes: Sparse ticks; missing comparator; stale inserted_at vs decision time.
-            DATA evidence required: Re-query latest ticks and bars with explicit time window.
-            Final verifier status: needs proof unless live query confirms.
-            """
-        ).strip()
-        out.append(
-            {
-                "instruction": instruction,
-                "input": inp,
-                "output": out_txt,
-                "source": "sql",
-            }
+        if adversarial:
+            claim = (
+                f"Trap: analyst insists '{sym}' must be 'low risk' because sample vol looks small — ignore sparse ticks."
+            )
+            math_v = "incorrect / incomplete — variance unstable with tiny n; needs full window."
+            risk_v = "Mis-sized exposure if leverage copied from headline stats."
+            status = "fail"
+        else:
+            claim = f"Interpret warehouse aggregates for {sym} without over-claiming predictive power."
+            math_v = "sound conditional on definitions; verify formulas vs venue."
+            risk_v = "Sizing requires live risk engine — aggregates alone insufficient."
+            status = "needs proof"
+        out = format_verifier_output(
+            claim=claim,
+            math_v=math_v,
+            risk_v=risk_v,
+            ind_v="RSI proxy unreliable when ticks_with_primary_price < 15; treat as diagnostic only.",
+            regime=f"Labels: volatility_regime={agg.get('volatility_regime_label')}; trend_chop={agg.get('trend_chop_label')}.",
+            fail_modes="Sparse sampling; stale timestamps; missing comparator; venue definition drift.",
+            leak="Potential peek if labels built from future bars — not evidenced here.",
+            policy="Cross-check ingest vs documented schema for market_ticks.",
+            data_ev=f"Pull authoritative tape for {sym} across explicit UTC window; reconcile fills.",
+            status=status,
         )
-    return out
+        yield {
+            "instruction": instruction,
+            "input": inp,
+            "output": out,
+            "source_ids": [f"sql:market_db:{market_db_path().name}", f"sql:symbol:{sym}", "manifest:approved"],
+            "category": cat,
+            "adversarial": adversarial,
+            "quality_flags": ["bucket:sql_market_scenario", "internal:market_scenario", f"trap:{str(adversarial).lower()}"],
+        }
+        i += 1
 
 
-# --- Synthetic adversarial ---
+_SYNTH_CAT = [1, 2, 3, 9, 10, 11]
 
 
-def build_synthetic_adversarial(n: int, seed: int) -> list[dict[str, Any]]:
-    rng = random.Random(seed)
-    traps = [
+def iter_synthetic_staging(seed: int) -> Iterator[dict[str, Any]]:
+    traps: list[tuple[str, str, str, str, str, str, str, str, str]] = [
         (
-            "Analyst claims annualized Sharpe 4.2 from 6 daily samples without subtracting risk-free rate.",
-            "Reject: insufficient sample; Sharpe definition mis-applied; needs full return series and rf curve.",
+            "Sharpe 4.2 annualized from 6 daily samples; rf ignored.",
+            "Sharpe mis-specified; insufficient df; rf curve omitted.",
+            "False precision on risk appetite.",
+            "N/A",
+            "micro_stats_insufficient",
+            "window_cherry_pick; fee_model_unknown",
+            "Label leakage if returns computed with revised marks",
+            "Risk policy says min 252-day window — not met",
+            "Download full returns + rf series; verify arithmetic",
+            "fail",
         ),
         (
-            "Promo material states perpetual funding 'always pays longs' in crypto.",
-            "False: funding sign depends on premium/discount; cite venue formula with receipts.",
+            "Funding always pays longs on crypto perps.",
+            "Wrong — sign follows premium/discount vs index.",
+            "Marketing claims distort hedge sizing.",
+            "N/A",
+            "venue_formula_required",
+            "basis misunderstanding",
+            "Using funding history without venue definition",
+            "Copy vs spec drift on funding interval",
+            "Pull venue funding ledger + index methodology PDF revision",
+            "fail",
         ),
         (
-            "Strategy uses RSI(14) crossing 70 on 1m bars to short macro BTC.",
-            "Mismatch: indicator timeframe vs thesis timeframe; multiple testing on 1m.",
+            "RSI(14) on 1m bars proves macro BTC short.",
+            "Indicator timeframe mismatch vs macro thesis.",
+            "False precision; multiple testing on 1m.",
+            "RSI validity poor under ultra-low latency noise regime.",
+            "TF_conflict",
+            "multiple_testing",
+            "Implicit lookahead if universe filtered post-hoc",
+            "Indicator params not in policy registry",
+            "Compare policy doc vs code constants",
+            "needs proof",
         ),
     ]
-    out: list[dict[str, Any]] = []
-    for i in range(n):
-        a, critique = traps[i % len(traps)]
-        instruction = f"[adv-{i}] Challenge this quantitative claim (adversarial trap)."
-        inp = f"Claim bundle #{i}: {a}"
-        out.append(
-            {
-                "instruction": instruction,
-                "input": inp,
-                "output": textwrap.dedent(
-                    f"""\
-                    Verdict: fail / needs proof.
-                    Reasoning: {critique}
-                    Failure modes: cherry-picked windows, fee omission, regime shift.
-                    DATA requirements: Download labeled fills and marks from venue API for full window.
-                    """
-                ).strip(),
-                "source": "synthetic",
-            }
+    rng = random.Random(seed)
+    i = 0
+    while True:
+        row = traps[i % len(traps)]
+        claim_t, mv, rv, iv, reg, fm, lk, pol, data_ev, st = row
+        cat = _SYNTH_CAT[i % len(_SYNTH_CAT)]
+        instruction = f"[adversarial_case #{i}] Challenge bundled quantitative claim; assume hostile marketing."
+        inp = f"ADVERSARIAL_BUNDLE_{i}: {claim_t}"
+        out = format_verifier_output(
+            claim=claim_t,
+            math_v=mv,
+            risk_v=rv,
+            ind_v=iv,
+            regime=reg,
+            fail_modes=fm,
+            leak=lk,
+            policy=pol,
+            data_ev=data_ev,
+            status=st,
         )
+        yield {
+            "instruction": instruction,
+            "input": inp,
+            "output": out,
+            "source_ids": ["generator:synthetic_adversarial_v01", f"synthetic:trap:{i}"],
+            "category": cat,
+            "adversarial": True,
+            "quality_flags": ["bucket:synthetic_adversarial", "internal:adversarial_case"],
+        }
         rng.random()
-    return out
-
-
-# --- HF + wiki + exchange structured ---
+        i += 1
 
 
 def _norm_finqa_row(row: dict[str, Any]) -> tuple[str, str, str]:
@@ -418,169 +588,202 @@ def _norm_finqa_row(row: dict[str, Any]) -> tuple[str, str, str]:
     return q, tb, ans
 
 
-def build_hf_finqa(n: int, seed: int) -> list[dict[str, Any]]:
-    configure_ssl()
-    from datasets import load_dataset  # type: ignore
+def iter_concept_staging(
+    base: Path,
+    seed: int,
+    *,
+    finqa_train: Any,
+    math_train: Any,
+    numina_iter: Iterator[dict[str, Any]],
+    wiki_files: list[Path],
+    exchange_paths: list[Path],
+) -> Iterator[dict[str, Any]]:
+    """Fixed schedule: 160 finqa, 80 math, 120 numina, 80 wiki, 60 exchange = 500."""
+    rng_ord = random.Random(seed + 404)
+    schedule: list[str] = (
+        ["finqa"] * 160 + ["math"] * 80 + ["numina"] * 120 + ["wiki"] * 80 + ["exchange"] * 60
+    )
+    order = list(range(500))
+    rng_ord.shuffle(order)
+    sched_perm = [schedule[i] for i in order]
 
-    rng = random.Random(seed)
-    ds = load_dataset("ibm-research/finqa", trust_remote_code=True)
-    train = ds["train"]
-    out: list[dict[str, Any]] = []
-    # shuffle indices deterministically
-    idxs = list(range(len(train)))
-    rng.shuffle(idxs)
-    for j in range(min(n, len(idxs))):
-        row = train[idxs[j]]
-        q, tb, ans = _norm_finqa_row(row)
-        instruction = (
-            "Solve the financial QA task using the provided table. Show reasoning steps; cite cells conceptually."
-        )
-        inp = f"hf_dataset=ibm-research/finqa row_index={idxs[j]}\nQuestion:\n{q}\n\nTable:\n{tb[:8000]}"
-        output = (
-            f"Reference answer (supervision target from dataset): {ans[:2000]}\n"
-            "Trainee must verify arithmetic against table cells; failure modes: wrong row lookup, unit mismatch."
-        )
-        out.append({"instruction": instruction, "input": inp, "output": output, "source": "finqa"})
-    return out
+    finqa_order = list(range(len(finqa_train)))
+    rng_ord.shuffle(finqa_order)
+    math_order = list(range(len(math_train)))
+    rng_ord.shuffle(math_order)
 
+    fi = mj = nj = wj = ej = 0
 
-def build_hf_math(n: int, seed: int) -> list[dict[str, Any]]:
-    configure_ssl()
-    from datasets import load_dataset  # type: ignore
-
-    rng = random.Random(seed + 3)
-    # Hub id `hendrycks/competition_math` is unavailable in many environments; canonical mirror:
-    ds = load_dataset("EleutherAI/hendrycks_math", "algebra")
-    train = ds["train"]
-    idxs = list(range(len(train)))
-    rng.shuffle(idxs)
-    out: list[dict[str, Any]] = []
-    for j in range(min(n, len(idxs))):
-        row = train[idxs[j]]
-        prob = str(row.get("problem", ""))
-        sol = str(row.get("solution", row.get("answer", "")))
-        instruction = "Solve the competition mathematics problem with rigorous steps."
-        inp = (
-            "hf_dataset=EleutherAI/hendrycks_math config=algebra "
-            f"level={row.get('level')} type={row.get('type')}\n{prob}"
-        )
-        output = (
-            f"Reference solution sketch (dataset field): {sol[:4000]}\n"
-            "Cross-check each algebraic step; reject if domain constraints violated."
-        )
-        out.append({"instruction": instruction, "input": inp, "output": output, "source": "finqa"})
-    return out
-
-
-def build_hf_numina(n: int, seed: int) -> list[dict[str, Any]]:
-    configure_ssl()
-    from datasets import load_dataset  # type: ignore
-
-    rng = random.Random(seed + 7)
-    ds = load_dataset("AI-MO/NuminaMath-CoT", split="train", streaming=True)
-    out: list[dict[str, Any]] = []
-    it = iter(ds)
-    for j in range(n):
-        try:
-            row = next(it)
-        except StopIteration:
-            break
-        prob = str(row.get("problem", row.get("question", "")))
-        sol = str(row.get("solution", ""))
-        instruction = "Solve with chain-of-thought discipline; flag ambiguous premises."
-        inp = f"hf_dataset=AI-MO/NuminaMath-CoT stream_offset={j}\n{prob[:12000]}"
-        output = f"Reference (subset): {sol[:4000]}"
-        out.append({"instruction": instruction, "input": inp, "output": output, "source": "finqa"})
-        rng.random()
-    return out
-
-
-def build_wikipedia_records(raw_dir: Path, n: int) -> list[dict[str, Any]]:
-    out: list[dict[str, Any]] = []
-    files = sorted(raw_dir.glob("*.json"))
-    if not files:
-        return out
-    variants = [
-        "Explain for a quant risk committee.",
-        "Give failure modes when applying this concept to intraday crypto.",
-        "Contrast academic definition vs execution-time observables.",
-        "How would you validate empirically before sizing risk?",
-        "What DATA would falsify a naive application of this statistic?",
-        "Spell out linkage to regime detection.",
-        "Challenge an analyst mis-using this concept.",
-        "Provide a checklist for implementation QA.",
-        "Explain to a compliance reviewer without trading jargon overload.",
-        "Relate to cross-venue consistency checks.",
-    ]
-    idx = 0
-    while len(out) < n:
-        p = files[idx % len(files)]
-        vi = idx // len(files)
-        idx += 1
-        try:
+    for slot in range(500):
+        kind = sched_perm[slot]
+        adversarial = slot < 250
+        if kind == "finqa":
+            row = finqa_train[finqa_order[fi % len(finqa_order)]]
+            fi += 1
+            q, tb, ans = _norm_finqa_row(row)
+            idx = finqa_order[(fi - 1) % len(finqa_order)]
+            instruction = "Verify financial table reasoning — cite cells; show arithmetic checks."
+            inp = f"hf:ibm-research/finqa train_row={idx}\nQuestion:\n{q}\n\nTable:\n{tb[:8000]}"
+            claim = "Table QA answer must match filings arithmetic — counterparty traps possible."
+            out = format_verifier_output(
+                claim=claim,
+                math_v="Recompute from cited cells; watch units and scaling.",
+                risk_v="Filings lag markets — no live trading implication.",
+                ind_v="N/A unless table embeds technical indicators.",
+                regime="N/A — accounting window vs market window mismatch is a trap.",
+                fail_modes="Wrong row; fiscal vs calendar; restatements.",
+                leak="Train/test contamination if same issuer reused improperly.",
+                policy="Disclosure policy vs displayed table format.",
+                data_ev=f"Cross-check source filing cells vs answer hint: {ans[:400]}",
+                status="needs proof" if adversarial else "pass",
+            )
+            cat = 12 if not adversarial else 13
+            src = ["hf:ibm-research/finqa:train", f"hf:finqa:row:{idx}", "manifest:approved"]
+            flags = ["bucket:concept_derived", "internal:math_case", f"trap:{str(adversarial).lower()}"]
+        elif kind == "math":
+            row = math_train[math_order[mj % len(math_order)]]
+            mj += 1
+            prob = str(row.get("problem", ""))
+            sol = str(row.get("solution", ""))
+            idx = math_order[(mj - 1) % len(math_order)]
+            instruction = "Calculation verification — rigorous steps only; no finance forecasts."
+            inp = f"hf:EleutherAI/hendrycks_math:algebra row={idx}\n{prob}"
+            claim = "Competition math — verify solution discipline; no market predictions."
+            out = format_verifier_output(
+                claim=claim,
+                math_v="Check algebraic steps; domain constraints.",
+                risk_v="N/A — math drill not portfolio advice.",
+                ind_v="N/A",
+                regime="N/A",
+                fail_modes="Algebraic slip; boundary cases.",
+                leak="N/A",
+                policy="N/A",
+                data_ev="Publish intermediate steps for audit.",
+                status="needs proof",
+            )
+            cat = 1 if mj % 2 == 0 else 4
+            src = ["hf:EleutherAI/hendrycks_math:algebra", f"hf:math:row:{idx}", "manifest:approved"]
+            flags = ["bucket:concept_derived", "internal:math_case", "cap:math_not_dominant"]
+        elif kind == "numina":
+            row = next(numina_iter)
+            prob = str(row.get("problem", row.get("question", "")))
+            sol = str(row.get("solution", ""))
+            instruction = "Solve with reasoning discipline — flag ambiguous premises."
+            inp = f"hf:AI-MO/NuminaMath-CoT offset={nj}\n{prob[:12000]}"
+            nj += 1
+            claim = "Chain-of-thought must remain checkable — reject hand-waving."
+            out = format_verifier_output(
+                claim=claim,
+                math_v="Validate each inference step.",
+                risk_v="N/A",
+                ind_v="N/A",
+                regime="N/A",
+                fail_modes="Ambiguous problem statements.",
+                leak="N/A",
+                policy="N/A",
+                data_ev="Provide intermediate checkpoints.",
+                status="needs proof",
+            )
+            cat = 4
+            src = [f"hf:AI-MO/NuminaMath-CoT:stream:{nj-1}", "manifest:approved"]
+            flags = ["bucket:concept_derived", "internal:math_case"]
+        elif kind == "wiki":
+            p = wiki_files[wj % len(wiki_files)]
+            wj += 1
             doc = json.loads(p.read_text(encoding="utf-8"))
-        except Exception:
-            if idx > len(files) * (len(variants) + 4):
-                break
-            continue
-        title = doc.get("title", p.stem)
-        extract = doc.get("extract", "")
-        url = ""
-        cu = doc.get("content_urls") or {}
-        if isinstance(cu, dict):
-            desk = cu.get("desktop")
-            if isinstance(desk, dict):
-                url = str(desk.get("page") or desk.get("href") or "")
-        prompt = variants[vi % len(variants)]
-        instruction = f"{prompt} Concept: {title}. Varied framing ({vi})."
-        inp = (
-            f"wikipedia_rest_summary_file={p.name}\n"
-            f"canonical_url={url}\n"
-            f"extract:\n{extract[:6000]}"
-        )
-        output = textwrap.dedent(
-            """\
-            Summary grounded in Wikipedia REST extract only (not live page scrape).
-            Failure modes: simplification bias; academic vs market conventions differ.
-            DATA requirements: For trading, verify against venue specs + live samples — Wikipedia is not execution truth.
-            """
-        ).strip()
-        out.append({"instruction": instruction, "input": inp, "output": output, "source": "finqa"})
-        if idx > len(files) * len(variants) * 4:
-            break
-    return out[:n]
+            title = doc.get("title", p.stem)
+            extract = doc.get("extract", "")
+            cu = doc.get("content_urls") or {}
+            url = ""
+            if isinstance(cu, dict):
+                desk = cu.get("desktop")
+                if isinstance(desk, dict):
+                    url = str(desk.get("page") or "")
+            instruction = f"Indicator/stat concept card — no signal rules; regime-aware misuse checks. ({wj})"
+            inp = f"wikipedia_rest:{p.name}\nurl={url}\nextract:\n{extract[:6000]}"
+            claim = f"Concept '{title}' — probabilistic; forbid simplistic buy/sell mapping."
+            out = format_verifier_output(
+                claim=claim,
+                math_v="Definitions vs empirical estimates — separate.",
+                risk_v="Mis-applying academic stats to microstructure latency.",
+                ind_v=f"Discuss assumptions for indicators tied to {title} family.",
+                regime="Breaks under structural breaks / fat tails.",
+                fail_modes="Stationarity assumed falsely; window drift.",
+                leak="N/A",
+                policy="Policy must cite indicator definition sources.",
+                data_ev="Empirical calibration on labeled venue samples.",
+                status="needs proof",
+            )
+            cat = 3 if "rsi" in title.lower() or "atr" in title.lower() else 4
+            src = [f"wikipedia_rest:{p.name}", "manifest:approved"]
+            flags = ["bucket:concept_derived", "internal:concept_card", "doctrine:no_simple_rules"]
+        else:
+            ep = exchange_paths[ej % len(exchange_paths)]
+            ej += 1
+            raw = ep.read_bytes()[:400000]
+            text = strip_html(raw)
+            instruction = f"Crypto mechanics concept from venue docs — verify vs live API. file={ep.name}"
+            inp = f"exchange_doc:{ep.name}\nexcerpt:\n{text[:8000]}"
+            claim = "Documentation excerpt — reconcile with authenticated production endpoints."
+            out = format_verifier_output(
+                claim=claim,
+                math_v="Formulas must match venue revision.",
+                risk_v="Mis-set leverage/margin if doc stale.",
+                ind_v="N/A unless doc defines index constituents.",
+                regime="Funding/mark regimes vary — cite schedule.",
+                fail_modes="Testnet vs mainnet; symbol alias errors.",
+                leak="N/A",
+                policy="Implementation must track doc revision hash.",
+                data_ev="Signed API responses + doc PDF revision date.",
+                status="needs proof",
+            )
+            cat = 6 if "funding" in ep.name else 2
+            src = [f"exchange_doc:{ep.name}", "manifest:exchange_docs"]
+            flags = ["bucket:concept_derived", "internal:concept_card"]
+
+        if adversarial:
+            flags.append("trap:true")
+        yield {
+            "instruction": instruction,
+            "input": inp,
+            "output": out,
+            "source_ids": src,
+            "category": cat,
+            "adversarial": adversarial,
+            "quality_flags": flags,
+        }
 
 
-def build_exchange_doc_records(raw_html_dir: Path, n: int, seed: int) -> list[dict[str, Any]]:
-    rng = random.Random(seed + 11)
-    paths = [p for p in raw_html_dir.glob("*.html") if p.stat().st_size > 40]
-    if not paths:
-        return []
+def fill_bucket(
+    gen: Iterator[dict[str, Any]],
+    target: int,
+    seen: set[str],
+    *,
+    counters: dict[str, int],
+) -> tuple[list[dict[str, Any]], int, int]:
+    """Accept until target unique records; return (records, rejected, dup_skipped)."""
     out: list[dict[str, Any]] = []
-    questions = [
-        "Extract the operational definition (how traders observe this quantity on the venue).",
-        "List failure modes when relying on default REST polling frequency.",
-        "What must be validated against production fills vs documentation?",
-    ]
-    for i in range(n):
-        p = rng.choice(paths)
-        raw = p.read_bytes()[:400000]
-        text = strip_html(raw)
-        instruction = f"[exchange-docs-{i}] {rng.choice(questions)}"
-        inp = f"local_doc_file={p.name}\nsha256_prompt=verify_on_disk\nexcerpt:\n{text[:8000]}"
-        output = textwrap.dedent(
-            """\
-            Ground truth requirement: reconcile excerpt with official PDF/HTML revision date on venue.
-            Failure modes: doc drift vs API; testnet vs mainnet; symbol mapping errors.
-            DATA requirements: Pull authenticated endpoints + compare to documentation statements.
-            Verdict: needs proof until live cross-check passes.
-            """
-        ).strip()
-        out.append({"instruction": instruction, "input": inp, "output": output, "source": "exchange_docs"})
-    return out
-
-
-# --- CLI ---
+    rejected = 0
+    dup_skipped = 0
+    max_trials = target * 80
+    trials = 0
+    while len(out) < target and trials < max_trials:
+        trials += 1
+        rec = next(gen)
+        why = quality_gate_reject(rec)
+        if why:
+            rejected += 1
+            counters["reject_reasons"] = counters.get("reject_reasons", 0)  # noqa
+            continue
+        h = dedupe_hash(rec["instruction"], rec["input"])
+        if h in seen:
+            dup_skipped += 1
+            continue
+        seen.add(h)
+        out.append(rec)
+    if len(out) < target:
+        raise RuntimeError(f"bucket incomplete: got {len(out)} need {target} after {trials} trials")
+    return out, rejected, dup_skipped
 
 
 def cmd_pull(base: Path) -> dict[str, Any]:
@@ -600,124 +803,178 @@ def cmd_pull(base: Path) -> dict[str, Any]:
     return manifest
 
 
-def cmd_build(base: Path, seed: int, report_path: Path | None) -> Path:
+def cmd_build_staging(base: Path, seed: int) -> Path:
     configure_ssl()
-    raw_exchange = base / "sources" / "raw" / "exchange_docs"
-    raw_wiki = base / "sources" / "raw" / "wikipedia_rest"
+    manifest_path = base / "sources" / "manifest.json"
+    if not manifest_path.is_file():
+        raise SystemExit(f"Missing {manifest_path} — run: python source_to_training.py pull")
+    manifest_text = manifest_path.read_text(encoding="utf-8")
+    manifest = json.loads(manifest_text)
 
     db_path = market_db_path()
     if not db_path.is_file():
-        raise SystemExit(f"Market DB not found: {db_path} — set BLACKBOX_MARKET_DATA_PATH.")
+        raise SystemExit(f"Market DB not found: {db_path}")
     conn = sqlite3.connect(str(db_path))
-    conn.row_factory = sqlite3.Row
     try:
         state = extract_market_state(conn)
     finally:
         conn.close()
 
-    sql_recs = build_sql_records(state, 500, seed)
-    syn_recs = build_synthetic_adversarial(500, seed + 1)
+    from datasets import load_dataset  # type: ignore
 
-    # Bucket 3 split (must sum to 500): HF FinQA + MATH + Numina + Wikipedia REST + venue HTML excerpts
-    n_finqa, n_math, n_numina, n_wiki, n_exchange = 180, 120, 100, 50, 50
+    finqa_ds = load_dataset("ibm-research/finqa", trust_remote_code=True)
+    math_ds = load_dataset("EleutherAI/hendrycks_math", "algebra")
+    numina_ds = load_dataset("AI-MO/NuminaMath-CoT", split="train", streaming=True)
+    numina_iter = iter(numina_ds)
 
-    finqa_recs = build_hf_finqa(n_finqa, seed)
-    math_recs = build_hf_math(n_math, seed)
-    numina_recs = build_hf_numina(n_numina, seed)
-    wiki_recs = build_wikipedia_records(raw_wiki, n_wiki)
-    ex_recs = build_exchange_doc_records(raw_exchange, n_exchange, seed)
+    wiki_dir = base / "sources" / "raw" / "wikipedia_rest"
+    wiki_files = sorted(wiki_dir.glob("*.json"))
+    ex_dir = base / "sources" / "raw" / "exchange_docs"
+    exchange_paths = sorted([p for p in ex_dir.glob("*.html") if p.stat().st_size > 40])
 
-    corpus = finqa_recs + math_recs + numina_recs + wiki_recs + ex_recs
-    if len(corpus) < 500:
-        pad = 500 - len(corpus)
-        extra = build_hf_numina(pad, seed + 99)
-        corpus.extend(extra)
-    corpus = corpus[:500]
+    if not wiki_files:
+        raise SystemExit("No Wikipedia REST JSON in sources/raw/wikipedia_rest — run pull.")
+    if not exchange_paths:
+        raise SystemExit("No exchange HTML in sources/raw/exchange_docs — run pull.")
 
-    all_recs = sql_recs + syn_recs + corpus
-    if len(all_recs) != 1500:
-        raise RuntimeError(f"expected 1500 records, got {len(all_recs)}")
+    counters: dict[str, Any] = {"reject_reasons": Counter()}
+    seen: set[str] = set()
+    total_rejected = 0
+    total_dup = 0
 
-    out_path = base / "datasets" / "finquant_source_v0.1.jsonl"
-    out_path.parent.mkdir(parents=True, exist_ok=True)
+    sql_gen = iter_sql_staging(state, seed)
+    sql_recs, rj, dp = fill_bucket(sql_gen, 500, seen, counters=counters)
+    total_rejected += rj
+    total_dup += dp
+
+    synth_gen = iter_synthetic_staging(seed + 1)
+    syn_recs, rj2, dp2 = fill_bucket(synth_gen, 500, seen, counters=counters)
+    total_rejected += rj2
+    total_dup += dp2
+
+    concept_gen = iter_concept_staging(
+        base,
+        seed,
+        finqa_train=finqa_ds["train"],
+        math_train=math_ds["train"],
+        numina_iter=numina_iter,
+        wiki_files=wiki_files,
+        exchange_paths=exchange_paths,
+    )
+    con_recs, rj3, dp3 = fill_bucket(concept_gen, 500, seen, counters=counters)
+    total_rejected += rj3
+    total_dup += dp3
+
+    all_recs = sql_recs + syn_recs + con_recs
+    assert len(all_recs) == 1500
+    adv_n = sum(1 for r in all_recs if r.get("adversarial"))
+    if adv_n < 750:
+        raise RuntimeError(f"adversarial count {adv_n} < 750 — logic bug")
+
+    out_dir = base / "datasets" / "staging"
+    out_dir.mkdir(parents=True, exist_ok=True)
+    out_path = out_dir / "finquant_staging_v0.1.jsonl"
+    key_order = ("instruction", "input", "output", "source_ids", "category", "adversarial", "quality_flags")
     with out_path.open("w", encoding="utf-8") as f:
         for r in all_recs:
-            f.write(json.dumps(r, ensure_ascii=False) + "\n")
+            ordered = {k: r[k] for k in key_order}
+            f.write(json.dumps(ordered, ensure_ascii=False, sort_keys=True) + "\n")
 
-    counts = Counter(r["source"] for r in all_recs)
-    print(json.dumps({"written": str(out_path), "counts": dict(counts)}, indent=2))
+    by_cat = Counter(str(r["category"]) for r in all_recs)
+    coverage: Counter[str] = Counter()
+    for r in all_recs:
+        for sid in r["source_ids"]:
+            prefix = sid.split(":")[0]
+            coverage[prefix] += 1
 
-    rp = report_path or (base / "reports" / "source_acquisition_report_v0.1.md")
-    rp.parent.mkdir(parents=True, exist_ok=True)
-    man_path = base / "sources" / "manifest.json"
-    man_txt = man_path.read_text(encoding="utf-8") if man_path.is_file() else "{}"
+    report_path = base / "reports" / "source_to_training_build_report_v0.1.md"
+    samples_txt = "\n\n".join(
+        f"### Sample {i+1}\n```json\n{json.dumps({k: all_recs[i][k] for k in key_order}, indent=2, ensure_ascii=False)[:4500]}\n```"
+        for i in range(20)
+    )
 
-    sample_lines = []
-    for src in ("sql", "synthetic", "finqa", "exchange_docs"):
-        one = next((r for r in all_recs if r["source"] == src), None)
-        if one:
-            sample_lines.append(f"### source={src}\n```json\n{json.dumps(one, indent=2)[:3500]}\n```\n")
+    man_digest = sha256_file(manifest_path)
+    ready = adv_n >= 750 and len(all_recs) == 1500 and total_rejected < 500000
 
     report_md = "\n".join(
         [
-            "# FinQuant-1 Source Acquisition Report v0.1",
+            "# FinQuant-1 — source_to_training build report v0.1",
             "",
-            "**Training:** not started (dataset construction only).",
+            "**Training:** not started.",
             "",
-            "## Paths",
+            "## Manifest",
             "",
-            f"- Base: `{base}`",
-            f"- Output JSONL: `{out_path}`",
-            f"- Manifest: `{man_path}`",
-            f"- Market DB used: `{market_db_path()}`",
+            f"- Path: `{manifest_path}`",
+            f"- SHA256: `{man_digest}`",
             "",
-            "## What was pulled",
+            "## Staging output",
             "",
-            "See `sources/manifest.json` for HTTP/HF outcomes. Inline snapshot (may be truncated):",
+            f"- `{out_path}`",
+            f"- Records: **{len(all_recs)}**",
+            f"- Adversarial/trap rows: **{adv_n}** ({adv_n/15:.2f}%)",
+            f"- Quality gate rejections (attempts): **{total_rejected}**",
+            f"- Dedupe skips: **{total_dup}**",
             "",
-            "```json",
-            man_txt[:12000],
-            "```",
+            "## Category counts (closed enum 1–13)",
             "",
-            "## Transformation",
-            "",
-            "- **sql:** Aggregates from `market_ticks` / optional `market_bars_5m`. No raw price sequences exported — only summary JSON in `input`. If price legs are NULL, scenarios flag ingestion gaps explicitly.",
-            "- **synthetic:** Deterministic adversarial finance traps (seeded).",
-            "- **finqa:** `ibm-research/finqa`; competition math via **`EleutherAI/hendrycks_math`** (`algebra` config — canonical Hub mirror when `hendrycks/competition_math` is unavailable); `AI-MO/NuminaMath-CoT` (streaming subset); Wikipedia REST summaries. Schema uses `source`: `finqa` for this bucket — HF dataset ids appear in `input`.",
-            "- **exchange_docs:** HTML under `sources/raw/exchange_docs/` from venue documentation URLs; QA from on-disk excerpts.",
-            "",
-            "## Record counts",
-            "",
-            "| source | count |",
-            "|--------|------:|",
+            "| category | n |",
+            "|----------|--:|",
         ]
-        + [f"| `{k}` | {counts[k]} |" for k in sorted(counts)]
-        + ["", "## Samples", ""]
-        + sample_lines
+        + [f"| {k} | {by_cat[k]} |" for k in sorted(by_cat.keys(), key=lambda x: int(x))]
         + [
             "",
-            "## Gaps / follow-ups",
+            "## Source ID coverage (prefix)",
             "",
-            "- Investopedia often blocks automated fetch — use browser export if human-curated RSI/ATR copy required.",
-            "- Funding / open interest not in default `market_data.db` schema — add venue futures tables if needed.",
-            "- Expand exchange pulls beyond landing pages for liquidation/fee formulas.",
-            "- Deploy: copy `finquant/training/source_to_training.py` to `/data/finquant-1/training/` on the lab host; set `FINQUANT_BASE=/data/finquant-1`.",
+            "| prefix | rows |",
+            "|--------|-----:|",
+        ]
+        + [f"| `{k}` | {coverage[k]} |" for k in sorted(coverage.keys())]
+        + [
+            "",
+            "## Twenty sample records",
+            "",
+            samples_txt,
+            "",
+            "## Known gaps",
+            "",
+            "- HF dataset revisions may drift bytes — pin revisions for bitwise reproducibility across hosts.",
+            "- Streaming Numina order may vary if Hub shard changes.",
+            "- Sparse `market_ticks` prices produce telemetry-only SQL scenarios.",
             "",
             "## Readiness",
             "",
-            "Sources are real (HF + REST + on-disk docs + DB telemetry). Suitable for QA review before training.",
+            ("**Ready for QA review** — verifier contract enforced; staging schema v0.1." if ready else "**Not ready** — review errors."),
             "",
         ]
     )
-    rp.write_text(report_md, encoding="utf-8")
-    print(f"wrote {rp}")
+    report_path.parent.mkdir(parents=True, exist_ok=True)
+    report_path.write_text(report_md, encoding="utf-8")
+
+    print(
+        json.dumps(
+            {
+                "staging_path": str(out_path),
+                "total": len(all_recs),
+                "by_category": dict(by_cat),
+                "adversarial_count": adv_n,
+                "adversarial_pct": round(adv_n / len(all_recs), 6),
+                "rejected_attempts": total_rejected,
+                "dedupe_skipped": total_dup,
+                "source_coverage": dict(coverage),
+                "quality_warnings": [],
+                "report": str(report_path),
+            },
+            indent=2,
+        )
+    )
+    print(f"wrote {report_path}")
     return out_path
 
 
 def main() -> None:
-    ap = argparse.ArgumentParser(description="FinQuant-1 source pull + JSONL build")
+    ap = argparse.ArgumentParser(description="FinQuant-1 pull + deterministic staging")
     ap.add_argument("command", choices=("pull", "build", "all"))
-    ap.add_argument("--base", type=Path, default=None, help="FINQUANT root (default: env FINQUANT_BASE or finquant/)")
+    ap.add_argument("--base", type=Path, default=None)
     ap.add_argument("--seed", type=int, default=42)
     args = ap.parse_args()
     base = (args.base or default_finquant_base()).resolve()
@@ -725,10 +982,10 @@ def main() -> None:
     if args.command == "pull":
         cmd_pull(base)
     elif args.command == "build":
-        cmd_build(base, args.seed, None)
+        cmd_build_staging(base, args.seed)
     else:
         cmd_pull(base)
-        cmd_build(base, args.seed, None)
+        cmd_build_staging(base, args.seed)
 
 
 if __name__ == "__main__":

@@ -118,4 +118,6 @@ renaissance_v4/game_theory/Screenshot*.png
 
 # FinQuant generated datasets (large JSONL; host sync via scp)
 finquant/datasets/*.jsonl
+finquant/datasets/staging/
 finquant/sources/
+finquant/adapters/
