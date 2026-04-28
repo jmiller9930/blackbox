@@ -13,6 +13,10 @@ Prints one JSON object suitable for architect acceptance:
 * Completion: ``student_seam_stop_reason_v1`` from seam audit when batch path given
 * Sample: first / last three trades (by first sealed event order) with key lifecycle stages present in trace
 
+After a terminal batch, the Flask API also writes a durable envelope (survives process restart) at
+``runtime/batches/<job_id>/student_runtime_result_<job_id>.json`` under the PML runtime root. Pass
+that file as ``--batch-json``; the script flattens ``parallel_job_terminal_record_v1`` automatically.
+
 Usage::
 
     python3 scripts/student_rm_mandatory_runtime_proof_v1.py <job_id> \\
@@ -41,9 +45,32 @@ from renaissance_v4.game_theory.learning_trace_events_v1 import (
     read_learning_trace_events_for_job_v1,
 )
 from renaissance_v4.game_theory.memory_paths import default_learning_trace_events_jsonl
+from renaissance_v4.game_theory.parallel_job_terminal_persistence_v1 import (
+    SCHEMA_PARALLEL_JOB_TERMINAL_RECORD_V1,
+)
 from renaissance_v4.game_theory.student_proctor.student_proctor_operator_runtime_v1 import (
     _replay_closed_trades_total_v1,
 )
+
+
+def _normalize_batch_json_for_proof_v1(raw: Any) -> dict[str, Any]:
+    """Flatten ``parallel_job_terminal_record_v1`` disk envelopes into proof-compatible shape."""
+    if not isinstance(raw, dict):
+        return {}
+    if raw.get("schema") != SCHEMA_PARALLEL_JOB_TERMINAL_RECORD_V1:
+        return raw
+    proof_in = raw.get("student_rm_mandatory_runtime_proof_input_v1")
+    full = raw.get("full_parallel_result_v1")
+    out: dict[str, Any] = {}
+    if isinstance(full, dict):
+        out.update(full)
+    if isinstance(proof_in, dict):
+        if proof_in.get("results") is not None:
+            out["results"] = proof_in["results"]
+        for k in ("student_loop_seam_audit", "student_loop_directive_09_v1"):
+            if proof_in.get(k) is not None:
+                out[k] = proof_in[k]
+    return out
 
 
 def _replay_total_from_batch_obj(obj: Any) -> int | None:
@@ -62,13 +89,21 @@ def _replay_total_from_batch_obj(obj: Any) -> int | None:
 def _seam_audit_from_batch_obj(obj: Any) -> dict[str, Any] | None:
     if not isinstance(obj, dict):
         return None
-    for k in ("student_loop_seam_audit", "student_loop_seam_audit_v1"):
+    for k in (
+        "student_loop_directive_09_v1",
+        "student_loop_seam_audit",
+        "student_loop_seam_audit_v1",
+    ):
         v = obj.get(k)
         if isinstance(v, dict):
             return v
     inner = obj.get("result")
     if isinstance(inner, dict):
-        for k in ("student_loop_seam_audit", "student_loop_seam_audit_v1"):
+        for k in (
+            "student_loop_directive_09_v1",
+            "student_loop_seam_audit",
+            "student_loop_seam_audit_v1",
+        ):
             v = inner.get(k)
             if isinstance(v, dict):
                 return v
@@ -176,7 +211,7 @@ def build_mandatory_proof_v1(
     replay_audit_field: int | None = None
     if batch_json_path is not None:
         p = batch_json_path.expanduser().resolve()
-        batch_obj = json.loads(p.read_text(encoding="utf-8"))
+        batch_obj = _normalize_batch_json_for_proof_v1(json.loads(p.read_text(encoding="utf-8")))
         replay_from_batch = _replay_total_from_batch_obj(batch_obj)
         seam_audit = _seam_audit_from_batch_obj(batch_obj)
         if seam_audit:

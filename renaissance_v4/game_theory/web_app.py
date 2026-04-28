@@ -315,6 +315,9 @@ from renaissance_v4.game_theory.learning_trace_events_v1 import (
     count_learning_trace_rm_breadcrumbs_for_job_v1,
     count_learning_trace_terminal_integrity_v1,
 )
+from renaissance_v4.game_theory.parallel_job_terminal_persistence_v1 import (
+    write_parallel_job_terminal_record_v1,
+)
 from renaissance_v4.game_theory.learning_trace_instrumentation_v1 import learning_trace_instrumentation_enabled_v1
 from renaissance_v4.game_theory.candle_timeframe_runtime import (
     annotate_scenarios_with_candle_timeframe,
@@ -941,6 +944,34 @@ def _student_rm_trace_contract_error_message_v1(trace_audit: dict[str, Any]) -> 
             + "; ".join(str(x) for x in errs[:24])
         )
     return f"{FAILED_RUNTIME_STUDENT_RM_TRACE_CONTRACT_V1}: trace proof failed"
+
+
+def _persist_parallel_terminal_v1(
+    job_id: str,
+    terminal_status: str,
+    result: dict[str, Any] | None,
+    *,
+    session_log_batch_dir: str | None,
+    telemetry_dir: Path | str | None,
+) -> None:
+    """Write disk proof bundle immediately on terminal batch states (survives Flask restart)."""
+    try:
+        td = str(telemetry_dir.resolve()) if isinstance(telemetry_dir, Path) else (
+            str(telemetry_dir) if telemetry_dir else None
+        )
+        write_parallel_job_terminal_record_v1(
+            job_id=job_id,
+            terminal_status=terminal_status,
+            api_result_payload=result,
+            session_log_batch_dir=session_log_batch_dir,
+            telemetry_dir=td,
+        )
+    except Exception as ex:
+        print(
+            f"[parallel_terminal_persist] job_id={job_id} status={terminal_status} FAILED: {type(ex).__name__}: {ex}",
+            file=sys.stderr,
+            flush=True,
+        )
 
 
 def _prepare_parallel_payload(data: dict[str, Any]) -> dict[str, Any]:
@@ -1850,6 +1881,13 @@ def create_app() -> Flask:
                                 "batch_timing": timing_c,
                                 "operator_rm_gates_v1": _build_operator_rm_gates_v1(jc, job_id),
                             }
+                            _persist_parallel_terminal_v1(
+                                job_id,
+                                "cancelled",
+                                jc["result"],
+                                session_log_batch_dir=None,
+                                telemetry_dir=telem_dir,
+                            )
                     return
                 if not pf_audit.get("ok_v1"):
                     err_msg = str(
@@ -1924,6 +1962,13 @@ def create_app() -> Flask:
                                 "status_v1": FAILED_PREFLIGHT_STATUS_V1,
                                 "operator_rm_gates_v1": _build_operator_rm_gates_v1(jpf, job_id),
                             }
+                            _persist_parallel_terminal_v1(
+                                job_id,
+                                "error",
+                                jpf["result"],
+                                session_log_batch_dir=None,
+                                telemetry_dir=telem_dir,
+                            )
                     return
 
                 if pf_audit.get("skipped_v1"):
@@ -2023,6 +2068,13 @@ def create_app() -> Flask:
                                 "rm_preflight_audit_v1": pf_audit,
                                 "batch_timing": timing_pc,
                             }
+                            _persist_parallel_terminal_v1(
+                                job_id,
+                                "cancelled",
+                                jpc["result"],
+                                session_log_batch_dir=None,
+                                telemetry_dir=telem_dir,
+                            )
                     return
                 with _JOBS_LOCK:
                     j_go = _JOBS.get(job_id)
@@ -2104,6 +2156,15 @@ def create_app() -> Flask:
                             student_seam_observability_v1=seam_audit,
                             exam_run_line_meta_v1=exam_line_rt,
                         )
+                        rt_payload = {
+                            "ok": False,
+                            "job_id": job_id,
+                            "error": err_rt,
+                            "student_rm_trace_contract_audit_v1": trace_contract_audit,
+                            "batch_timing": timing_rt,
+                            "status_v1": FAILED_RUNTIME_STUDENT_RM_TRACE_CONTRACT_V1,
+                            "results": results,
+                        }
                         with _JOBS_LOCK:
                             jrt = _JOBS.get(job_id)
                             if jrt:
@@ -2111,15 +2172,14 @@ def create_app() -> Flask:
                                 jrt["completed"] = len(results)
                                 jrt["error"] = err_rt
                                 jrt["batch_timing"] = timing_rt
-                                jrt["result"] = {
-                                    "ok": False,
-                                    "job_id": job_id,
-                                    "error": err_rt,
-                                    "student_rm_trace_contract_audit_v1": trace_contract_audit,
-                                    "batch_timing": timing_rt,
-                                    "status_v1": FAILED_RUNTIME_STUDENT_RM_TRACE_CONTRACT_V1,
-                                    "results": results,
-                                }
+                                jrt["result"] = rt_payload
+                        _persist_parallel_terminal_v1(
+                            job_id,
+                            "error",
+                            rt_payload,
+                            session_log_batch_dir=session_batch_dir[0],
+                            telemetry_dir=telem_dir,
+                        )
                         return
                 if seam_audit.get("skipped"):
                     emit_seam_disabled_placeholder_events_v1(
@@ -2194,6 +2254,13 @@ def create_app() -> Flask:
                         j["completed"] = len(results)
                         j["result"] = payload
                         j["batch_timing"] = timing
+                _persist_parallel_terminal_v1(
+                    job_id,
+                    "done",
+                    payload,
+                    session_log_batch_dir=session_batch_dir[0],
+                    telemetry_dir=telem_dir,
+                )
             except ParallelBatchCancelledError as e:
                 emit_referee_execution_completed_v1(
                     job_id=job_id, fingerprint=lt_fp, results=list(e.partial_results or [])
@@ -2227,6 +2294,14 @@ def create_app() -> Flask:
                     exam_run_line_meta_v1=exam_line_err,
                     parallel_cancel_partial_results=partial,
                 )
+                cancel_payload = {
+                    "ok": False,
+                    "job_id": job_id,
+                    "error": err_s,
+                    "cancelled": True,
+                    "batch_timing": timing,
+                    "parallel_cancel_partial_results": partial,
+                }
                 with _JOBS_LOCK:
                     j = _JOBS.get(job_id)
                     if j:
@@ -2235,6 +2310,14 @@ def create_app() -> Flask:
                         j["error"] = err_s
                         j["batch_timing"] = timing
                         j["last_message"] = err_s
+                        j["result"] = cancel_payload
+                _persist_parallel_terminal_v1(
+                    job_id,
+                    "cancelled",
+                    cancel_payload,
+                    session_log_batch_dir=session_batch_dir[0],
+                    telemetry_dir=telem_dir,
+                )
             except Exception as e:
                 if not referee_parallel_completed_emit_v1:
                     emit_referee_execution_completed_v1(
@@ -2262,12 +2345,34 @@ def create_app() -> Flask:
                     operator_batch_audit=operator_batch_audit,
                     exam_run_line_meta_v1=exam_line_err,
                 )
+                err_payload = {
+                    "ok": False,
+                    "job_id": job_id,
+                    "error": err_s,
+                    "batch_timing": timing,
+                }
+                persisted_parallel_err = dict(err_payload)
                 with _JOBS_LOCK:
-                    j = _JOBS.get(job_id)
-                    if j:
-                        j["status"] = "error"
-                        j["error"] = err_s
-                        j["batch_timing"] = timing
+                    j_ex = _JOBS.get(job_id)
+                    if j_ex:
+                        j_ex["status"] = "error"
+                        j_ex["error"] = err_s
+                        j_ex["batch_timing"] = timing
+                        try:
+                            j_ex["result"] = {
+                                **err_payload,
+                                "operator_rm_gates_v1": _build_operator_rm_gates_v1(j_ex, job_id),
+                            }
+                        except Exception:
+                            j_ex["result"] = dict(err_payload)
+                        persisted_parallel_err = j_ex["result"]
+                _persist_parallel_terminal_v1(
+                    job_id,
+                    "error",
+                    persisted_parallel_err,
+                    session_log_batch_dir=None,
+                    telemetry_dir=telem_dir,
+                )
             finally:
                 try:
                     prune_pml_runtime_batch_dirs()
@@ -2736,6 +2841,7 @@ def create_app() -> Flask:
                 if isinstance(_panel_pb, dict):
                     fail_pb["rm_preflight_results_panel_v1"] = copy.deepcopy(_panel_pb)
                 _pf_cancel = bool(pf_audit_block.get("cancelled_during_preflight_v1"))
+                persisted_pb = dict(fail_pb)
                 with _JOBS_LOCK:
                     jbpf = _JOBS.get(job_id)
                     if isinstance(jbpf, dict):
@@ -2753,6 +2859,14 @@ def create_app() -> Flask:
                             }
                         except Exception:
                             jbpf["result"] = dict(fail_pb)
+                        persisted_pb = jbpf["result"]
+                _persist_parallel_terminal_v1(
+                    job_id,
+                    "cancelled" if _pf_cancel else "error",
+                    persisted_pb,
+                    session_log_batch_dir=None,
+                    telemetry_dir=telem_dir,
+                )
                 return jsonify(fail_pb), 400
 
             _bp_pass = "RM PREFLIGHT PASS (blocking)"
@@ -2867,6 +2981,7 @@ def create_app() -> Flask:
                     _pan_rt = pf_audit_block.get("rm_preflight_results_panel_v1")
                     if isinstance(_pan_rt, dict):
                         rt_body["rm_preflight_results_panel_v1"] = copy.deepcopy(_pan_rt)
+                    persisted_rtb = dict(rt_body)
                     with _JOBS_LOCK:
                         jrtb = _JOBS.get(job_id)
                         if isinstance(jrtb, dict):
@@ -2880,6 +2995,14 @@ def create_app() -> Flask:
                                 }
                             except Exception:
                                 jrtb["result"] = dict(rt_body)
+                            persisted_rtb = jrtb["result"]
+                    _persist_parallel_terminal_v1(
+                        job_id,
+                        "error",
+                        persisted_rtb,
+                        session_log_batch_dir=session_batch_dir[0],
+                        telemetry_dir=telem_dir,
+                    )
                     return jsonify(rt_body), 400
             if seam_blocking.get("skipped"):
                 emit_seam_disabled_placeholder_events_v1(
@@ -2951,6 +3074,7 @@ def create_app() -> Flask:
                 ok_body["rm_preflight_results_panel_v1"] = copy.deepcopy(_pan_ok)
             if disk_warn_msgs:
                 ok_body["operator_disk_warnings"] = disk_warn_msgs
+            persisted_ok_body = ok_body
             with _JOBS_LOCK:
                 jok = _JOBS.get(job_id)
                 if isinstance(jok, dict):
@@ -2962,6 +3086,14 @@ def create_app() -> Flask:
                         jok["result"] = copy.deepcopy(ok_body)
                     except Exception:
                         jok["result"] = ok_body
+                    persisted_ok_body = jok["result"]
+            _persist_parallel_terminal_v1(
+                job_id,
+                "done",
+                persisted_ok_body if isinstance(persisted_ok_body, dict) else ok_body,
+                session_log_batch_dir=session_batch_dir[0],
+                telemetry_dir=telem_dir,
+            )
             return jsonify(ok_body)
         except Exception as e:
             err_s = f"{type(e).__name__}: {e}"
@@ -2987,6 +3119,8 @@ def create_app() -> Flask:
                 exam_run_line_meta_v1=exam_line_block_err,
             )
             err_body: dict[str, Any] = {"ok": False, "error": err_s, "job_id": job_id, "batch_timing": timing}
+            term_blocking = "cancelled" if isinstance(e, ParallelBatchCancelledError) else "error"
+            persisted_block_ex = dict(err_body)
             with _JOBS_LOCK:
                 jex = _JOBS.get(job_id)
                 if isinstance(jex, dict):
@@ -3003,6 +3137,14 @@ def create_app() -> Flask:
                         }
                     except Exception:
                         jex["result"] = dict(err_body)
+                    persisted_block_ex = jex["result"]
+            _persist_parallel_terminal_v1(
+                job_id,
+                term_blocking,
+                persisted_block_ex,
+                session_log_batch_dir=None,
+                telemetry_dir=telem_dir,
+            )
             return jsonify(err_body), 400
         finally:
             try:
