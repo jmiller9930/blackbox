@@ -21,28 +21,9 @@ def main() -> int:
     snap = ollama_role_routing_snapshot_v1()
     print(json.dumps(snap, indent=2))
     trx = "172.20.1.66"
-
-    def _urls_in_snapshot(obj: object) -> list[str]:
-        out: list[str] = []
-        if isinstance(obj, dict):
-            for k, v in obj.items():
-                if k in (
-                    "ollama_base_url",
-                    "runtime_llm_api_gateway_base_url_v1",
-                ) and isinstance(v, str):
-                    out.append(v)
-                out.extend(_urls_in_snapshot(v))
-        elif isinstance(obj, list):
-            for it in obj:
-                out.extend(_urls_in_snapshot(it))
-        return out
-
-    bad = [u for u in _urls_in_snapshot(snap) if trx in u]
-    if bad:
-        print(
-            f"\nWARNING: {trx} in resolved base URL(s) {bad!r} — runtime must not target trx40.",
-            file=sys.stderr,
-        )
+    urls = json.dumps(snap)
+    if trx in urls:
+        print(f"\nWARNING: {trx} appears in snapshot — runtime routing must not target trx40.", file=sys.stderr)
         return 2
     return 0
 
