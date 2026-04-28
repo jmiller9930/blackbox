@@ -37,7 +37,12 @@ def _fence_md(label: str, body: str, *, lang: str = "") -> str:
 
 
 def _trade_ids_chronological_v1(events: list[dict[str, Any]]) -> list[str]:
-    """Prefer sealed-output snapshot order; fallback to student_output_sealed."""
+    """Prefer sealed-output snapshot order; fallback to student_output_sealed.
+
+    When LLM output is rejected for every trade, sealed snapshots may be absent while RM still
+    emits Directive 4 EV rows — fall back to ``expected_value_risk_cost_evaluated_v1`` order so the
+    fingerprint (including Expected Value / Risk Cost) remains closure-visible.
+    """
     out: list[str] = []
     for ev in events:
         if str(ev.get("stage") or "") != STUDENT_TEST_SEALED_SNAPSHOT_V1:
@@ -52,6 +57,14 @@ def _trade_ids_chronological_v1(events: list[dict[str, Any]]) -> list[str]:
             tid = str(ev.get("trade_id") or "").strip()
             if tid and tid not in out:
                 out.append(tid)
+    if out:
+        return out
+    for ev in events:
+        if str(ev.get("stage") or "") != EXPECTED_VALUE_RISK_COST_EVALUATED_V1:
+            continue
+        tid = str(ev.get("trade_id") or "").strip()
+        if tid and tid not in out:
+            out.append(tid)
     return out
 
 
