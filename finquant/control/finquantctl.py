@@ -32,9 +32,11 @@ def default_finquant_base() -> Path:
     return Path(__file__).resolve().parents[1]
 
 
-def new_run_id() -> str:
-    ts = datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%SZ")
-    return f"fq-{ts}-{uuid.uuid4().hex[:6]}"
+def new_run_id(mode: str) -> str:
+    """Run id: ``YYYYMMDD_HHMMSS_<mode>_<short_hash>`` (UTC)."""
+    ts = datetime.now(timezone.utc).strftime("%Y%m%d_%H%M%S")
+    short = uuid.uuid4().hex[:7]
+    return f"{ts}_{mode}_{short}"
 
 
 def check_vram_ollama_block() -> tuple[bool, str]:
@@ -104,7 +106,7 @@ def cmd_submit(args: argparse.Namespace, base: Path) -> int:
     runs = base / "runs"
     runs.mkdir(parents=True, exist_ok=True)
 
-    run_id = new_run_id()
+    run_id = new_run_id(args.mode)
     run_dir = runs / run_id
     run_dir.mkdir(parents=True, exist_ok=False)
 
@@ -166,8 +168,35 @@ def cmd_submit(args: argparse.Namespace, base: Path) -> int:
     }
     (run_dir / "run_state.json").write_text(json.dumps(run_state, indent=2), encoding="utf-8")
 
+    append_control_plane_m1_report(base, run_id, state)
+
     print(json.dumps({"run_id": run_id, "run_dir": str(run_dir), "state": state}, indent=2))
     return 0
+
+
+def append_control_plane_m1_report(base: Path, run_id: str, state: str) -> None:
+    """Append a submit stamp to ``reports/control_plane_m1_report.md`` under FINQUANT_BASE."""
+    reports = base / "reports"
+    reports.mkdir(parents=True, exist_ok=True)
+    path = reports / "control_plane_m1_report.md"
+    stamp = datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
+    block = (
+        f"\n### Submit — {stamp}\n\n"
+        f"- **run_id:** `{run_id}`\n"
+        f"- **state:** `{state}`\n"
+    )
+    if not path.is_file():
+        path.write_text(
+            "# FinQuant Control Plane — M1 report\n\n"
+            "> Canonical checklist lives in the repo: `finquant/reports/control_plane_m1_report.md`. "
+            "Copy that file here before relying on this report for sign-off, or merge its checklist into this path.\n\n"
+            "## Submit log (append-only, UTC)\n"
+            + block
+            + "\n",
+            encoding="utf-8",
+        )
+        return
+    path.write_text(path.read_text(encoding="utf-8").rstrip() + block + "\n", encoding="utf-8")
 
 
 def cmd_status(args: argparse.Namespace, base: Path) -> int:
@@ -221,7 +250,7 @@ def main() -> None:
     )
 
     st = sub.add_parser("status", help="Show run_state.json for a run")
-    st.add_argument("run_id", help="Run id (fq-...)")
+    st.add_argument("run_id", help="Run id (YYYYMMDD_HHMMSS_<mode>_<short_hash>)")
 
     ls = sub.add_parser("list", help="List runs under FINQUANT_BASE/runs/")
 
