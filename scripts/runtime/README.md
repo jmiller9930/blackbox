@@ -225,7 +225,7 @@ Canonical module: `renaissance_v4/game_theory/ollama_role_routing_v1.py`. Flask 
 | `OLLAMA_BASE_URL` | Used for **lightweight** base when `PML_LIGHTWEIGHT_OLLAMA_BASE_URL` unset (shared host). Legacy **`_ollama.ollama_base_url()`** unchanged (Anna / scripts). |
 | `STUDENT_OLLAMA_BASE_URL` | **Student** parallel LLM base (then `PML_LIGHTWEIGHT_*`, then `OLLAMA_BASE_URL`; default host `172.20.2.230`). Model tag still from exam contract. |
 | `SYSTEM_AGENT_OLLAMA_BASE_URL` / `SYSTEM_AGENT_OLLAMA_MODEL` / `SYSTEM_AGENT_OLLAMA_MODEL_FALLBACK` | **Operator System Agent** (defaults: `http://172.20.1.66:11434`, `qwen3-coder:30b`, fallback `qwen2.5-coder:7b`). **Propose-only** — use `system_agent_ollama_v1` behind tool APIs. |
-| `DEEPSEEK_ESCALATION_OLLAMA_*` | **Escalation / debug** only (`deepseek-r1:14b` on lightweight host by default). |
+| `DEEPSEEK_ESCALATION_OLLAMA_*` | **Escalation / debug** only (default model `deepseek-v4-flash:cloud` on host **172.20.2.230**; override base/model as needed). |
 
 Task `description` is JSON with `schema_version`, normalized fields, `parse_method` (`json` | `headings` | `fallback`), and `raw_model_output`.
 

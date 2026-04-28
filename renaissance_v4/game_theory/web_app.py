@@ -7830,6 +7830,7 @@ PAGE_HTML = """<!DOCTYPE html>
                   <option value="qwen3-coder:30b" selected>__STUDENT_LLM_APPROVED_MODEL_V1__ (production)</option>
                   <option value="qwen2.5:7b">qwen2.5:7b (legacy — fails contract)</option>
                   <option value="deepseek-r1:14b">deepseek-r1:14b (legacy — fails contract)</option>
+                  <option value="deepseek-v4-flash:cloud">deepseek-v4-flash:cloud (debug tag — fails contract unless approved)</option>
                 </select>
               </div>
             </details>
