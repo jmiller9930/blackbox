@@ -22,7 +22,7 @@ import sqlite3
 import threading
 import time
 from pathlib import Path
-from typing import Any
+from typing import Any, Callable
 
 from renaissance_v4.core.outcome_record import OutcomeRecord, outcome_record_to_jsonable
 from renaissance_v4.game_theory.exam_run_contract_v1 import (
@@ -465,6 +465,7 @@ def execute_student_behavior_probe_v1(
     telemetry_dir: Any,
     strategy_id: str | None,
     probe_progress_line_cb_v1: Any | None = None,
+    probe_cancel_check_v1: Callable[[], bool] | None = None,
 ) -> tuple[dict[str, Any] | None, dict[str, Any]]:
     """
     Run seam directly on synthetic minimal outcomes.
@@ -472,8 +473,12 @@ def execute_student_behavior_probe_v1(
     Returns ``(failure_payload_or_none, probe_summary_v1)``. On PASS, failure is ``None`` and summary carries counts.
 
     By default the seam body runs in a **spawn subprocess** and is **terminated** if it exceeds the wall SLA
-    (RM-preflight-style hard timeout). Optional ``probe_progress_line_cb_v1(line: str)`` receives elapsed/budget
+    (RM-preflight-style hard timeout).     Optional ``probe_progress_line_cb_v1(line: str)`` receives elapsed/budget
     ticks and PASS/FAIL/TIMEOUT lines for the operator terminal.
+
+    Optional ``probe_cancel_check_v1()`` is polled ~every 0.5s while the isolated subprocess runs (same idea as
+    RM preflight cancel). When it returns True, the child is terminated and the probe returns with
+    ``probe_cancelled_v1`` in the summary so the batch can finalize as **cancelled** without starting parallel workers.
 
     Does **not** invoke ``run_scenarios_parallel``.
     """
@@ -549,8 +554,21 @@ def execute_student_behavior_probe_v1(
         "strategy_id": strategy_id,
     }
 
-    use_subproc = student_behavior_probe_subprocess_isolation_enabled_v1()
     t_wall0 = time.monotonic()
+    if probe_cancel_check_v1 is not None and probe_cancel_check_v1():
+        elapsed = time.monotonic() - t_wall0
+        _line(f"PROBE: CANCELLED elapsed={elapsed:.2f}s — operator stop before seam execution")
+        return None, {
+            "probe_summary_v1": empty_m,
+            "probe_wall_clock_s_v1": elapsed,
+            "probe_wall_limit_s_v1": wall_limit,
+            "behavior_probe_trace_job_id_v1": trace_jid,
+            "probe_pass_v1": False,
+            "probe_outcome_v1": "CANCELLED",
+            "probe_cancelled_v1": True,
+        }
+
+    use_subproc = student_behavior_probe_subprocess_isolation_enabled_v1()
     stop_hb = threading.Event()
 
     def _heartbeat_loop_v1() -> None:
@@ -570,7 +588,29 @@ def execute_student_behavior_probe_v1(
             q = ctx.Queue(maxsize=1)
             proc = ctx.Process(target=_student_behavior_probe_child_main_v1, args=(q, seam_kw))
             proc.start()
-            proc.join(timeout=float(wall_limit))
+            deadline = time.monotonic() + float(wall_limit)
+            while proc.is_alive():
+                if probe_cancel_check_v1 is not None and probe_cancel_check_v1():
+                    proc.terminate()
+                    proc.join(2.0)
+                    if proc.is_alive():
+                        proc.kill()
+                        proc.join(2.0)
+                    elapsed = time.monotonic() - t_wall0
+                    _line(f"PROBE: CANCELLED elapsed={elapsed:.2f}s — operator stop (subprocess terminated)")
+                    return None, {
+                        "probe_summary_v1": empty_m,
+                        "probe_wall_clock_s_v1": elapsed,
+                        "probe_wall_limit_s_v1": wall_limit,
+                        "behavior_probe_trace_job_id_v1": trace_jid,
+                        "probe_pass_v1": False,
+                        "probe_outcome_v1": "CANCELLED",
+                        "probe_cancelled_v1": True,
+                    }
+                remaining = deadline - time.monotonic()
+                if remaining <= 0:
+                    break
+                proc.join(timeout=min(0.5, max(remaining, 0.01)))
             if proc.is_alive():
                 proc.terminate()
                 proc.join(2.0)
@@ -654,6 +694,18 @@ def execute_student_behavior_probe_v1(
                 return fl, {"probe_summary_v1": empty_m, "probe_pass_v1": False, "probe_outcome_v1": "FAIL"}
             failure, summary = raw[1], raw[2]
         else:
+            if probe_cancel_check_v1 is not None and probe_cancel_check_v1():
+                elapsed = time.monotonic() - t_wall0
+                _line(f"PROBE: CANCELLED elapsed={elapsed:.2f}s — operator stop before in-process seam")
+                return None, {
+                    "probe_summary_v1": empty_m,
+                    "probe_wall_clock_s_v1": elapsed,
+                    "probe_wall_limit_s_v1": wall_limit,
+                    "behavior_probe_trace_job_id_v1": trace_jid,
+                    "probe_pass_v1": False,
+                    "probe_outcome_v1": "CANCELLED",
+                    "probe_cancelled_v1": True,
+                }
             failure, summary = _run_probe_seam_body_v1(**seam_kw)
     finally:
         stop_hb.set()

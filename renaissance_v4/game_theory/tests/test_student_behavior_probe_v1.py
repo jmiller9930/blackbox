@@ -2,9 +2,14 @@
 
 from __future__ import annotations
 
+from pathlib import Path
+
+import pytest
+
 from renaissance_v4.game_theory.student_behavior_probe_v1 import (
     evaluate_student_behavior_probe_gates_v1,
     evaluate_full_student_run_contract_v1,
+    execute_student_behavior_probe_v1,
 )
 from renaissance_v4.game_theory.student_proctor.student_ollama_student_output_v1 import (
     _apply_canonical_student_action_v1,
@@ -107,3 +112,26 @@ def test_full_run_contract_fails_when_stop_reason_not_completed_v1() -> None:
         {"student_seam_stop_reason_v1": "skipped_seam_disabled_v1"},
     )
     assert r.get("student_full_run_contract_failed_v1") is True
+
+
+def test_execute_probe_operator_cancel_before_seam_v1(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Operator cancel must resolve without waiting for subprocess wall SLA."""
+    monkeypatch.setenv("PATTERN_GAME_STUDENT_PROBE_SUBPROCESS_ISOLATION", "1")
+    root = Path(__file__).resolve().parents[2]
+    manifest = root / "configs" / "manifests" / "baseline_v1_recipe.json"
+    if not manifest.is_file():
+        pytest.skip("baseline manifest missing")
+    scenarios = [{"scenario_id": "probe_cancel_t", "manifest_path": str(manifest)}]
+    fail, summ = execute_student_behavior_probe_v1(
+        scenarios=scenarios,
+        main_job_id="a" * 32,
+        exam_run_contract_request_v1={"student_brain_profile_v1": "memory_context_llm_student"},
+        operator_batch_audit={"operator_recipe_id": "custom"},
+        telemetry_dir=None,
+        strategy_id=None,
+        probe_cancel_check_v1=lambda: True,
+    )
+    assert fail is None
+    assert isinstance(summ, dict)
+    assert summ.get("probe_cancelled_v1") is True
+    assert summ.get("probe_outcome_v1") == "CANCELLED"

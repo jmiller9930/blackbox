@@ -2100,7 +2100,63 @@ def create_app() -> Flask:
                         telemetry_dir=telem_dir,
                         strategy_id=op_rid_pf,
                         probe_progress_line_cb_v1=lambda ln: _parallel_job_append_rm_preflight_line_v1(job_id, ln),
+                        probe_cancel_check_v1=lambda: _parallel_job_cancel_requested(job_id),
                     )
+                    if isinstance(probe_sum, dict) and probe_sum.get("probe_cancelled_v1"):
+                        err_probe_c = (
+                            "Stopped by operator during student behavior probe — parallel workers were not started."
+                        )
+                        _parallel_job_append_rm_preflight_line_v1(
+                            job_id, "GATE: Student behavior probe = CANCELLED (operator)"
+                        )
+                        exam_line_probe_c = _exam_run_line_meta_for_parallel_job_v1(
+                            exam_req=exam_req if isinstance(exam_req, dict) else None,
+                            fingerprint_preview=fp_prev if isinstance(fp_prev, str) else None,
+                            operator_batch_audit=operator_batch_audit,
+                            results=None,
+                            job_id=job_id,
+                            seam_audit=None,
+                            error=err_probe_c,
+                        )
+                        timing_probe_c = record_parallel_batch_finished(
+                            job_id=job_id,
+                            started_at_utc=started_iso,
+                            start_unix=start_unix,
+                            total_scenarios=len(scenarios),
+                            workers_used=workers_used,
+                            results=None,
+                            session_log_batch_dir=None,
+                            error=err_probe_c,
+                            operator_batch_audit=operator_batch_audit,
+                            exam_run_line_meta_v1=exam_line_probe_c,
+                            parallel_cancel_partial_results=[],
+                        )
+                        with _JOBS_LOCK:
+                            jprobe_c = _JOBS.get(job_id)
+                            if jprobe_c:
+                                jprobe_c["status"] = "cancelled"
+                                jprobe_c["preflight_display_status_v1"] = "preflight_cancelled_during_student_probe_v1"
+                                jprobe_c["completed"] = 0
+                                jprobe_c["error"] = err_probe_c
+                                jprobe_c["batch_timing"] = timing_probe_c
+                                jprobe_c["last_message"] = err_probe_c
+                                jprobe_c["result"] = {
+                                    "ok": False,
+                                    "job_id": job_id,
+                                    "error": err_probe_c,
+                                    "cancelled": True,
+                                    "student_behavior_probe_summary_v1": probe_sum,
+                                    "rm_preflight_audit_v1": pf_audit,
+                                    "batch_timing": timing_probe_c,
+                                }
+                                _persist_parallel_terminal_v1(
+                                    job_id,
+                                    "cancelled",
+                                    jprobe_c["result"],
+                                    session_log_batch_dir=None,
+                                    telemetry_dir=telem_dir,
+                                )
+                        return
                     pm = probe_sum.get("probe_summary_v1") if isinstance(probe_sum, dict) else {}
                     _pa = int((pm or {}).get("authority_count_v1") or 0)
                     _ps = int((pm or {}).get("sealed_count_v1") or 0)
@@ -2706,7 +2762,9 @@ def create_app() -> Flask:
 
         Sets ``cancel_requested`` on the in-memory job. During **RM preflight**, the background
         thread checks this flag between wiring steps and finalizes **cancelled** without starting
-        ``run_scenarios_parallel`` when possible. During **running**, the pool stops scheduling new
+        ``run_scenarios_parallel`` when possible. During **student behavior probe** (still ``preflight``
+        status), the probe parent polls this flag ~every 0.5s and terminates the isolated subprocess so
+        cancel does not block on the probe SLA. During **running**, the pool stops scheduling new
         scenarios and raises :class:`ParallelBatchCancelledError` when the runner observes the flag.
         Already-running worker processes are not SIGKILL'd — they may complete while the parent
         tears down pending futures.
@@ -3101,7 +3159,79 @@ def create_app() -> Flask:
                     telemetry_dir=telem_dir,
                     strategy_id=op_rid_pf_b,
                     probe_progress_line_cb_v1=lambda ln: _parallel_job_append_rm_preflight_line_v1(job_id, ln),
+                    probe_cancel_check_v1=lambda: _parallel_job_cancel_requested(job_id),
                 )
+                if isinstance(probe_sum_b, dict) and probe_sum_b.get("probe_cancelled_v1"):
+                    err_probe_cb = (
+                        "Stopped by operator during student behavior probe — parallel workers were not started."
+                    )
+                    _parallel_job_append_rm_preflight_line_v1(
+                        job_id, "GATE: Student behavior probe = CANCELLED (operator)"
+                    )
+                    exam_line_probe_cb = _exam_run_line_meta_for_parallel_job_v1(
+                        exam_req=exam_req_block if isinstance(exam_req_block, dict) else None,
+                        fingerprint_preview=fp_prev_block if isinstance(fp_prev_block, str) else None,
+                        operator_batch_audit=operator_batch_audit,
+                        results=None,
+                        job_id=job_id,
+                        seam_audit=None,
+                        error=err_probe_cb,
+                    )
+                    timing_probe_cb = record_parallel_batch_finished(
+                        job_id=job_id,
+                        started_at_utc=started_iso,
+                        start_unix=start_unix,
+                        total_scenarios=len(scenarios),
+                        workers_used=workers_used,
+                        results=None,
+                        session_log_batch_dir=None,
+                        error=err_probe_cb,
+                        operator_batch_audit=operator_batch_audit,
+                        exam_run_line_meta_v1=exam_line_probe_cb,
+                        parallel_cancel_partial_results=[],
+                    )
+                    cancel_probe_body: dict[str, Any] = {
+                        "ok": False,
+                        "job_id": job_id,
+                        "error": err_probe_cb,
+                        "cancelled": True,
+                        "student_behavior_probe_summary_v1": probe_sum_b,
+                        "batch_timing": timing_probe_cb,
+                        "rm_preflight_audit_v1": pf_audit_block,
+                    }
+                    _panel_probe_cb = pf_audit_block.get("rm_preflight_results_panel_v1")
+                    if isinstance(_panel_probe_cb, dict):
+                        cancel_probe_body["rm_preflight_results_panel_v1"] = copy.deepcopy(_panel_probe_cb)
+                    persisted_probe_cb = dict(cancel_probe_body)
+                    with _JOBS_LOCK:
+                        jpcb = _JOBS.get(job_id)
+                        if isinstance(jpcb, dict):
+                            jpcb["status"] = "cancelled"
+                            jpcb["preflight_display_status_v1"] = "preflight_cancelled_during_student_probe_v1"
+                            jpcb["completed"] = 0
+                            jpcb["error"] = err_probe_cb
+                            jpcb["batch_timing"] = timing_probe_cb
+                            try:
+                                jpcb["result"] = {
+                                    **cancel_probe_body,
+                                    "operator_rm_gates_v1": _build_operator_rm_gates_v1(jpcb, job_id),
+                                }
+                            except Exception:
+                                jpcb["result"] = dict(cancel_probe_body)
+                            persisted_probe_cb = jpcb["result"]
+                    _persist_parallel_terminal_v1(
+                        job_id,
+                        "cancelled",
+                        persisted_probe_cb,
+                        session_log_batch_dir=None,
+                        telemetry_dir=telem_dir,
+                    )
+                    print(
+                        f"[pattern_game_parallel] job_id={job_id} STUDENT BEHAVIOR PROBE CANCELLED (blocking)",
+                        file=sys.stderr,
+                        flush=True,
+                    )
+                    return jsonify(cancel_probe_body), 200
                 pm_b = probe_sum_b.get("probe_summary_v1") if isinstance(probe_sum_b, dict) else {}
                 _pab = int((pm_b or {}).get("authority_count_v1") or 0)
                 _psb = int((pm_b or {}).get("sealed_count_v1") or 0)
@@ -10013,8 +10143,17 @@ PAGE_HTML = """<!DOCTYPE html>
           ) {
             return;
           }
+          var prevTitle = btn.title;
+          var prevText = btn.textContent;
           btn.disabled = true;
-          fetch('/api/run-parallel/cancel/' + encodeURIComponent(rid), { method: 'POST' })
+          btn.classList.remove('pg-student-d11-row-stop');
+          btn.classList.add('pg-student-d11-row-stop-muted');
+          btn.textContent = '\u23f3';
+          btn.title = 'Stopping… — cancel sent to server';
+          fetch('/api/run-parallel/cancel/' + encodeURIComponent(rid), {
+            method: 'POST',
+            signal: typeof AbortSignal !== 'undefined' && AbortSignal.timeout ? AbortSignal.timeout(20000) : undefined,
+          })
             .then(function (r) {
               return r.json().then(function (j) {
                 return { r: r, j: j };
@@ -10024,17 +10163,34 @@ PAGE_HTML = """<!DOCTYPE html>
               if (!o.r.ok || !o.j || !o.j.ok) {
                 alert((o.j && o.j.error) || ('Stop failed HTTP ' + o.r.status));
                 btn.disabled = false;
+                btn.classList.add('pg-student-d11-row-stop');
+                btn.classList.remove('pg-student-d11-row-stop-muted');
+                btn.textContent = prevText;
+                btn.title = prevTitle;
                 return;
               }
+              btn.textContent = '\u2713';
+              btn.title = 'Stop acknowledged — row refreshes when the batch ends';
               if (typeof setRunFeedbackToast === 'function') {
-                setRunFeedbackToast('Stop requested — exam will show as stopped when workers finish.');
+                setRunFeedbackToast('Stopping… cancel acknowledged — scorecard shows \u23f3 until workers finish.');
               }
               void refreshStudentPanelD11({ soft: true });
               if (typeof refreshScorecardHistory === 'function') void refreshScorecardHistory();
+              setTimeout(function () {
+                void refreshStudentPanelD11({ soft: true });
+              }, 800);
             })
-            .catch(function () {
-              alert('Stop failed (network)');
+            .catch(function (e) {
+              alert(
+                e && e.name === 'TimeoutError'
+                  ? 'Stop request timed out — try again or hard-refresh.'
+                  : 'Stop failed (network)'
+              );
               btn.disabled = false;
+              btn.classList.add('pg-student-d11-row-stop');
+              btn.classList.remove('pg-student-d11-row-stop-muted');
+              btn.textContent = prevText;
+              btn.title = prevTitle;
             });
         });
       });
