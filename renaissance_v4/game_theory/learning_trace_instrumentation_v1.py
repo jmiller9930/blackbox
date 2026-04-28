@@ -756,6 +756,34 @@ def emit_student_decision_authority_v1(
         return False
 
 
+def emit_fatal_authority_seal_mismatch_v1(
+    *,
+    job_id: str,
+    fingerprint: str | None,
+    scenario_id: str | None,
+    trade_id: str | None,
+    reason_code: str,
+    detail: str,
+) -> None:
+    """Terminal learning-loop trace — mandate contract: authority rows must not exceed sealed rows."""
+    dc = (detail or "").strip()
+    rc = (reason_code or "").strip() or "unknown_v1"
+    _emit(
+        job_id=job_id,
+        fingerprint=fingerprint,
+        stage="fatal_authority_seal_mismatch_v1",
+        status="error",
+        summary=f"Fatal authority/seal contract: {rc}",
+        producer="student_loop_seam_v1",
+        evidence_payload={
+            "reason_code": rc,
+            "detail": dc[:4000],
+            "scenario_id": scenario_id,
+            "trade_id": trade_id,
+        },
+    )
+
+
 __all__ = [
     "emit_026c_learning_decision_made_v1",
     "emit_026c_learning_record_created_v1",
@@ -781,6 +809,7 @@ __all__ = [
     "emit_referee_used_student_output_batch_truth_v1",
     "emit_seam_disabled_placeholder_events_v1",
     "emit_student_decision_authority_v1",
+    "emit_fatal_authority_seal_mismatch_v1",
     "emit_student_output_sealed_v1",
     "emit_timeframe_mismatch_detected_v1",
     "fingerprint_for_parallel_job_v1",

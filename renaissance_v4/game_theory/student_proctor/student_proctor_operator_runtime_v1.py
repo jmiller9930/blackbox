@@ -62,6 +62,7 @@ from renaissance_v4.game_theory.student_proctor.learning_memory_promotion_v1 imp
 )
 from renaissance_v4.game_theory.learning_trace_instrumentation_v1 import (
     emit_candle_timeframe_nexus_v1,
+    emit_fatal_authority_seal_mismatch_v1,
     emit_governance_decided_v1,
     emit_learning_record_appended_v1,
     emit_llm_called_v1,
@@ -105,6 +106,50 @@ from renaissance_v4.game_theory.student_proctor.student_learning_store_v1 import
 from renaissance_v4.utils.db import DB_PATH
 
 _NS_RECORD = uuid.UUID("6ba7b810-9dad-11d1-80b4-00c04fd430c8")
+
+
+class StudentSeamFatalAuthoritySealMismatch(RuntimeError):
+    """Emitted ``student_decision_authority_v1`` for this trade but not ``student_output_sealed`` (mandate contract)."""
+
+    def __init__(
+        self,
+        *,
+        scenario_id: str,
+        trade_id: str,
+        reason_code: str,
+        detail: str,
+    ) -> None:
+        self.scenario_id = scenario_id
+        self.trade_id = trade_id
+        self.reason_code = reason_code
+        self.detail = detail
+        super().__init__(f"{reason_code}: {detail}")
+
+
+def _raise_fatal_authority_seal_mismatch_v1(
+    *,
+    job_id: str,
+    fingerprint: str | None,
+    scenario_id: str,
+    trade_id: str,
+    reason_code: str,
+    detail: str,
+) -> None:
+    emit_fatal_authority_seal_mismatch_v1(
+        job_id=job_id,
+        fingerprint=fingerprint,
+        scenario_id=scenario_id,
+        trade_id=trade_id,
+        reason_code=reason_code,
+        detail=detail,
+    )
+    raise StudentSeamFatalAuthoritySealMismatch(
+        scenario_id=scenario_id,
+        trade_id=trade_id,
+        reason_code=reason_code,
+        detail=detail,
+    )
+
 
 SCHEMA_PHASED_HONESTY_ANNOTATION_V1 = "phased_honesty_annotation_v1"
 SCHEMA_WIRING_HONESTY_ANNOTATION_V1 = "wiring_honesty_annotation_v1"
@@ -574,6 +619,8 @@ def student_loop_seam_after_parallel_batch_v1(
                     errors.append(f"{sid}: non-dict outcome")
                     continue
                 try:
+                    authority_commit_emitted_v1 = False
+                    seal_emitted_this_trade_v1 = False
                     o = outcome_record_from_jsonable(raw)
                 except (TypeError, ValueError) as e:
                     errors.append(f"{sid}: outcome_from_json {e!r}")
@@ -766,7 +813,17 @@ def student_loop_seam_after_parallel_batch_v1(
                                 exam_run_contract_request_v1=ex_req if isinstance(ex_req, dict) else None,
                                 mandate_active_v1=mandate_active_v1,
                             )
+                            authority_commit_emitted_v1 = True
                         except RuntimeError as rde:
+                            if mandate_active_v1:
+                                _raise_fatal_authority_seal_mismatch_v1(
+                                    job_id=str(run_id).strip(),
+                                    fingerprint=fp_emit,
+                                    scenario_id=sid,
+                                    trade_id=str(o.trade_id),
+                                    reason_code="student_decision_authority_runtime_v1",
+                                    detail=str(rde),
+                                )
                             errors.append(f"{sid} trade={o.trade_id}: student_decision_authority_runtime: {rde}")
                             continue
                     allowed_mids = frozenset(
@@ -848,6 +905,15 @@ def student_loop_seam_after_parallel_batch_v1(
                                     student_reasoning_fault_map_v1=_llm_rej_fm,
                                 )
                                 # No stub fallback for LLM profile — thesis or explicit failure (precondition for 017).
+                                if mandate_active_v1:
+                                    _raise_fatal_authority_seal_mismatch_v1(
+                                        job_id=str(run_id).strip(),
+                                        fingerprint=fp_emit,
+                                        scenario_id=sid,
+                                        trade_id=str(o.trade_id),
+                                        reason_code="llm_student_output_rejected_v1",
+                                        detail="; ".join(str(x) for x in (soe or []))[:4000],
+                                    )
                                 continue
                             ollama_ok += 1
                             emit_llm_output_received_v1(
@@ -864,6 +930,15 @@ def student_loop_seam_after_parallel_batch_v1(
                         )
                     if soe or so is None:
                         errors.append(f"{sid} trade={o.trade_id}: student_output {'; '.join(soe)}")
+                        if mandate_active_v1:
+                            _raise_fatal_authority_seal_mismatch_v1(
+                                job_id=str(run_id).strip(),
+                                fingerprint=fp_emit,
+                                scenario_id=sid,
+                                trade_id=str(o.trade_id),
+                                reason_code="student_output_empty_or_errors_v1",
+                                detail="; ".join(str(x) for x in (soe or []))[:4000],
+                            )
                         continue
                     so, auth_errs = apply_engine_authority_to_student_output_v1(
                         so,
@@ -896,6 +971,15 @@ def student_loop_seam_after_parallel_batch_v1(
                             f"{sid} trade={o.trade_id}: entry_reasoning_authority_merge_failed: "
                             f"{'; '.join(auth_errs) if auth_errs else 'null_student_output'}"
                         )
+                        if mandate_active_v1:
+                            _raise_fatal_authority_seal_mismatch_v1(
+                                job_id=str(run_id).strip(),
+                                fingerprint=fp_emit,
+                                scenario_id=sid,
+                                trade_id=str(o.trade_id),
+                                reason_code="entry_reasoning_authority_merge_failed_v1",
+                                detail="; ".join(auth_errs) if auth_errs else "null_student_output",
+                            )
                         continue
                     if (
                         str(brain_prof or "").strip() == STUDENT_BRAIN_PROFILE_MEMORY_CONTEXT_LLM_STUDENT_V1
@@ -940,6 +1024,15 @@ def student_loop_seam_after_parallel_batch_v1(
                                 trade_id=str(o.trade_id),
                                 student_reasoning_fault_map_v1=_proto_fm,
                             )
+                            if mandate_active_v1:
+                                _raise_fatal_authority_seal_mismatch_v1(
+                                    job_id=str(run_id).strip(),
+                                    fingerprint=fp_emit,
+                                    scenario_id=sid,
+                                    trade_id=str(o.trade_id),
+                                    reason_code="llm_student_decision_protocol_incomplete_v1",
+                                    detail=msg[:4000],
+                                )
                             continue
                     if mandate_active_v1:
                         _bind = ere.get("student_decision_authority_binding_v1") if isinstance(ere, dict) else None
@@ -948,7 +1041,14 @@ def student_loop_seam_after_parallel_batch_v1(
                                 f"{sid} trade={o.trade_id}: STUDENT_DECISION_AUTHORITY_MANDATE_V1: "
                                 "missing student_decision_authority_binding_v1 after authority — bypass blocked"
                             )
-                            continue
+                            _raise_fatal_authority_seal_mismatch_v1(
+                                job_id=str(run_id).strip(),
+                                fingerprint=fp_emit,
+                                scenario_id=sid,
+                                trade_id=str(o.trade_id),
+                                reason_code="student_decision_authority_binding_missing_v1",
+                                detail="missing student_decision_authority_binding_v1 after authority",
+                            )
                     if isinstance(so, dict) and isinstance(ere, dict):
                         _b = ere.get("student_decision_authority_binding_v1")
                         if isinstance(_b, dict) and _b.get("decision_source_v1"):
@@ -1030,6 +1130,7 @@ def student_loop_seam_after_parallel_batch_v1(
                         student_action_v1_echo=str(so.get("student_action_v1") or "").strip() or None,
                         decision_protocol_extras_v1=protocol_extras,
                     )
+                    seal_emitted_this_trade_v1 = True
                     if primary_trade_shadow_student_v1 is None and isinstance(so, dict):
                         primary_student_output_v1 = so
                         pr_ids = so.get("pattern_recipe_ids")
@@ -1176,12 +1277,41 @@ def student_loop_seam_after_parallel_batch_v1(
                             )
                         else:
                             raise
+                except StudentSeamFatalAuthoritySealMismatch:
+                    raise
                 except ValueError as ve:
+                    if mandate_active_v1 and authority_commit_emitted_v1 and not seal_emitted_this_trade_v1:
+                        _raise_fatal_authority_seal_mismatch_v1(
+                            job_id=str(run_id).strip(),
+                            fingerprint=fp_emit,
+                            scenario_id=sid,
+                            trade_id=str(o.trade_id),
+                            reason_code="value_error_before_seal_v1",
+                            detail=repr(ve),
+                        )
                     errors.append(f"{sid} trade={o.trade_id}: {ve!r}")
                 except OSError as oe:
+                    if mandate_active_v1 and authority_commit_emitted_v1 and not seal_emitted_this_trade_v1:
+                        _raise_fatal_authority_seal_mismatch_v1(
+                            job_id=str(run_id).strip(),
+                            fingerprint=fp_emit,
+                            scenario_id=sid,
+                            trade_id=str(o.trade_id),
+                            reason_code="os_error_before_seal_v1",
+                            detail=f"{type(oe).__name__}: {oe}",
+                        )
                     errors.append(f"{sid} trade={o.trade_id}: {type(oe).__name__}: {oe}")
                 except Exception as exc:
-                    # One trade must never abort the entire seam (939 outcomes); capture and continue.
+                    if mandate_active_v1 and authority_commit_emitted_v1 and not seal_emitted_this_trade_v1:
+                        _raise_fatal_authority_seal_mismatch_v1(
+                            job_id=str(run_id).strip(),
+                            fingerprint=fp_emit,
+                            scenario_id=sid,
+                            trade_id=str(o.trade_id),
+                            reason_code="seam_trade_unhandled_exception_before_seal_v1",
+                            detail=f"{type(exc).__name__}: {exc}",
+                        )
+                    # Non-mandate / post-seal: one trade must not abort the entire seam; capture and continue.
                     errors.append(
                         f"{sid} trade={o.trade_id}: seam_trade_unhandled_exception: "
                         f"{type(exc).__name__}: {exc}"
@@ -1287,6 +1417,53 @@ def student_loop_seam_after_parallel_batch_v1(
         if primary_student_output_v1 is not None:
             out_audit["primary_student_output_sealed_v1"] = copy.deepcopy(primary_student_output_v1)
         return out_audit
+    except StudentSeamFatalAuthoritySealMismatch as fatal_ex:
+        _fatal_fp_lo = (
+            _student_output_fingerprint_v1(primary_student_output_v1)
+            if primary_student_output_v1 is not None
+            else None
+        )
+        return {
+            "schema": "student_loop_seam_audit_v1",
+            "run_id": run_id,
+            "replay_closed_trades_total_v1": replay_closed_trades_total_v1,
+            "trades_considered": trades_seen,
+            "student_seam_stop_reason_v1": "fatal_authority_seal_mismatch_v1",
+            "fatal_authority_seal_mismatch_v1": True,
+            "fatal_authority_seal_detail_v1": {
+                "scenario_id": fatal_ex.scenario_id,
+                "trade_id": fatal_ex.trade_id,
+                "reason_code": fatal_ex.reason_code,
+                "detail": fatal_ex.detail,
+            },
+            "student_decision_authority_mandate_enforced_v1": bool(mandate_active_v1),
+            "candle_timeframe_minutes_effective_v1": int(c_tf),
+            "student_learning_store_path": str(store.resolve()),
+            "database_path_used": str(db.resolve()),
+            "student_learning_rows_appended": appended,
+            "student_retrieval_matches": retrieval_matches_total,
+            "student_output_fingerprint": _fatal_fp_lo,
+            "shadow_student_enabled": True,
+            "primary_trade_shadow_student_v1": primary_trade_shadow_student_v1,
+            "errors": errors + [f"fatal_authority_seal_mismatch_v1: {fatal_ex.reason_code}"],
+            "soft_fail": True,
+            "phased_honesty_annotation_v1": _phased_honesty_annotation_v1(
+                seam_attempted=True,
+                student_emit_occurred=primary_student_output_v1 is not None,
+                trades_seen=trades_seen,
+            ),
+            "wiring_honesty_annotation_v1": _wiring_honesty_annotation_v1(
+                seam_attempted=True,
+                trades_seen=trades_seen,
+                first_packet_annex_present=first_packet_annex_present,
+                retrieval_matches_total=retrieval_matches_total,
+            ),
+            "memory_semantics_annotation_v1": _memory_semantics_annotation_v1(seam_attempted=True),
+            "deliverable_vocabulary_annotation_v1": _deliverable_vocabulary_annotation_v1(
+                seam_attempted=True
+            ),
+            "llm_student_output_rejections_v1": llm_student_output_rejections_v1,
+        }
     except Exception as seam_fatal:
         _fatal_fp = (
             _student_output_fingerprint_v1(primary_student_output_v1)
@@ -1338,5 +1515,6 @@ __all__ = [
     "SCHEMA_MEMORY_SEMANTICS_ANNOTATION_V1",
     "SCHEMA_PHASED_HONESTY_ANNOTATION_V1",
     "SCHEMA_WIRING_HONESTY_ANNOTATION_V1",
+    "StudentSeamFatalAuthoritySealMismatch",
     "student_loop_seam_after_parallel_batch_v1",
 ]

@@ -66,6 +66,36 @@ def _fake_student_rm_trace_proof_ok_v1() -> dict:
     }
 
 
+def _fake_terminal_integrity_ok_for_job_v1() -> dict:
+    """Stub file-backed terminal counts — GT015 mocks seam/trace without writing JSONL."""
+    return {
+        "schema": "learning_trace_terminal_integrity_v1",
+        "student_decision_authority_v1_count": 1,
+        "student_output_sealed_count": 1,
+        "integrity_ok": True,
+        "lines_matched_job": 2,
+        "trace_file_exists": True,
+    }
+
+
+def _fake_execute_student_behavior_probe_pass_v1(*_a: object, **_kw: object) -> tuple[None, dict]:
+    """Avoid real subprocess probe — GT015 exercises HTTP + mocked parallel/seam only."""
+    return (
+        None,
+        {
+            "probe_summary_v1": {
+                "authority_count_v1": 1,
+                "sealed_count_v1": 1,
+                "rejection_count_v1": 0,
+                "contract_violation_count_v1": 0,
+            },
+            "probe_timeout_v1": False,
+            "probe_wall_clock_s_v1": 0.01,
+            "probe_wall_limit_s_v1": 120.0,
+        },
+    )
+
+
 def _fake_parallel_row() -> dict:
     return {
         "ok": True,
@@ -90,6 +120,10 @@ def _fake_parallel_row() -> dict:
     }
 
 
+@patch(
+    "renaissance_v4.game_theory.student_behavior_probe_v1.execute_student_behavior_probe_v1",
+    new=_fake_execute_student_behavior_probe_pass_v1,
+)
 def test_post_run_parallel_blocking_writes_lane_metadata(
     flask_client, tmp_path: Path
 ) -> None:
@@ -108,6 +142,8 @@ def test_post_run_parallel_blocking_writes_lane_metadata(
 
     fake_seam = {
         "schema": "student_loop_seam_audit_v1",
+        "student_seam_stop_reason_v1": "completed_all_trades_v1",
+        "student_decision_authority_mandate_enforced_v1": True,
         "student_learning_rows_appended": 0,
         "student_retrieval_matches": 0,
         "student_output_fingerprint": None,
@@ -156,20 +192,24 @@ def test_post_run_parallel_blocking_writes_lane_metadata(
                                     "renaissance_v4.game_theory.tools.student_reasoning_model_trace_proof_v1.validate_student_reasoning_model_trace_for_job_v1",
                                     return_value=_fake_student_rm_trace_proof_ok_v1(),
                                 ):
-                                    r = flask_client.post(
-                                        "/api/run-parallel",
-                                        json={
-                                            "operator_recipe_id": "custom",
-                                            "scenarios_json": '[{"scenario_id":"s_gt015_http","manifest_path":"renaissance_v4/configs/manifests/baseline_v1_recipe.json","agent_explanation":{"hypothesis":"GT015 HTTP test"}}]',
-                                            "evaluation_window_mode": "12",
-                                            "exam_run_contract_v1": {
-                                                "student_reasoning_mode": STUDENT_REASONING_MODE_LLM_QWEN_V1,
-                                                "skip_cold_baseline_if_anchor": True,
-                                                "prompt_version": "gt015_http_test_v1",
-                                                "retrieved_context_ids": [],
+                                    with patch(
+                                        "renaissance_v4.game_theory.learning_trace_events_v1.count_learning_trace_terminal_integrity_v1",
+                                        return_value=_fake_terminal_integrity_ok_for_job_v1(),
+                                    ):
+                                        r = flask_client.post(
+                                            "/api/run-parallel",
+                                            json={
+                                                "operator_recipe_id": "custom",
+                                                "scenarios_json": '[{"scenario_id":"s_gt015_http","manifest_path":"renaissance_v4/configs/manifests/baseline_v1_recipe.json","agent_explanation":{"hypothesis":"GT015 HTTP test"}}]',
+                                                "evaluation_window_mode": "12",
+                                                "exam_run_contract_v1": {
+                                                    "student_reasoning_mode": STUDENT_REASONING_MODE_LLM_QWEN_V1,
+                                                    "skip_cold_baseline_if_anchor": True,
+                                                    "prompt_version": "gt015_http_test_v1",
+                                                    "retrieved_context_ids": [],
+                                                },
                                             },
-                                        },
-                                    )
+                                        )
     assert r.status_code == 200, r.get_data(as_text=True)
     body = r.get_json()
     assert body.get("ok") is True
@@ -181,6 +221,10 @@ def test_post_run_parallel_blocking_writes_lane_metadata(
     assert last_meta.get("student_llm_execution_v1", {}).get("ollama_trades_succeeded") == 1
 
 
+@patch(
+    "renaissance_v4.game_theory.student_behavior_probe_v1.execute_student_behavior_probe_v1",
+    new=_fake_execute_student_behavior_probe_pass_v1,
+)
 def test_post_run_parallel_start_returns_200_with_exam_contract(
     flask_client, tmp_path: Path
 ) -> None:
@@ -209,6 +253,8 @@ def test_post_run_parallel_start_returns_200_with_exam_contract(
 
     fake_seam = {
         "schema": "student_loop_seam_audit_v1",
+        "student_seam_stop_reason_v1": "completed_all_trades_v1",
+        "student_decision_authority_mandate_enforced_v1": True,
         "student_learning_rows_appended": 0,
         "student_retrieval_matches": 0,
         "student_output_fingerprint": "ab" * 32,
@@ -258,18 +304,22 @@ def test_post_run_parallel_start_returns_200_with_exam_contract(
                                         "renaissance_v4.game_theory.tools.student_reasoning_model_trace_proof_v1.validate_student_reasoning_model_trace_for_job_v1",
                                         return_value=_fake_student_rm_trace_proof_ok_v1(),
                                     ):
-                                        r = flask_client.post(
-                                            "/api/run-parallel/start",
-                                            json={
-                                                "operator_recipe_id": "custom",
-                                                "scenarios_json": '[{"scenario_id":"s_gt015_http","manifest_path":"renaissance_v4/configs/manifests/baseline_v1_recipe.json","agent_explanation":{"hypothesis":"GT015 start test"}}]',
-                                                "evaluation_window_mode": "12",
-                                                "exam_run_contract_v1": {
-                                                    "student_reasoning_mode": STUDENT_REASONING_MODE_LLM_QWEN_V1,
-                                                    "prompt_version": "gt015_start_test_v1",
+                                        with patch(
+                                            "renaissance_v4.game_theory.learning_trace_events_v1.count_learning_trace_terminal_integrity_v1",
+                                            return_value=_fake_terminal_integrity_ok_for_job_v1(),
+                                        ):
+                                            r = flask_client.post(
+                                                "/api/run-parallel/start",
+                                                json={
+                                                    "operator_recipe_id": "custom",
+                                                    "scenarios_json": '[{"scenario_id":"s_gt015_http","manifest_path":"renaissance_v4/configs/manifests/baseline_v1_recipe.json","agent_explanation":{"hypothesis":"GT015 start test"}}]',
+                                                    "evaluation_window_mode": "12",
+                                                    "exam_run_contract_v1": {
+                                                        "student_reasoning_mode": STUDENT_REASONING_MODE_LLM_QWEN_V1,
+                                                        "prompt_version": "gt015_start_test_v1",
+                                                    },
                                                 },
-                                            },
-                                        )
+                                            )
     assert r.status_code == 200, r.get_data(as_text=True)
     st = r.get_json()
     assert st.get("ok") is True

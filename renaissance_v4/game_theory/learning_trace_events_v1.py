@@ -64,6 +64,8 @@ EVENT_STAGES_V1 = (
     "lifecycle_reasoning_stage_v1",
     "lifecycle_tape_summary_v1",
     "student_decision_authority_v1",
+    # Runtime contract — seam/job terminal when authority rows exceed sealed (after mandate processing).
+    "fatal_authority_seal_mismatch_v1",
 )
 
 # Map persisted ``stage`` → graph node ``id`` (reconstructed trace) for merge / provenance.
@@ -102,6 +104,7 @@ STAGE_TO_NODE_IDS_V1: dict[str, tuple[str, ...]] = {
     "lifecycle_reasoning_stage_v1": ("student_reasoning", "llm_reasoning"),
     "lifecycle_tape_summary_v1": ("student_reasoning", "llm_reasoning"),
     "student_decision_authority_v1": ("student_decision", "student_reasoning"),
+    "fatal_authority_seal_mismatch_v1": ("student_decision",),
 }
 
 

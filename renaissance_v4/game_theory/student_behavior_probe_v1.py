@@ -17,6 +17,7 @@ Disable isolation with ``PATTERN_GAME_STUDENT_PROBE_SUBPROCESS_ISOLATION=0`` (te
 from __future__ import annotations
 
 import copy
+import json
 import multiprocessing
 import os
 import sqlite3
@@ -122,7 +123,11 @@ def evaluate_full_student_run_contract_v1(
     if not bool(intr.get("integrity_ok")):
         reasons.append("authority_ne_sealed_trace_integrity_v1")
     sr = str((seam_audit or {}).get("student_seam_stop_reason_v1") or "") if isinstance(seam_audit, dict) else ""
-    if sr != "completed_all_trades_v1":
+    sr_terminal_ok_v1 = sr in (
+        "completed_all_trades_v1",
+        "rm_preflight_early_exit_first_seal_v1",
+    )
+    if not sr_terminal_ok_v1:
         reasons.append(f"student_seam_stop_reason_not_completed_v1:{sr or 'missing'}")
     failed = len(reasons) > 0
     return {
@@ -131,6 +136,50 @@ def evaluate_full_student_run_contract_v1(
         "contract_failure_reasons_v1": reasons,
         "learning_trace_terminal_integrity_echo_v1": intr,
     }
+
+
+def finalize_seam_audit_authority_seal_contract_v1(
+    job_id: str,
+    seam_audit: dict[str, Any] | None,
+) -> dict[str, Any]:
+    """
+    Post-seam belt-and-suspenders: if mandate applies and terminal trace counts show authority≠sealed,
+    emit ``fatal_authority_seal_mismatch_v1`` and flag the seam audit (job batch path treats as terminal error).
+    """
+    sa = seam_audit if isinstance(seam_audit, dict) else {}
+    if sa.get("fatal_authority_seal_mismatch_v1"):
+        return sa
+    if not sa.get("student_decision_authority_mandate_enforced_v1"):
+        return sa
+    if sa.get("skipped"):
+        return sa
+    from renaissance_v4.game_theory.learning_trace_events_v1 import count_learning_trace_terminal_integrity_v1
+    from renaissance_v4.game_theory.learning_trace_instrumentation_v1 import emit_fatal_authority_seal_mismatch_v1
+
+    jid = str(job_id or "").strip()
+    intr = count_learning_trace_terminal_integrity_v1(jid)
+    if bool(intr.get("integrity_ok")):
+        return sa
+    detail = json.dumps(intr, default=str)[:4000]
+    emit_fatal_authority_seal_mismatch_v1(
+        job_id=jid,
+        fingerprint=None,
+        scenario_id=None,
+        trade_id=None,
+        reason_code="terminal_integrity_auth_ne_sealed_v1",
+        detail=detail,
+    )
+    out = dict(sa)
+    out["fatal_authority_seal_mismatch_v1"] = True
+    out["student_seam_stop_reason_v1"] = "fatal_authority_seal_mismatch_v1"
+    out["fatal_authority_seal_detail_v1"] = {
+        "reason_code": "terminal_integrity_auth_ne_sealed_v1",
+        "learning_trace_terminal_integrity_echo_v1": intr,
+    }
+    errs = list(out.get("errors") or []) if isinstance(out.get("errors"), list) else []
+    errs.append("fatal_authority_seal_mismatch_v1: terminal_integrity_auth_ne_sealed_v1")
+    out["errors"] = errs
+    return out
 
 
 def _symbol_from_manifest_v1(manifest: dict[str, Any]) -> str:
@@ -731,6 +780,7 @@ __all__ = [
     "build_failed_student_behavior_probe_payload_v1",
     "build_failed_student_behavior_probe_timeout_payload_v1",
     "evaluate_full_student_run_contract_v1",
+    "finalize_seam_audit_authority_seal_contract_v1",
     "evaluate_student_behavior_probe_gates_v1",
     "execute_student_behavior_probe_v1",
     "profile_requires_student_behavior_probe_v1",

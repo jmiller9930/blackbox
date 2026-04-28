@@ -936,6 +936,7 @@ def _web_ui_require_hypothesis() -> bool:
 FAILED_RUNTIME_STUDENT_RM_TRACE_CONTRACT_V1 = "failed_runtime_student_rm_trace_contract_v1"
 FAILED_STUDENT_BEHAVIOR_PROBE_STATUS_V1 = "failed_student_behavior_probe_v1"
 FAILED_STUDENT_FULL_RUN_CONTRACT_STATUS_V1 = "failed_student_full_run_contract_v1"
+FAILED_FATAL_AUTHORITY_SEAL_MISMATCH_V1 = "fatal_authority_seal_mismatch_v1"
 
 
 def _student_rm_trace_contract_error_message_v1(trace_audit: dict[str, Any]) -> str:
@@ -1783,6 +1784,7 @@ def create_app() -> Flask:
                 FAILED_STUDENT_BEHAVIOR_PROBE_TIMEOUT_V1,
                 evaluate_full_student_run_contract_v1,
                 execute_student_behavior_probe_v1,
+                finalize_seam_audit_authority_seal_contract_v1,
                 profile_requires_student_behavior_probe_v1,
                 student_behavior_probe_enabled_v1,
             )
@@ -2305,6 +2307,77 @@ def create_app() -> Flask:
                     if isinstance(operator_batch_audit, dict)
                     else None,
                 )
+                seam_audit = finalize_seam_audit_authority_seal_contract_v1(job_id, seam_audit)
+                if seam_audit.get("fatal_authority_seal_mismatch_v1"):
+                    _fd_asm = seam_audit.get("fatal_authority_seal_detail_v1")
+                    _rc_asm = (
+                        str((_fd_asm or {}).get("reason_code") or "authority_seal_contract_v1")
+                        if isinstance(_fd_asm, dict)
+                        else "authority_seal_contract_v1"
+                    )
+                    err_asm = f"{FAILED_FATAL_AUTHORITY_SEAL_MISMATCH_V1}: {_rc_asm}"
+                    exam_line_asm = _exam_run_line_meta_for_parallel_job_v1(
+                        exam_req=exam_req if isinstance(exam_req, dict) else None,
+                        fingerprint_preview=fp_prev if isinstance(fp_prev, str) else None,
+                        operator_batch_audit=operator_batch_audit,
+                        results=results,
+                        job_id=job_id,
+                        seam_audit=seam_audit,
+                        error=err_asm,
+                    )
+                    if isinstance(exam_line_asm, dict):
+                        exam_line_asm["batch_terminal_status_v1"] = FAILED_FATAL_AUTHORITY_SEAL_MISMATCH_V1
+                        if isinstance(_fd_asm, dict):
+                            exam_line_asm["fatal_authority_seal_detail_v1"] = _fd_asm
+                    timing_asm = record_parallel_batch_finished(
+                        job_id=job_id,
+                        started_at_utc=started_iso,
+                        start_unix=start_unix,
+                        total_scenarios=len(scenarios),
+                        workers_used=workers_used,
+                        results=results,
+                        session_log_batch_dir=session_batch_dir[0],
+                        error=err_asm,
+                        operator_batch_audit=operator_batch_audit,
+                        student_seam_observability_v1=seam_audit,
+                        exam_run_line_meta_v1=exam_line_asm,
+                    )
+                    asm_payload: dict[str, Any] = {
+                        "ok": False,
+                        "job_id": job_id,
+                        "error": err_asm,
+                        "results": results,
+                        "batch_timing": timing_asm,
+                        "status_v1": FAILED_FATAL_AUTHORITY_SEAL_MISMATCH_V1,
+                        "student_loop_directive_09_v1": seam_audit,
+                        "rm_preflight_audit_v1": pf_audit,
+                        "operator_metrics_suppressed_v1": True,
+                    }
+                    persisted_asm = asm_payload
+                    with _JOBS_LOCK:
+                        j_asm = _JOBS.get(job_id)
+                        if j_asm:
+                            j_asm["status"] = "error"
+                            j_asm["completed"] = len(results)
+                            j_asm["error"] = err_asm
+                            j_asm["batch_timing"] = timing_asm
+                            try:
+                                j_asm["result"] = {
+                                    **asm_payload,
+                                    "operator_rm_gates_v1": _build_operator_rm_gates_v1(j_asm, job_id),
+                                }
+                            except Exception:
+                                j_asm["result"] = dict(asm_payload)
+                            persisted_asm = j_asm["result"]
+                    _persist_parallel_terminal_v1(
+                        job_id,
+                        "error",
+                        persisted_asm,
+                        session_log_batch_dir=session_batch_dir[0],
+                        telemetry_dir=telem_dir,
+                    )
+                    return
+
                 if student_rm_wiring_mandate_active_v1(exam_req if isinstance(exam_req, dict) else None):
                     from renaissance_v4.game_theory.tools.student_reasoning_model_trace_proof_v1 import (
                         validate_student_reasoning_model_trace_for_job_v1,
@@ -2367,8 +2440,10 @@ def create_app() -> Flask:
                         return
 
                 full_run_contract_v1: dict[str, Any] | None = None
-                if profile_requires_student_behavior_probe_v1(exam_req if isinstance(exam_req, dict) else None) and not seam_audit.get(
-                    "skipped"
+                if (
+                    profile_requires_student_behavior_probe_v1(exam_req if isinstance(exam_req, dict) else None)
+                    and not seam_audit.get("skipped")
+                    and not seam_audit.get("fatal_authority_seal_mismatch_v1")
                 ):
                     full_run_contract_v1 = evaluate_full_student_run_contract_v1(job_id, seam_audit)
                     if full_run_contract_v1.get("student_full_run_contract_failed_v1"):
@@ -3015,6 +3090,7 @@ def create_app() -> Flask:
                 FAILED_STUDENT_BEHAVIOR_PROBE_TIMEOUT_V1,
                 evaluate_full_student_run_contract_v1,
                 execute_student_behavior_probe_v1,
+                finalize_seam_audit_authority_seal_contract_v1,
                 profile_requires_student_behavior_probe_v1,
                 student_behavior_probe_enabled_v1,
             )
@@ -3400,6 +3476,79 @@ def create_app() -> Flask:
                 if isinstance(operator_batch_audit, dict)
                 else None,
             )
+            seam_blocking = finalize_seam_audit_authority_seal_contract_v1(job_id, seam_blocking)
+            if seam_blocking.get("fatal_authority_seal_mismatch_v1"):
+                _fd_asmb = seam_blocking.get("fatal_authority_seal_detail_v1")
+                _rc_asmb = (
+                    str((_fd_asmb or {}).get("reason_code") or "authority_seal_contract_v1")
+                    if isinstance(_fd_asmb, dict)
+                    else "authority_seal_contract_v1"
+                )
+                err_asmb = f"{FAILED_FATAL_AUTHORITY_SEAL_MISMATCH_V1}: {_rc_asmb}"
+                exam_line_asmb = _exam_run_line_meta_for_parallel_job_v1(
+                    exam_req=exam_req_block if isinstance(exam_req_block, dict) else None,
+                    fingerprint_preview=fp_prev_block if isinstance(fp_prev_block, str) else None,
+                    operator_batch_audit=operator_batch_audit,
+                    results=results,
+                    job_id=job_id,
+                    seam_audit=seam_blocking,
+                    error=err_asmb,
+                )
+                if isinstance(exam_line_asmb, dict):
+                    exam_line_asmb["batch_terminal_status_v1"] = FAILED_FATAL_AUTHORITY_SEAL_MISMATCH_V1
+                    if isinstance(_fd_asmb, dict):
+                        exam_line_asmb["fatal_authority_seal_detail_v1"] = _fd_asmb
+                timing_asmb = record_parallel_batch_finished(
+                    job_id=job_id,
+                    started_at_utc=started_iso,
+                    start_unix=start_unix,
+                    total_scenarios=len(scenarios),
+                    workers_used=workers_used,
+                    results=results,
+                    session_log_batch_dir=session_batch_dir[0],
+                    error=err_asmb,
+                    operator_batch_audit=operator_batch_audit,
+                    student_seam_observability_v1=seam_blocking,
+                    exam_run_line_meta_v1=exam_line_asmb,
+                )
+                asmb_body: dict[str, Any] = {
+                    "ok": False,
+                    "error": err_asmb,
+                    "job_id": job_id,
+                    "batch_timing": timing_asmb,
+                    "status_v1": FAILED_FATAL_AUTHORITY_SEAL_MISMATCH_V1,
+                    "student_loop_directive_09_v1": seam_blocking,
+                    "rm_preflight_audit_v1": pf_audit_block,
+                    "operator_metrics_suppressed_v1": True,
+                    "results": results,
+                }
+                _pan_asmb = pf_audit_block.get("rm_preflight_results_panel_v1")
+                if isinstance(_pan_asmb, dict):
+                    asmb_body["rm_preflight_results_panel_v1"] = copy.deepcopy(_pan_asmb)
+                persisted_asmb = dict(asmb_body)
+                with _JOBS_LOCK:
+                    j_asmb = _JOBS.get(job_id)
+                    if isinstance(j_asmb, dict):
+                        j_asmb["status"] = "error"
+                        j_asmb["error"] = err_asmb
+                        j_asmb["batch_timing"] = timing_asmb
+                        try:
+                            j_asmb["result"] = {
+                                **asmb_body,
+                                "operator_rm_gates_v1": _build_operator_rm_gates_v1(j_asmb, job_id),
+                            }
+                        except Exception:
+                            j_asmb["result"] = dict(asmb_body)
+                        persisted_asmb = j_asmb["result"]
+                _persist_parallel_terminal_v1(
+                    job_id,
+                    "error",
+                    persisted_asmb,
+                    session_log_batch_dir=session_batch_dir[0],
+                    telemetry_dir=telem_dir,
+                )
+                return jsonify(asmb_body), 400
+
             if student_rm_wiring_mandate_active_v1(
                 exam_req_block if isinstance(exam_req_block, dict) else None
             ):
@@ -3474,9 +3623,13 @@ def create_app() -> Flask:
                     return jsonify(rt_body), 400
 
             full_run_contract_block_v1: dict[str, Any] | None = None
-            if profile_requires_student_behavior_probe_v1(
-                exam_req_block if isinstance(exam_req_block, dict) else None
-            ) and not seam_blocking.get("skipped"):
+            if (
+                profile_requires_student_behavior_probe_v1(
+                    exam_req_block if isinstance(exam_req_block, dict) else None
+                )
+                and not seam_blocking.get("skipped")
+                and not seam_blocking.get("fatal_authority_seal_mismatch_v1")
+            ):
                 full_run_contract_block_v1 = evaluate_full_student_run_contract_v1(job_id, seam_blocking)
                 if full_run_contract_block_v1.get("student_full_run_contract_failed_v1"):
                     err_fcb = (
