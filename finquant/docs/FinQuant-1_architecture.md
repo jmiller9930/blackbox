@@ -3,6 +3,8 @@
 **Status:** Active architecture baseline — read before further FinQuant-1 build work.  
 **Scope:** Deliberately narrow in **what it is allowed to do for operators** (verifier, not assistant). Do not expand into an autonomous quant agent or open-ended general assistant product.
 
+**Framing:** FinQuant-1 is implemented as **NDE: FinQuant** — the first domain inside the **NDE Factory** (Narrow Domain Expert factory). The reusable factory abstraction is documented in **`finquant/reports/nde_factory_v0.1.md`**; this document remains the **domain-specific** architecture for crypto-perps quant verification.
+
 ---
 
 ## Final product story — agent + FinQuant as one system

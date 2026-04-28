@@ -4,6 +4,8 @@
 **Deploy mirror:** `/data/finquant-1/reports/training_control_plane_v0.1.md`  
 **Scope:** Govern FinQuant-1 training/eval without replacing existing scripts (`source_to_training.py`, `train_qlora.py`, `eval_finquant.py`). Those remain **execution engines**; the control plane **schedules, versions, gates, and audits** them.
 
+**NDE Factory:** This control-plane pattern applies to **NDE: FinQuant** first; the cross-domain factory framing is **`finquant/reports/nde_factory_v0.1.md`**.
+
 ---
 
 ## 1. Stack recommendation
