@@ -158,7 +158,7 @@ Workflow:
 
 ## Engineer update
 
-**Status:** **submitted 2026-04-27** — audit document delivered; **pending architect acceptance**
+**Status:** **accepted 2026-04-27** — audit document delivered and Architect-accepted (see Architect review)
 
 - **Methodology:** Read `student_context_builder_v1` SQL and packet builder; `contracts_v1` learning validation; `entry_reasoning_engine_v1` full scoring path; `cross_run_retrieval_v1` vs `score_memory_records_v1` field names; `student_proctor_operator_runtime_v1` seam order; `student_decision_authority_v1`; scorecard/expectancy/promotion grep for classification.  
 - **Deliverable:** [`docs/rm_directive_1_quant_perps_data_math_capability_audit_v1.md`](../../../docs/rm_directive_1_quant_perps_data_math_capability_audit_v1.md)  
@@ -172,6 +172,10 @@ Workflow:
 
 ## Architect review
 
-**Status:** pending architect review
+**Status:** accepted
 
 Architect will append **Accepted** only when Sections A–E and proof bar are satisfied; otherwise **Rejected — rework** with required missing subsections.
+
+---
+
+**Architect Acceptance (2026-04-27):** Directive 1 complete. Audit reviewed, factually validated, and accepted. Proceed to Directive 2.

@@ -72,7 +72,7 @@ Legend: **YES** = present and accessible on a **documented code path** today; **
 | `pattern_outcome_quality_v1` expectancy_per_trade | `renaissance_v4/game_theory/pattern_outcome_quality_v1.py` | module-level stats | **report_only** |
 | Bundle optimizer expectancy floor | `renaissance_v4/game_theory/bundle_optimizer.py` | signal disable rules | **dead_code** (relative to Student decision packet path) |
 | Sharpe / Sortino proxies | `modules/anna_training/quant_metrics.py` | various | **dead_code** for PML `decision_synthesis_v1` | Not imported by `entry_reasoning_engine_v1` or Student seam. |
-| Policy vocab indicators | `renaissance_v4/policy_spec/indicators_v1.py` | vocabulary | **dead_code** unless explicitly bridged (not part of `indicator_score_v1`) |
+| Policy vocab indicators | `renaissance_v4/policy_spec/indicators_v1.py` | vocabulary | **policy_intake_only — not entry_reasoning_engine** (used by policy intake and normalization; **not** used in Student decision path / `indicator_score_v1`) |
 
 ---
 
