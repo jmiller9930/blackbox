@@ -17,7 +17,7 @@ import httpx
 from fastapi import FastAPI, Request, Response
 from fastapi.responses import JSONResponse, StreamingResponse
 
-UPSTREAM = os.environ.get("OLLAMA_UPSTREAM", "http://127.0.0.1:11434").rstrip("/")
+UPSTREAM = os.environ.get("OLLAMA_UPSTREAM", "http://172.20.2.230:11434").rstrip("/")
 AUTO_ALIASES = frozenset(
     x.strip().lower()
     for x in os.environ.get(
@@ -26,8 +26,22 @@ AUTO_ALIASES = frozenset(
     ).split(",")
     if x.strip()
 )
-MODEL_CODE = os.environ.get("ROUTER_MODEL_CODE", "qwen3-coder:30b")
-MODEL_THEORY = os.environ.get("ROUTER_MODEL_THEORY", "qwen3-coder-next:latest")
+MODEL_CODE = os.environ.get("ROUTER_MODEL_CODE", "qwen2.5:7b")
+MODEL_THEORY = os.environ.get("ROUTER_MODEL_THEORY", "qwen2.5:7b")
+
+_TRX40_HOST_V1 = "172.20.1.66"
+
+
+def _upstream_guard_finquant_v1(log_: logging.Logger) -> None:
+    """Runtime router upstream must not target trx40 (FinQuant training); log api_gw_blocked_trx40_training_v1."""
+    from urllib.parse import urlparse
+
+    h = (urlparse(UPSTREAM).hostname or "").strip().lower()
+    if h == _TRX40_HOST_V1:
+        log_.error("api_gw_blocked_trx40_training_v1 upstream_host=%s upstream=%s", h, UPSTREAM)
+        raise RuntimeError("api_gw_blocked_trx40_training_v1")
+
+
 CODE_RE = re.compile(
     r"```|"
     r"\bdef\s+\w+\s*\(|"
@@ -48,6 +62,8 @@ logging.basicConfig(
     format="%(levelname)s [ollama-router] %(message)s",
 )
 log = logging.getLogger("ollama_router")
+
+_upstream_guard_finquant_v1(log)
 
 CONTEXT_PREFIX = (
     "Project context (injected by ollama-router from the user's repo mount). "

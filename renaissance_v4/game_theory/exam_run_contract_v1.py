@@ -7,9 +7,10 @@ GT_DIRECTIVE_015 — exam run contract: **Student brain profile**, nested LLM me
 Legacy ``student_reasoning_mode`` **input** strings are still accepted and normalized to a profile.
 
 **LLM** is metadata under the ``memory_context_llm_student`` profile: ``student_llm_v1`` with
-``llm_provider``, ``llm_model``, ``llm_role``. The Student Ollama model is **fixed** to
-``qwen3-coder:30b`` at ``student_ollama_base_url_v1()`` (see ``STUDENT_LLM_APPROVED_MODEL_V1``) —
-any other ``llm_model`` in the request is **rejected** (no silent fallback).
+``llm_provider``, ``llm_model``, ``llm_role``. The Student contract model is **fixed** to
+``qwen2.5:7b`` at ``student_ollama_base_url_v1()`` (API Gateway URL in lab — see
+``STUDENT_LLM_APPROVED_MODEL_V1``). Internal retries may use ``STUDENT_LLM_FALLBACK_MODEL_V1`` only on
+transport/empty/malformed responses — not as an alternate approved exam tag.
 
 Parallel replay **still executes** for every batch in v1; ``skip_cold_baseline`` records whether a
 **prior comparable baseline** existed (comparison validity), not a physical skip of Referee work.
@@ -121,12 +122,14 @@ _LEGACY_INPUT_TO_PROFILE_V1: dict[str, str] = {
 
 _DEFAULT_LLM_ROLE_V1 = "single_shot_student_output_v1"
 _DEFAULT_LLM_PROVIDER_V1 = "ollama"
-# Only model allowed on the Student (memory_context_llm_student) Ollama path — no other default.
-STUDENT_LLM_APPROVED_MODEL_V1 = "qwen3-coder:30b"
+# Primary contract tag on the Student (memory_context_llm_student) path.
+STUDENT_LLM_APPROVED_MODEL_V1 = "qwen2.5:7b"
+# Internal retry only (harder reasoning / primary failure) — not a second approved exam tag.
+STUDENT_LLM_FALLBACK_MODEL_V1 = "deepseek-r1:14b"
 
 
 def default_ollama_base_url_v1() -> str:
-    """Student Ollama base URL (``STUDENT_OLLAMA_BASE_URL`` or lab default **172.20.1.66:11434**)."""
+    """Student LLM base URL — API Gateway (``RUNTIME_LLM_API_GATEWAY_BASE_URL`` / ``STUDENT_OLLAMA_BASE_URL``)."""
     from renaissance_v4.game_theory.ollama_role_routing_v1 import student_ollama_base_url_v1
 
     return student_ollama_base_url_v1()
@@ -695,6 +698,7 @@ __all__ = [
     "STUDENT_BRAIN_PROFILE_MEMORY_CONTEXT_STUDENT_V1",
     "STUDENT_BRAIN_PROFILE_MEMORY_CONTEXT_LLM_STUDENT_V1",
     "STUDENT_LLM_APPROVED_MODEL_V1",
+    "STUDENT_LLM_FALLBACK_MODEL_V1",
     "CANONICAL_STUDENT_BRAIN_PROFILES_V1",
     "LEGACY_STUDENT_REASONING_INPUTS_V1",
     "build_exam_run_line_meta_v1",

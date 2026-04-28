@@ -808,7 +808,8 @@ def student_loop_seam_after_parallel_batch_v1(
                         _pkt_ann, _annex_err = attach_student_context_annex_v1(pkt, _annex_pl)
                         if _pkt_ann is not None:
                             pkt = _pkt_ann
-                            first_packet_annex_present = True
+                            # D7: ``first_packet_annex_present`` stays tied to the retrieval-built packet only
+                            # (lines above); post-hoc annex from entry_reasoning_eval must not flip the baseline claim.
                             if student_test_mode_isolation_active_v1():
                                 try:
                                     append_learning_trace_event_v1(

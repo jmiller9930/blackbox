@@ -51,8 +51,9 @@ def test_ask_data_ollama_target_fallback_when_deepseek_unset(monkeypatch: pytest
         "DEEPSEEK_ESCALATION_OLLAMA_MODEL",
         "SYSTEM_AGENT_OLLAMA_BASE_URL",
         "SYSTEM_AGENT_OLLAMA_MODEL",
+        "RUNTIME_LLM_API_GATEWAY_BASE_URL",
     ):
         monkeypatch.delenv(k, raising=False)
     b, m, _ = ask_data_ollama_target_for_route_v1("deepseek_escalation")
-    assert b == "http://172.20.2.230:11434"
+    assert b == "http://127.0.0.1:11434"
     assert m == "deepseek-r1:14b"

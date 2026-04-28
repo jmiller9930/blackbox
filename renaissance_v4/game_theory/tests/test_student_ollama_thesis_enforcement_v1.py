@@ -271,7 +271,7 @@ def test_seam_llm_profile_no_stub_fallback_on_thesis_reject(tmp_path: Path) -> N
     ]
     ex_req = {
         "student_brain_profile_v1": "memory_context_llm_student",
-        "student_llm_v1": {"llm_model": "qwen3-coder:30b", "llm_provider": "ollama"},
+        "student_llm_v1": {"llm_model": "qwen2.5:7b", "llm_provider": "ollama"},
         "prompt_version": "pv_seam_test",
     }
 

@@ -27,6 +27,6 @@
     "student_vs_baseline_disagreement_v1",
     "random_audit_sample_v1"
   ],
-  "local_llm_model": "qwen3-coder:30b",
-  "local_ollama_base_url": "http://172.20.1.66:11434"
+  "local_llm_model": "qwen2.5:7b",
+  "local_ollama_base_url": "http://127.0.0.1:11434"
 }
