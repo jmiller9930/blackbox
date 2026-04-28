@@ -1,0 +1,4 @@
+# FinQuant-1 dataset tooling (optional; not part of core BLACK BOX Phase 1 install)
+datasets>=2.14,<4
+huggingface_hub>=0.20,<1
+certifi>=2024.0.0
