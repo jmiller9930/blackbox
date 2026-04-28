@@ -65,7 +65,11 @@ from renaissance_v4.game_theory.student_proctor.entry_reasoning_engine_v1 import
     run_entry_reasoning_pipeline_preflight_v1,
 )
 from renaissance_v4.game_theory.student_proctor.shadow_student_v1 import emit_shadow_stub_student_output_v1
-from renaissance_v4.game_theory.student_proctor.student_context_builder_v1 import build_student_decision_packet_v1
+from renaissance_v4.game_theory.student_proctor.student_context_builder_v1 import (
+    attach_student_context_annex_v1,
+    build_student_context_annex_v1_from_entry_reasoning_eval_v1,
+    build_student_decision_packet_v1,
+)
 from renaissance_v4.game_theory.student_proctor.student_decision_authority_v1 import (
     DECISION_SOURCE_REASONING_MODEL_V1,
     run_student_decision_authority_for_trade_v1,
@@ -971,6 +975,12 @@ def run_rm_preflight_decision_snapshot_v1(
                 unified_router_ran_v1=bool(unified_router),
                 bundle_wall_ms_v1=float(_bundle_ms) if isinstance(_bundle_ms, (int, float)) else None,
             )
+
+            if isinstance(ere, dict):
+                _ann_pf = build_student_context_annex_v1_from_entry_reasoning_eval_v1(ere)
+                _pkt_pf, _aerr_pf = attach_student_context_annex_v1(pkt, _ann_pf)
+                if _pkt_pf is not None:
+                    pkt = _pkt_pf
 
             audit.enter("output_seal_v1")
             so, soe = emit_shadow_stub_student_output_v1(

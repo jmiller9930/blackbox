@@ -26,6 +26,7 @@ from renaissance_v4.game_theory.student_test_mode_v1 import (
 REPORT_FILENAME_V1 = "decision_fingerprint_report.md"
 STUDENT_TEST_LLM_TURN_V1 = "student_test_llm_turn_v1"
 STUDENT_TEST_SEALED_SNAPSHOT_V1 = "student_test_sealed_output_snapshot_v1"
+STUDENT_TEST_PRE_REVEAL_STRUCTURED_V1 = "student_test_pre_reveal_structured_context_v1"
 
 
 def _fence_md(label: str, body: str, *, lang: str = "") -> str:
@@ -151,12 +152,33 @@ def write_student_test_decision_fingerprint_report_md_v1(
         lines.append("")
 
         lines.append("### 1. What the Student Saw\n")
+        pre_ev = (by_st.get(STUDENT_TEST_PRE_REVEAL_STRUCTURED_V1) or [{}])[-1]
+        ep_pre = pre_ev.get("evidence_payload") if isinstance(pre_ev.get("evidence_payload"), dict) else {}
+        annex_snap = ep_pre.get("student_context_annex_v1")
+        if isinstance(annex_snap, dict) and annex_snap:
+            lines.append(
+                "- **Structured pre-reveal context (`student_context_annex_v1`, injected before LLM):** "
+                "deterministic entry-reasoning slices (indicator / risk / synthesis / memory / prior)."
+            )
+            try:
+                annex_blob = json.dumps(annex_snap, indent=2, ensure_ascii=False, default=str)
+            except TypeError:
+                annex_blob = str(annex_snap)
+            lines.append(_fence_md("student_context_annex_v1", annex_blob[:48000], lang="json"))
+            lines.append(
+                f"- **bars_in_packet (with annex on same packet):** `{ep_pre.get('bars_in_packet')!s}`"
+            )
+        else:
+            lines.append(
+                "- **Structured pre-reveal annex:** _(no `student_test_pre_reveal_structured_context_v1` row — "
+                "non-isolated run or annex attach skipped)._"
+            )
         mem_ev = (by_st.get("memory_retrieval_completed") or [{}])[-1]
         ep_mem = mem_ev.get("evidence_payload") if isinstance(mem_ev.get("evidence_payload"), dict) else {}
         rm = ep_mem.get("student_retrieval_matches")
         n026 = ep_mem.get("retrieved_lifecycle_learning_026c_slice_count_v1")
         lines.append(
-            f"- **context retrieval:** matches={rm!s}; "
+            f"- **context retrieval (store slices for packet):** matches={rm!s}; "
             f"026c lifecycle slices={n026!s}. "
             "In isolated student test mode, promoted lifecycle retrieval from production stores is disabled "
             f"(`{STUDENT_TEST_ISOLATION_ENV_V1}=1`); expect zero retrieved promoted rows."
@@ -186,6 +208,10 @@ def write_student_test_decision_fingerprint_report_md_v1(
         lines.append("")
 
         lines.append("### 2. What the Student Was Asked\n")
+        lines.append(
+            "- **Prompt includes full `student_decision_packet_v1` JSON** (OHLCV + `student_context_annex_v1` "
+            "when present) and **PRE_REVEAL_CAUSAL_CONTEXT_ONLY** notice."
+        )
         up = str(ep_llm.get("user_prompt_v1") or "")
         if up.strip():
             lines.append(_fence_md("prompt", up, lang="text"))

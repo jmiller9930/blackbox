@@ -14,6 +14,7 @@ capped.
 
 from __future__ import annotations
 
+import copy
 import sqlite3
 from pathlib import Path
 from typing import Any
@@ -26,6 +27,7 @@ from renaissance_v4.game_theory.student_proctor.contracts_v1 import (
     CONTRACT_VERSION_STUDENT_PROCTOR_V1,
     FIELD_RETRIEVED_STUDENT_EXPERIENCE_V1,
     FIELD_STUDENT_CONTEXT_ANNEX_V1,
+    SCHEMA_STUDENT_CONTEXT_ANNEX_V1,
     SCHEMA_STUDENT_RETRIEVAL_SLICE_V1,
     validate_pre_reveal_bundle_v1,
     validate_student_context_annex_v1,
@@ -235,6 +237,41 @@ def validate_student_decision_packet_v1(packet: Any) -> list[str]:
 
     errs.extend(validate_pre_reveal_bundle_v1(packet))
     return errs
+
+
+def build_student_context_annex_v1_from_entry_reasoning_eval_v1(
+    entry_reasoning_eval_v1: dict[str, Any],
+) -> dict[str, Any]:
+    """
+    Build ``student_context_annex_v1`` from deterministic entry-reasoning outputs (pre-reveal).
+
+    Maps engine fields into ``indicator_context`` / ``structure_context`` buckets so the Student LLM
+    sees RSI/EMA/ATR labels, risk strings, synthesis, memory/prior eval — **before** answering — without
+    embedding Referee outcomes or post-trade results (caller must not pass those inside ``ere``).
+    """
+    ere = entry_reasoning_eval_v1 if isinstance(entry_reasoning_eval_v1, dict) else {}
+    indicator_context: dict[str, Any] = {}
+    ic = ere.get("indicator_context_eval_v1")
+    if isinstance(ic, dict):
+        indicator_context["indicator_context_eval_v1"] = copy.deepcopy(ic)
+
+    structure_context: dict[str, Any] = {}
+    for key in (
+        "risk_inputs_v1",
+        "decision_synthesis_v1",
+        "memory_context_eval_v1",
+        "prior_outcome_eval_v1",
+    ):
+        v = ere.get(key)
+        if isinstance(v, dict):
+            structure_context[key] = copy.deepcopy(v)
+
+    return {
+        "schema": SCHEMA_STUDENT_CONTEXT_ANNEX_V1,
+        "contract_version": CONTRACT_VERSION_STUDENT_PROCTOR_V1,
+        "indicator_context": indicator_context,
+        "structure_context": structure_context,
+    }
 
 
 def attach_student_context_annex_v1(

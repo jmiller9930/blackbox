@@ -235,3 +235,33 @@ def _attach(base: dict, fn: object) -> dict:
     q = deepcopy(base)
     fn(q)
     return q
+
+
+def test_build_annex_from_entry_reasoning_eval_attaches(synthetic_db: Path) -> None:
+    from renaissance_v4.game_theory.student_proctor.student_context_builder_v1 import (
+        attach_student_context_annex_v1,
+        build_student_context_annex_v1_from_entry_reasoning_eval_v1,
+    )
+
+    pkt = _valid_packet_from_fixture(synthetic_db)
+    ere = {
+        "indicator_context_eval_v1": {
+            "schema": "indicator_context_eval_v1",
+            "contract_version": 1,
+            "rsi_state": "neutral",
+            "ema_trend": "bullish_trend",
+            "atr_volume_state": "normal_volatility",
+            "volume_state": "strong_participation",
+        },
+        "risk_inputs_v1": {"schema": "risk_inputs_v1", "invalidation_condition_v1": "ic"},
+        "decision_synthesis_v1": {"action": "enter_long", "final_score": 0.4},
+        "memory_context_eval_v1": {"aggregate_memory_effect_v1": "none"},
+        "prior_outcome_eval_v1": {"wins_total_fraction_v1": 0.0},
+    }
+    annex = build_student_context_annex_v1_from_entry_reasoning_eval_v1(ere)
+    out, err = attach_student_context_annex_v1(pkt, annex)
+    assert err is None and out is not None
+    assert validate_student_decision_packet_v1(out) == []
+    ic = out["student_context_annex_v1"]["indicator_context"]["indicator_context_eval_v1"]
+    assert ic["rsi_state"] == "neutral"
+    assert out["student_context_annex_v1"]["structure_context"]["decision_synthesis_v1"]["action"] == "enter_long"

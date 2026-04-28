@@ -222,7 +222,13 @@ def emit_student_output_via_ollama_v1(
     ``llm_io_capture_v1``: optional mutable dict; when provided, receives ``user_prompt_v1`` and
     ``raw_assistant_text_v1`` for ``student_test_mode_v1`` trace proof (no behavior change).
     """
-    pkt_json = json.dumps(packet, ensure_ascii=False, default=str)[:12000]
+    # Bars + student_context_annex_v1 can exceed legacy 12k; keep a generous cap for exam prompts.
+    _raw_max = (os.environ.get("PATTERN_GAME_STUDENT_PROMPT_PACKET_JSON_MAX") or "56000").strip()
+    try:
+        _MAX_PACKET_JSON_CHARS = int(_raw_max or "56000")
+    except ValueError:
+        _MAX_PACKET_JSON_CHARS = 56000
+    pkt_json = json.dumps(packet, ensure_ascii=False, default=str)[:_MAX_PACKET_JSON_CHARS]
     thesis_lines = (
         "MANDATORY Student decision protocol (all keys below MUST appear in the JSON; no skipping steps; "
         "no narrative-only answer — every value must be substantive, not placeholders like \"n/a\" unless "
@@ -253,15 +259,23 @@ def emit_student_output_via_ollama_v1(
         thesis_block = (
             "Optional thesis / protocol keys (omit any you cannot justify from the packet only):\n" + thesis_lines
         )
+    pre_reveal_notice = (
+        "PRE_REVEAL_CAUSAL_CONTEXT_ONLY — The JSON below is causal market and deterministic "
+        "entry-reasoning context at this decision time only. It excludes Referee outcomes, realized "
+        "PnL, win/loss counts, future bars, and any key forbidden by pre-reveal rules. When "
+        "`student_context_annex_v1` is present, it duplicates structured indicator/risk/synthesis/"
+        "memory/prior signals the engine computed from the same bars — use them; do not invent OHLCV.\n\n"
+    )
     user = (
         "You are the Student (exam). You MUST output a single JSON object only — no markdown, no prose outside JSON.\n"
         "Keys required: act (boolean), direction (string: long | short | flat), confidence_01 (number 0..1), "
         "pattern_recipe_ids (array of strings, non-empty), reasoning_text (short string; may echo protocol).\n"
         + thesis_block
+        + pre_reveal_notice
         + f"prompt_version_echo: {prompt_version}\n"
         + f"graded_unit_id: {graded_unit_id}\n"
         + f"decision_open_time_ms: {decision_at_ms}\n"
-        + "Pre-reveal decision packet (JSON):\n"
+        + "Full student_decision_packet_v1 (JSON; OHLCV bars and optional student_context_annex_v1):\n"
         + f"{pkt_json}\n"
     )
     if isinstance(llm_io_capture_v1, dict):

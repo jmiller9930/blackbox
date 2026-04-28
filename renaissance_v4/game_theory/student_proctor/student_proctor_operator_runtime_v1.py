@@ -106,6 +106,10 @@ from renaissance_v4.game_theory.student_proctor.student_learning_store_v1 import
     build_student_learning_record_v1_from_reveal,
     default_student_learning_store_path_v1,
 )
+from renaissance_v4.game_theory.student_proctor.student_context_builder_v1 import (
+    attach_student_context_annex_v1,
+    build_student_context_annex_v1_from_entry_reasoning_eval_v1,
+)
 from renaissance_v4.utils.db import DB_PATH
 
 _NS_RECORD = uuid.UUID("6ba7b810-9dad-11d1-80b4-00c04fd430c8")
@@ -799,6 +803,43 @@ def student_loop_seam_after_parallel_batch_v1(
                                     if _pfm_learn is not None:
                                         pfm = _pfm_learn
                                         ere["student_reasoning_fault_map_v1"] = pfm
+                    if isinstance(ere, dict):
+                        _annex_pl = build_student_context_annex_v1_from_entry_reasoning_eval_v1(ere)
+                        _pkt_ann, _annex_err = attach_student_context_annex_v1(pkt, _annex_pl)
+                        if _pkt_ann is not None:
+                            pkt = _pkt_ann
+                            first_packet_annex_present = True
+                            if student_test_mode_isolation_active_v1():
+                                try:
+                                    append_learning_trace_event_v1(
+                                        build_learning_trace_event_v1(
+                                            job_id=str(run_id).strip(),
+                                            fingerprint=fp_emit,
+                                            stage="student_test_pre_reveal_structured_context_v1",
+                                            status="pass",
+                                            summary=(
+                                                "student_test_mode_v1: student_context_annex_v1 "
+                                                "attached before Student LLM"
+                                            ),
+                                            producer="student_loop_seam_v1",
+                                            scenario_id=sid,
+                                            trade_id=str(o.trade_id),
+                                            evidence_payload={
+                                                "student_context_annex_v1": copy.deepcopy(
+                                                    pkt.get(FIELD_STUDENT_CONTEXT_ANNEX_V1)
+                                                ),
+                                                "bars_in_packet": len(
+                                                    pkt.get("bars_inclusive_up_to_t") or []
+                                                ),
+                                            },
+                                        )
+                                    )
+                                except Exception:
+                                    pass
+                        elif _annex_err:
+                            errors.append(
+                                f"{sid} trade={o.trade_id}: student_context_annex_v1: {_annex_err}"
+                            )
                     allowed_mids = frozenset(
                         str(z.get("record_id") or "").strip()
                         for z in rxx
