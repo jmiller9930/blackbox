@@ -43,6 +43,8 @@ def test_seam_skipped_when_env_disabled(monkeypatch: pytest.MonkeyPatch) -> None
         run_id="run_x",
     )
     assert audit.get("skipped") is True
+    assert audit.get("student_seam_stop_reason_v1") == "skipped_seam_disabled_v1"
+    assert audit.get("replay_closed_trades_total_v1") == 0
     assert int(audit.get("student_learning_rows_appended") or 0) == 0
     assert int(audit.get("student_retrieval_matches") or 0) == 0
     assert audit.get("student_output_fingerprint") is None
@@ -99,6 +101,9 @@ def test_seam_processes_trade_with_synthetic_db(
         strategy_id="pattern_learning",
     )
     assert int(audit.get("student_learning_rows_appended") or 0) >= 1
+    assert int(audit.get("replay_closed_trades_total_v1") or 0) == 1
+    assert audit.get("student_seam_stop_reason_v1") == "completed_all_trades_v1"
+    assert int(audit.get("trades_considered") or 0) == 1
     assert audit.get("shadow_student_enabled") is True
     assert isinstance(audit.get("student_retrieval_matches"), int)
     fp = audit.get("student_output_fingerprint")

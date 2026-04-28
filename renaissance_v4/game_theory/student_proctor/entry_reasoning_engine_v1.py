@@ -21,6 +21,7 @@ import os
 from typing import Any
 
 from renaissance_v4.game_theory.student_proctor.contracts_v1 import (
+    CONFLICTING_INDICATORS_NO_CONFLICT_PACKET_LABEL_V1,
     CONTRACT_VERSION_STUDENT_PROCTOR_V1,
     validate_student_output_v1,
 )
@@ -997,7 +998,9 @@ def apply_engine_authority_to_student_output_v1(
     confl: list[str] = []
     if rsi_s in ("exhaustion_risk",) and "bullish" in ema_t:
         confl.append("rsi_exhaustion_vs_bull_trend")
-    out["conflicting_indicators"] = confl
+    out["conflicting_indicators"] = (
+        confl if confl else [CONFLICTING_INDICATORS_NO_CONFLICT_PACKET_LABEL_V1]
+    )
     rsk = ere2.get("risk_inputs_v1") or {}
     out["context_fit"] = (ema_t.replace("_trend", "") or "context")[:128]
     out["invalidation_text"] = str(rsk.get("invalidation_condition_v1", ""))[:4000]

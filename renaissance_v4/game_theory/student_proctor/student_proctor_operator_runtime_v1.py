@@ -309,6 +309,18 @@ def _merge_exam_lifecycle_026b_into_packet_v1(
     return pkt
 
 
+def _replay_closed_trades_total_v1(results: list[dict[str, Any]]) -> int:
+    """Count ``OutcomeRecord`` JSON rows across successful worker result rows (same cardinality as seam loop)."""
+    n = 0
+    for row in results or []:
+        if not row.get("ok"):
+            continue
+        rj = row.get("replay_outcomes_json")
+        if isinstance(rj, list):
+            n += len(rj)
+    return n
+
+
 def student_loop_seam_after_parallel_batch_v1(
     *,
     results: list[dict[str, Any]],
@@ -329,6 +341,8 @@ def student_loop_seam_after_parallel_batch_v1(
             "schema": "student_loop_seam_audit_v1",
             "skipped": True,
             "reason": "PATTERN_GAME_STUDENT_LOOP_SEAM disabled",
+            "replay_closed_trades_total_v1": _replay_closed_trades_total_v1(results),
+            "student_seam_stop_reason_v1": "skipped_seam_disabled_v1",
             "student_learning_rows_appended": 0,
             "student_retrieval_matches": 0,
             "student_output_fingerprint": None,
@@ -359,6 +373,8 @@ def student_loop_seam_after_parallel_batch_v1(
             "skipped": True,
             "reason": "operator_run_mode_baseline_no_student_seam",
             "baseline_control_operator_mode_v1": True,
+            "replay_closed_trades_total_v1": _replay_closed_trades_total_v1(results),
+            "student_seam_stop_reason_v1": "skipped_baseline_operator_mode_v1",
             "student_learning_rows_appended": 0,
             "student_retrieval_matches": 0,
             "student_output_fingerprint": None,
@@ -491,6 +507,8 @@ def student_loop_seam_after_parallel_batch_v1(
             "reason": "student_decision_authority_mandate_preconditions_failed_v1",
             "student_decision_authority_mandate_block_v1": True,
             "student_decision_authority_mandate_errors_v1": list(_mandate_pre),
+            "replay_closed_trades_total_v1": _replay_closed_trades_total_v1(results),
+            "student_seam_stop_reason_v1": "mandate_preconditions_failed_v1",
             "student_learning_rows_appended": 0,
             "student_retrieval_matches": 0,
             "student_output_fingerprint": None,
@@ -512,6 +530,7 @@ def student_loop_seam_after_parallel_batch_v1(
             "errors": list(_mandate_pre),
         }
 
+    replay_closed_trades_total_v1 = _replay_closed_trades_total_v1(results)
     _student_rm_contract_tok = None
     if mandate_active_v1:
         _student_rm_contract_tok = student_rm_trace_mandate_begin_v1()
@@ -1043,6 +1062,8 @@ def student_loop_seam_after_parallel_batch_v1(
                             "schema": "student_loop_seam_audit_v1",
                             "run_id": run_id,
                             "rm_preflight_wiring_early_exit_v1": True,
+                            "replay_closed_trades_total_v1": replay_closed_trades_total_v1,
+                            "student_seam_stop_reason_v1": "rm_preflight_early_exit_first_seal_v1",
                             "student_decision_authority_mandate_enforced_v1": bool(mandate_active_v1),
                             "candle_timeframe_minutes_effective_v1": int(c_tf),
                             "student_learning_store_path": str(store.resolve()),
@@ -1192,6 +1213,16 @@ def student_loop_seam_after_parallel_batch_v1(
         out_audit: dict[str, Any] = {
             "schema": "student_loop_seam_audit_v1",
             "run_id": run_id,
+            "replay_closed_trades_total_v1": replay_closed_trades_total_v1,
+            "student_seam_stop_reason_v1": (
+                "no_replay_outcomes_v1"
+                if replay_closed_trades_total_v1 <= 0
+                else (
+                    "completed_all_trades_v1"
+                    if trades_seen == replay_closed_trades_total_v1
+                    else "trade_loop_incomplete_v1"
+                )
+            ),
             "student_decision_authority_mandate_enforced_v1": bool(mandate_active_v1),
             "candle_timeframe_minutes_effective_v1": int(c_tf),
             "student_learning_store_path": str(store.resolve()),
@@ -1256,6 +1287,47 @@ def student_loop_seam_after_parallel_batch_v1(
         if primary_student_output_v1 is not None:
             out_audit["primary_student_output_sealed_v1"] = copy.deepcopy(primary_student_output_v1)
         return out_audit
+    except Exception as seam_fatal:
+        _fatal_fp = (
+            _student_output_fingerprint_v1(primary_student_output_v1)
+            if primary_student_output_v1 is not None
+            else None
+        )
+        return {
+            "schema": "student_loop_seam_audit_v1",
+            "run_id": run_id,
+            "replay_closed_trades_total_v1": replay_closed_trades_total_v1,
+            "trades_considered": trades_seen,
+            "student_seam_stop_reason_v1": "seam_unhandled_exception_v1",
+            "student_decision_authority_mandate_enforced_v1": bool(mandate_active_v1),
+            "candle_timeframe_minutes_effective_v1": int(c_tf),
+            "student_learning_store_path": str(store.resolve()),
+            "database_path_used": str(db.resolve()),
+            "student_learning_rows_appended": appended,
+            "student_retrieval_matches": retrieval_matches_total,
+            "student_output_fingerprint": _fatal_fp,
+            "shadow_student_enabled": True,
+            "primary_trade_shadow_student_v1": primary_trade_shadow_student_v1,
+            "errors": errors
+            + [f"seam_fatal: {type(seam_fatal).__name__}: {seam_fatal}"],
+            "soft_fail": True,
+            "phased_honesty_annotation_v1": _phased_honesty_annotation_v1(
+                seam_attempted=True,
+                student_emit_occurred=primary_student_output_v1 is not None,
+                trades_seen=trades_seen,
+            ),
+            "wiring_honesty_annotation_v1": _wiring_honesty_annotation_v1(
+                seam_attempted=True,
+                trades_seen=trades_seen,
+                first_packet_annex_present=first_packet_annex_present,
+                retrieval_matches_total=retrieval_matches_total,
+            ),
+            "memory_semantics_annotation_v1": _memory_semantics_annotation_v1(seam_attempted=True),
+            "deliverable_vocabulary_annotation_v1": _deliverable_vocabulary_annotation_v1(
+                seam_attempted=True
+            ),
+            "llm_student_output_rejections_v1": llm_student_output_rejections_v1,
+        }
     finally:
         if _student_rm_contract_tok is not None:
             student_rm_trace_mandate_reset_v1(_student_rm_contract_tok)
