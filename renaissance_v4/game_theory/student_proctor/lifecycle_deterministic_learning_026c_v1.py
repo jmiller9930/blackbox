@@ -18,6 +18,7 @@ from typing import Any
 
 from renaissance_v4.core.outcome_record import OutcomeRecord
 from renaissance_v4.game_theory.pml_runtime_layout import pml_runtime_root
+from renaissance_v4.game_theory.student_test_mode_v1 import student_test_mode_isolation_active_v1
 from renaissance_v4.game_theory.student_proctor.student_reasoning_fault_map_v1 import (
     CONTRACT_VERSION_FAULT_MAP,
     SCHEMA_STUDENT_REASONING_FAULT_MAP_V1,
@@ -360,6 +361,9 @@ def retrieve_applicable_learning_context_026c_v1(
     **STRICT** retrieval: only ``promote_pattern_v1`` rows, same symbol+timeframe+signature, prior
     decision time, bounded, decay-weighted, conflict-resolved (higher sample n then higher score).
     """
+    if student_test_mode_isolation_active_v1():
+        return []
+
     p = Path(store_path or default_lifecycle_deterministic_learning_store_path_v1())
     if not p.is_file():
         return []

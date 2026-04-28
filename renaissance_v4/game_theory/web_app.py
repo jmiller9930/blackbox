@@ -170,6 +170,11 @@ from renaissance_v4.game_theory.exam_run_contract_v1 import (
     parse_exam_run_contract_request_v1,
     preview_run_config_fingerprint_sha256_40_v1,
 )
+from renaissance_v4.game_theory.student_test_mode_v1 import (
+    STUDENT_TEST_INSUFFICIENT_TRADE_COUNT_V1,
+    StudentTestInsufficientTradesError,
+    truncate_parallel_results_to_trade_budget_v1,
+)
 from renaissance_v4.game_theory.pattern_game_operator_reset import (
     RESET_PATTERN_GAME_LEARNING_CONFIRM,
     reset_pattern_game_engine_learning_state_v1,
@@ -2387,9 +2392,76 @@ def create_app() -> Flask:
                     results, operator_recipe_id=operator_batch_audit.get("operator_recipe_id")
                 )
                 _guard_parallel_batch_not_noop(scenarios, results)
-                gh_promo = promote_groundhog_bundle_from_parallel_scenarios_v1(
-                    scenarios, from_run_id=job_id
-                )
+                if isinstance(exam_req, dict) and exam_req.get("student_test_mode_v1"):
+                    try:
+                        results = truncate_parallel_results_to_trade_budget_v1(results)
+                    except StudentTestInsufficientTradesError as e:
+                        err_st = (
+                            f"{STUDENT_TEST_INSUFFICIENT_TRADE_COUNT_V1}: "
+                            f"replay yielded {e.total} trades; require {e.required}"
+                        )
+                        exam_line_st = _exam_run_line_meta_for_parallel_job_v1(
+                            exam_req=exam_req if isinstance(exam_req, dict) else None,
+                            fingerprint_preview=fp_prev if isinstance(fp_prev, str) else None,
+                            operator_batch_audit=operator_batch_audit,
+                            results=results,
+                            job_id=job_id,
+                            seam_audit=None,
+                            error=err_st,
+                        )
+                        if isinstance(exam_line_st, dict):
+                            exam_line_st["batch_terminal_status_v1"] = STUDENT_TEST_INSUFFICIENT_TRADE_COUNT_V1
+                        timing_st = record_parallel_batch_finished(
+                            job_id=job_id,
+                            started_at_utc=started_iso,
+                            start_unix=start_unix,
+                            total_scenarios=len(scenarios),
+                            workers_used=workers_used,
+                            results=results,
+                            session_log_batch_dir=session_batch_dir[0],
+                            error=err_st,
+                            operator_batch_audit=operator_batch_audit,
+                            exam_run_line_meta_v1=exam_line_st,
+                        )
+                        st_payload: dict[str, Any] = {
+                            "ok": False,
+                            "job_id": job_id,
+                            "error": err_st,
+                            "results": results,
+                            "batch_timing": timing_st,
+                            "status_v1": STUDENT_TEST_INSUFFICIENT_TRADE_COUNT_V1,
+                            "rm_preflight_audit_v1": pf_audit,
+                        }
+                        persisted_st = st_payload
+                        with _JOBS_LOCK:
+                            jst = _JOBS.get(job_id)
+                            if jst:
+                                jst["status"] = "error"
+                                jst["completed"] = len(results)
+                                jst["error"] = err_st
+                                jst["batch_timing"] = timing_st
+                                jst["result"] = {
+                                    **st_payload,
+                                    "operator_rm_gates_v1": _build_operator_rm_gates_v1(jst, job_id),
+                                }
+                                persisted_st = jst["result"]
+                        _persist_parallel_terminal_v1(
+                            job_id,
+                            "error",
+                            persisted_st,
+                            session_log_batch_dir=session_batch_dir[0],
+                            telemetry_dir=telem_dir,
+                        )
+                        return
+                if isinstance(exam_req, dict) and exam_req.get("student_test_mode_v1"):
+                    gh_promo = {
+                        "skipped_v1": True,
+                        "reason_code_v1": "student_test_mode_v1_no_production_groundhog_write",
+                    }
+                else:
+                    gh_promo = promote_groundhog_bundle_from_parallel_scenarios_v1(
+                        scenarios, from_run_id=job_id
+                    )
                 ok_n = sum(1 for r in results if r.get("ok"))
                 op_rid = str(operator_batch_audit.get("operator_recipe_id") or "").strip() or None
                 seam_audit = student_loop_seam_after_parallel_batch_v1(
@@ -3556,9 +3628,79 @@ def create_app() -> Flask:
                 results, operator_recipe_id=operator_batch_audit.get("operator_recipe_id")
             )
             _guard_parallel_batch_not_noop(scenarios, results)
-            gh_promo_block = promote_groundhog_bundle_from_parallel_scenarios_v1(
-                scenarios, from_run_id=job_id
-            )
+            if isinstance(exam_req_block, dict) and exam_req_block.get("student_test_mode_v1"):
+                try:
+                    results = truncate_parallel_results_to_trade_budget_v1(results)
+                except StudentTestInsufficientTradesError as e:
+                    err_st_b = (
+                        f"{STUDENT_TEST_INSUFFICIENT_TRADE_COUNT_V1}: "
+                        f"replay yielded {e.total} trades; require {e.required}"
+                    )
+                    exam_line_st_b = _exam_run_line_meta_for_parallel_job_v1(
+                        exam_req=exam_req_block if isinstance(exam_req_block, dict) else None,
+                        fingerprint_preview=fp_prev_block if isinstance(fp_prev_block, str) else None,
+                        operator_batch_audit=operator_batch_audit,
+                        results=results,
+                        job_id=job_id,
+                        seam_audit=None,
+                        error=err_st_b,
+                    )
+                    if isinstance(exam_line_st_b, dict):
+                        exam_line_st_b["batch_terminal_status_v1"] = STUDENT_TEST_INSUFFICIENT_TRADE_COUNT_V1
+                    timing_st_b = record_parallel_batch_finished(
+                        job_id=job_id,
+                        started_at_utc=started_iso,
+                        start_unix=start_unix,
+                        total_scenarios=len(scenarios),
+                        workers_used=workers_used,
+                        results=results,
+                        session_log_batch_dir=session_batch_dir[0],
+                        error=err_st_b,
+                        operator_batch_audit=operator_batch_audit,
+                        exam_run_line_meta_v1=exam_line_st_b,
+                    )
+                    st_body_b: dict[str, Any] = {
+                        "ok": False,
+                        "job_id": job_id,
+                        "error": err_st_b,
+                        "results": results,
+                        "batch_timing": timing_st_b,
+                        "status_v1": STUDENT_TEST_INSUFFICIENT_TRADE_COUNT_V1,
+                        "rm_preflight_audit_v1": pf_audit_block,
+                    }
+                    persisted_st_b = dict(st_body_b)
+                    with _JOBS_LOCK:
+                        jst_b = _JOBS.get(job_id)
+                        if isinstance(jst_b, dict):
+                            jst_b["status"] = "error"
+                            jst_b["completed"] = len(results)
+                            jst_b["error"] = err_st_b
+                            jst_b["batch_timing"] = timing_st_b
+                            try:
+                                jst_b["result"] = {
+                                    **st_body_b,
+                                    "operator_rm_gates_v1": _build_operator_rm_gates_v1(jst_b, job_id),
+                                }
+                            except Exception:
+                                jst_b["result"] = dict(st_body_b)
+                            persisted_st_b = jst_b["result"]
+                    _persist_parallel_terminal_v1(
+                        job_id,
+                        "error",
+                        persisted_st_b,
+                        session_log_batch_dir=session_batch_dir[0],
+                        telemetry_dir=telem_dir,
+                    )
+                    return jsonify(persisted_st_b), 400
+            if isinstance(exam_req_block, dict) and exam_req_block.get("student_test_mode_v1"):
+                gh_promo_block = {
+                    "skipped_v1": True,
+                    "reason_code_v1": "student_test_mode_v1_no_production_groundhog_write",
+                }
+            else:
+                gh_promo_block = promote_groundhog_bundle_from_parallel_scenarios_v1(
+                    scenarios, from_run_id=job_id
+                )
             ok_n = sum(1 for r in results if r.get("ok"))
             op_rid_block = str(operator_batch_audit.get("operator_recipe_id") or "").strip() or None
             seam_blocking = student_loop_seam_after_parallel_batch_v1(

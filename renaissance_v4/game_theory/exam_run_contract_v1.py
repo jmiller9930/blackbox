@@ -380,6 +380,8 @@ def parse_exam_run_contract_request_v1(data: dict[str, Any]) -> tuple[dict[str, 
         block["candle_timeframe_minutes"] = data.get("candle_timeframe_minutes")
     if data.get("student_decision_authority_mode_v1") is not None:
         block["student_decision_authority_mode_v1"] = data.get("student_decision_authority_mode_v1")
+    if data.get("student_test_mode_v1") is not None:
+        block["student_test_mode_v1"] = data.get("student_test_mode_v1")
 
     raw_profile = block.get("student_brain_profile_v1")
     raw_mode = block.get("student_reasoning_mode")
@@ -518,6 +520,16 @@ def parse_exam_run_contract_request_v1(data: dict[str, Any]) -> tuple[dict[str, 
     lc_err = _apply_optional_026b_lifecycle_fields_v1(out, block, data)
     if lc_err:
         return None, lc_err
+
+    raw_stm = block.get("student_test_mode_v1")
+    if raw_stm is None and data.get("student_test_mode_v1") is not None:
+        raw_stm = data.get("student_test_mode_v1")
+    if isinstance(raw_stm, str):
+        stm_ok = raw_stm.strip().lower() in ("1", "true", "yes", "on")
+    else:
+        stm_ok = bool(raw_stm)
+    if stm_ok:
+        out["student_test_mode_v1"] = True
     return out, None
 
 
