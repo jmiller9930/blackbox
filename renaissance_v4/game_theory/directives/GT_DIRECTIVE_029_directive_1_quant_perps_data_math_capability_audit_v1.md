@@ -161,7 +161,7 @@ Workflow:
 **Status:** **submitted 2026-04-27** — audit document delivered; **pending architect acceptance**
 
 - **Methodology:** Read `student_context_builder_v1` SQL and packet builder; `contracts_v1` learning validation; `entry_reasoning_engine_v1` full scoring path; `cross_run_retrieval_v1` vs `score_memory_records_v1` field names; `student_proctor_operator_runtime_v1` seam order; `student_decision_authority_v1`; scorecard/expectancy/promotion grep for classification.  
-- **Deliverable:** [`docs/rm_directive_1_quant_perps_data_math_capability_audit_v1.md`](../../docs/rm_directive_1_quant_perps_data_math_capability_audit_v1.md)  
+- **Deliverable:** [`docs/rm_directive_1_quant_perps_data_math_capability_audit_v1.md`](../../../docs/rm_directive_1_quant_perps_data_math_capability_audit_v1.md)  
 - **`git rev-parse HEAD`:** `6535bb9516f76795102f446ed7e436da757f1e33` (merged on `main`, pushed to **`origin`**)  
 - **Deficiencies log:** Not updated (`directive_execution_log.md` / `blackbox_master_plan.md` — skip unless operator requests same-PR sync).  
 - **RM boundary:** No disagreement; gaps explicitly defer unified RM to later directives per **`GT_DIRECTIVE_028`**.
