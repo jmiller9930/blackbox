@@ -204,7 +204,13 @@ def main() -> None:
         help="Adapter dir relative to FINQUANT_BASE or absolute",
     )
     ap.add_argument("--max-new-tokens", type=int, default=768)
-    ap.add_argument("--write-report", action="store_true", help="Write reports/smoke_eval_report.md")
+    ap.add_argument("--write-report", action="store_true", help="Write eval report markdown under FINQUANT_BASE/reports/")
+    ap.add_argument(
+        "--report-path",
+        type=str,
+        default=None,
+        help="Report filename relative to FINQUANT_BASE/reports/ (default: smoke_eval_report.md or v0.1_eval_report.md with --adapter full)",
+    )
     ap.add_argument("--seed", type=int, default=42)
     args = ap.parse_args()
 
@@ -281,10 +287,14 @@ def main() -> None:
     print(json.dumps({"summary": summary, "results": results}, indent=2))
 
     if args.write_report:
+        report_name = args.report_path
+        if not report_name:
+            report_name = "v0.1_eval_report.md" if "v0.1" in str(adapter_path) and "smoke" not in str(adapter_path) else "smoke_eval_report.md"
+        title = "FinQuant-1 — v0.1 full eval report" if "v0.1_eval" in report_name else "FinQuant-1 — smoke eval report"
         ts = datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
         host = socket.gethostname()
         lines = [
-            "# FinQuant-1 — smoke eval report",
+            f"# {title}",
             "",
             f"**Generated:** `{ts}` UTC",
             f"**Host:** `{host}`",
@@ -326,7 +336,7 @@ def main() -> None:
                 "",
             ]
         )
-        outp = base / "reports" / "smoke_eval_report.md"
+        outp = Path(report_name) if Path(report_name).is_absolute() else base / "reports" / report_name
         outp.parent.mkdir(parents=True, exist_ok=True)
         outp.write_text("\n".join(lines), encoding="utf-8")
         print(f"wrote {outp}")

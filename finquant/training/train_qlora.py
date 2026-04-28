@@ -102,7 +102,7 @@ def set_seed(seed: int) -> None:
         pass
 
 
-def write_smoke_report(
+def write_training_report_md(
     base: Path,
     *,
     mode: str,
@@ -110,12 +110,22 @@ def write_smoke_report(
     staging: Path,
     out_dir: Path,
     log_history: list[dict[str, Any]],
+    report_filename: str,
+    heading: str,
     extra: str = "",
-) -> None:
+    history_tail: int = 40,
+) -> Path:
     ts = datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
     host = socket.gethostname()
+    losses = [float(x["loss"]) for x in log_history if isinstance(x, dict) and x.get("loss") is not None]
+    loss_note = ""
+    if losses:
+        loss_note = (
+            f"Loss first/last/min/max: {losses[0]:.4f} / {losses[-1]:.4f} / "
+            f"{min(losses):.4f} / {max(losses):.4f}\n\n"
+        )
     lines = [
-        "# FinQuant-1 — smoke training report",
+        heading,
         "",
         f"**Generated:** `{ts}` UTC",
         f"**Host:** `{host}`",
@@ -124,26 +134,30 @@ def write_smoke_report(
         f"**Staging:** `{staging}`",
         f"**Output:** `{out_dir}`",
         "",
+        "## Loss summary",
+        "",
+        loss_note or "(no loss entries in log_history)\n",
         "## Loss log (trainer history tail)",
         "",
         "```json",
-        json.dumps(log_history[-40:], indent=2),
+        json.dumps(log_history[-history_tail:], indent=2),
         "```",
         "",
-        "## Acceptance checklist",
+        "## Checklist",
         "",
         "| Item | Notes |",
         "|------|-------|",
-        "| Training starts without error | See log history |",
-        "| Loss logs appear | non-empty log_history after steps |",
-        "| Adapter checkpoint saved | see output dir / checkpoint-* |",
+        "| Training completes | See log tail |",
+        "| Loss logged | non-empty history |",
+        "| Adapter + checkpoints | see output dir |",
         "",
         extra,
     ]
-    report = base / "reports" / "smoke_training_report.md"
+    report = base / "reports" / report_filename
     report.parent.mkdir(parents=True, exist_ok=True)
     report.write_text("\n".join(lines), encoding="utf-8")
     print(f"wrote {report}")
+    return report
 
 
 def main() -> None:
@@ -276,14 +290,30 @@ def main() -> None:
     tokenizer.save_pretrained(str(out_dir))
 
     if args.mode == "smoke":
-        write_smoke_report(
+        write_training_report_md(
             base,
             mode=args.mode,
             cfg_path=cfg_path,
             staging=staging,
             out_dir=out_dir,
             log_history=log_history,
+            report_filename="smoke_training_report.md",
+            heading="# FinQuant-1 — smoke training report",
             extra="## Status\n\n**Smoke run complete.** Review loss trend and checkpoint before full v0.1 training.\n",
+            history_tail=40,
+        )
+    elif args.mode == "full":
+        write_training_report_md(
+            base,
+            mode=args.mode,
+            cfg_path=cfg_path,
+            staging=staging,
+            out_dir=out_dir,
+            log_history=log_history,
+            report_filename="full_training_report_v0.1.md",
+            heading="# FinQuant-1 — full training report (v0.1)",
+            extra="## Status\n\n**Full v0.1 training complete.** Run `eval_finquant.py` with `--adapter adapters/finquant-1-qwen7b-v0.1`.\n",
+            history_tail=120,
         )
 
     print(json.dumps({"output_dir": str(out_dir), "mode": args.mode, "steps": train_section["max_steps"]}, indent=2))
