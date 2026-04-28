@@ -264,6 +264,7 @@ def build_student_context_annex_v1_from_entry_reasoning_eval_v1(
         "decision_synthesis_v1",
         "memory_context_eval_v1",
         "prior_outcome_eval_v1",
+        "pattern_memory_eval_v1",
     ):
         v = ere.get(key)
         if isinstance(v, dict):

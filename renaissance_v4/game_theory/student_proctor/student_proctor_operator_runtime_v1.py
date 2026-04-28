@@ -1300,6 +1300,11 @@ def student_loop_seam_after_parallel_batch_v1(
                     if lre or lr is None:
                         errors.append(f"{sid} trade={o.trade_id}: learning_row {'; '.join(lre)}")
                         continue
+                    _pps = (
+                        ere.get("perps_pattern_signature_v1") if isinstance(ere, dict) else None
+                    )
+                    if isinstance(_pps, dict) and str(_pps.get("schema") or "") == "perps_pattern_signature_v1":
+                        lr["perps_pattern_signature_v1"] = _pps
                     l3 = build_student_panel_l3_payload_v1(str(run_id).strip(), str(o.trade_id))
                     _mem_dec, _mem_rc, gov = classify_trade_memory_promotion_v1(
                         l3_payload=l3, scorecard_entry=scorecard_entry_effective

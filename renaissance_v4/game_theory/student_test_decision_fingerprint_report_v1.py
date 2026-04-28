@@ -27,6 +27,7 @@ REPORT_FILENAME_V1 = "decision_fingerprint_report.md"
 STUDENT_TEST_LLM_TURN_V1 = "student_test_llm_turn_v1"
 STUDENT_TEST_SEALED_SNAPSHOT_V1 = "student_test_sealed_output_snapshot_v1"
 STUDENT_TEST_PRE_REVEAL_STRUCTURED_V1 = "student_test_pre_reveal_structured_context_v1"
+PATTERN_MEMORY_EVALUATED_V1 = "pattern_memory_evaluated_v1"
 
 
 def _fence_md(label: str, body: str, *, lang: str = "") -> str:
@@ -185,6 +186,50 @@ def write_student_test_decision_fingerprint_report_md_v1(
             lines.append(
                 "- **Structured pre-reveal annex:** _(no `student_test_pre_reveal_structured_context_v1` row — "
                 "non-isolated run or annex attach skipped)._"
+            )
+
+        pm_rows = [x for x in by_st.get(PATTERN_MEMORY_EVALUATED_V1) or []]
+        pm_ev = pm_rows[-1] if pm_rows else {}
+        ep_pm = pm_ev.get("evidence_payload") if isinstance(pm_ev.get("evidence_payload"), dict) else {}
+        pm_blob = ep_pm.get("pattern_memory_eval_v1")
+        if isinstance(pm_blob, dict) and pm_blob:
+            lines.append("- **RM — Pattern memory (Directive 3, `pattern_memory_evaluated_v1`):**")
+            try:
+                pm_json = json.dumps(pm_blob, indent=2, ensure_ascii=False, default=str)
+            except TypeError:
+                pm_json = str(pm_blob)
+            lines.append(_fence_md("pattern_memory_eval_v1", pm_json[:32000], lang="json"))
+            sig = pm_blob.get("perps_pattern_signature_v1")
+            if isinstance(sig, dict):
+                lines.append(
+                    f"- **Pattern signature hash:** `{sig.get('signature_hash_v1')!s}` "
+                    f"(symbol `{sig.get('symbol')!s}`, tf `{sig.get('timeframe_minutes')!s}m`)"
+                )
+            stats = pm_blob.get("pattern_outcome_stats_v1")
+            if isinstance(stats, dict):
+                lines.append(
+                    f"- **Historical outcomes (similar rows):** count={stats.get('count')!s}, "
+                    f"win_fraction={stats.get('wins_total_fraction_v1')!s}, "
+                    f"avg_pnl={stats.get('avg_pnl')!s}"
+                )
+            eff = pm_blob.get("pattern_effect_to_score_v1")
+            lines.append(
+                f"- **Pattern influence (`pattern_effect_to_score_v1` additive to RM final_score):** `{eff!s}`"
+            )
+            tops = pm_blob.get("top_matches_v1")
+            if isinstance(tops, list) and tops:
+                lines.append("- **Top signature matches (record_id / similarity / historical pnl):**")
+                for row in tops[:8]:
+                    if not isinstance(row, dict):
+                        continue
+                    lines.append(
+                        f"  - `{row.get('record_id')!s}` sim={row.get('similarity_v1')!s} "
+                        f"pnl={row.get('historical_pnl')!s}"
+                    )
+        else:
+            lines.append(
+                "- **RM — Pattern memory:** _(no `pattern_memory_evaluated_v1` trace row for this trade — "
+                "disabled env, missing trace, or path did not emit)._"
             )
         mem_ev = (by_st.get("memory_retrieval_completed") or [{}])[-1]
         ep_mem = mem_ev.get("evidence_payload") if isinstance(mem_ev.get("evidence_payload"), dict) else {}

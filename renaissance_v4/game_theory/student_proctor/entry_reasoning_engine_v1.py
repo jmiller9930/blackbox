@@ -3,7 +3,8 @@ GT_DIRECTIVE_026A_IMPL — **Student entry reasoning engine** (deterministic, va
 
 The LLM (when used) may only propose ``llm_explanation_proposal_v1`` text; **authority** is
 ``decision_synthesis_v1`` computed here. ``run_entry_reasoning_pipeline_v1`` is the **mandatory**
-ordered pipeline: market data → indicators → memory → prior outcomes → risk → decision →
+ordered pipeline: market data → indicators → perps state → pattern memory → retrieval memory →
+prior outcomes → risk → decision →
 validation → digest.
 
 ``run_entry_reasoning_pipeline_preflight_v1`` is **preflight-only**: tail-slices bars for bounded
@@ -35,6 +36,7 @@ from renaissance_v4.game_theory.student_proctor.student_reasoning_fault_map_v1 i
 )
 from renaissance_v4.utils.math_utils import ema as ema_last, safe_mean
 
+from renaissance_v4.game_theory.reasoning_model.pattern_memory_v1 import evaluate_pattern_memory_v1
 from renaissance_v4.game_theory.reasoning_model.perps_state_model_v1 import compute_perps_state_model_v1
 
 SCHEMA_ENTRY_REASONING_EVAL_V1 = "entry_reasoning_eval_v1"
@@ -596,6 +598,57 @@ def run_entry_reasoning_pipeline_v1(
         )
     )
 
+    pattern_mem_eval = evaluate_pattern_memory_v1(
+        indicator_context_eval_v1=ictx,
+        perps_state_model_v1=perps_state_model_v1,
+        symbol=sym,
+        candle_timeframe_minutes=int(run_candle_timeframe_minutes),
+        store_path=None,
+        current_run_id=str(job_id).strip(),
+    )
+    trace.append(
+        {
+            "stage": "pattern_memory_evaluated_v1",
+            "inputs": {"symbol": sym, "timeframe_minutes": int(run_candle_timeframe_minutes)},
+            "outputs": pattern_mem_eval,
+            "evidence": {"pattern_effect_to_score_v1": pattern_mem_eval.get("pattern_effect_to_score_v1")},
+        }
+    )
+    if emit_traces and job_id:
+        from renaissance_v4.game_theory.learning_trace_instrumentation_v1 import (
+            emit_pattern_memory_evaluated_directive_v1,
+        )
+
+        emit_pattern_memory_evaluated_directive_v1(
+            job_id=str(job_id).strip(),
+            fingerprint=fingerprint,
+            scenario_id=scenario_id,
+            trade_id=trade_id,
+            pattern_memory_eval_v1=pattern_mem_eval,
+        )
+    fnodes.append(
+        make_fault_node_v1(
+            "pattern_memory_evaluated_v1",
+            STATUS_PASS,
+            input_summary_v1="Historical pattern signature vs eligible learning rows.",
+            output_summary_v1=(
+                f"pattern_effect={pattern_mem_eval.get('pattern_effect_to_score_v1')!s}; "
+                f"top_matches={len(pattern_mem_eval.get('top_matches_v1') or [])}"
+            ),
+            evidence_fields_v1=["pattern_effect_to_score_v1", "signature_hash_v1"],
+            evidence_values_v1={
+                "pattern_effect_to_score_v1": pattern_mem_eval.get("pattern_effect_to_score_v1"),
+                "signature_hash_v1": (pattern_mem_eval.get("perps_pattern_signature_v1") or {}).get(
+                    "signature_hash_v1"
+                ),
+            },
+            operator_message_v1=(
+                "Directive 3 — compares bucketed context to prior trades with stored signatures; "
+                "additive score only."
+            ),
+        )
+    )
+
     last_close = float(bars[-1]["close"])
 
     scored = score_memory_records_v1(
@@ -680,6 +733,9 @@ def run_entry_reasoning_pipeline_v1(
     if mclass == "conflict" and abs(ind_s) < 0.2:
         fin = -0.3
 
+    pat_eff = float(pattern_mem_eval.get("pattern_effect_to_score_v1") or 0.0)
+    fin = fin + pat_eff
+
     action = "no_trade"
     if fin >= long_threshold:
         action = "enter_long"
@@ -723,18 +779,29 @@ def run_entry_reasoning_pipeline_v1(
         "indicator_score": round(ind_s, 6),
         "memory_score": round(mscore, 6),
         "prior_outcome_score": round(prior_s, 6),
+        "pattern_memory_score": round(pat_eff, 6),
         "risk_adjustment": round(float(ictx.get("confidence_effect_v1", {}).get("atr_adjustment", 0.0)), 6),
         "final_score": round(fin, 6),
         "action": action,
         "long_threshold": long_threshold,
         "short_threshold": short_threshold,
     }
-    _t("decision_synthesis_v1", {"scores": {k: ds[k] for k in ("indicator_score", "memory_score", "prior_outcome_score")}}, ds, {"authority": "entry_reasoning_engine_v1"})
+    _t(
+        "decision_synthesis_v1",
+        {
+            "scores": {
+                k: ds[k]
+                for k in ("indicator_score", "memory_score", "prior_outcome_score", "pattern_memory_score")
+            }
+        },
+        ds,
+        {"authority": "entry_reasoning_engine_v1"},
+    )
     fnodes.append(
         make_fault_node_v1(
             "decision_synthesis_v1",
             STATUS_PASS,
-            input_summary_v1="Indicator, memory, and history scores.",
+            input_summary_v1="Indicator, memory, prior outcomes, and pattern-memory scores.",
             output_summary_v1="Engine action: " + str(ds.get("action") or "no_trade") + ".",
             evidence_fields_v1=["action", "final_score"],
             evidence_values_v1={"action": ds.get("action"), "final_score": ds.get("final_score")},
@@ -752,6 +819,8 @@ def run_entry_reasoning_pipeline_v1(
         "symbol": sym,
         "indicator_context_eval_v1": ictx,
         "perps_state_model_v1": perps_state_model_v1,
+        "perps_pattern_signature_v1": pattern_mem_eval.get("perps_pattern_signature_v1"),
+        "pattern_memory_eval_v1": pattern_mem_eval,
         "memory_context_eval_v1": mctx,
         "prior_outcome_eval_v1": poe,
         "risk_inputs_v1": risk,
