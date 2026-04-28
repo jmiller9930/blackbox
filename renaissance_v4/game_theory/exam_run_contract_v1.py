@@ -8,7 +8,7 @@ Legacy ``student_reasoning_mode`` **input** strings are still accepted and norma
 
 **LLM** is metadata under the ``memory_context_llm_student`` profile: ``student_llm_v1`` with
 ``llm_provider``, ``llm_model``, ``llm_role``. The Student Ollama model is **fixed** to
-``qwen3-coder:30b`` at ``student_ollama_base_url_v1()`` (see ``STUDENT_LLM_APPROVED_MODEL_V1``) —
+``qwen2.5:7b`` at ``student_ollama_base_url_v1()`` (see ``STUDENT_LLM_APPROVED_MODEL_V1``) —
 any other ``llm_model`` in the request is **rejected** (no silent fallback).
 
 Parallel replay **still executes** for every batch in v1; ``skip_cold_baseline`` records whether a
@@ -122,11 +122,11 @@ _LEGACY_INPUT_TO_PROFILE_V1: dict[str, str] = {
 _DEFAULT_LLM_ROLE_V1 = "single_shot_student_output_v1"
 _DEFAULT_LLM_PROVIDER_V1 = "ollama"
 # Only model allowed on the Student (memory_context_llm_student) Ollama path — no other default.
-STUDENT_LLM_APPROVED_MODEL_V1 = "qwen3-coder:30b"
+STUDENT_LLM_APPROVED_MODEL_V1 = "qwen2.5:7b"
 
 
 def default_ollama_base_url_v1() -> str:
-    """Student Ollama base URL (``STUDENT_OLLAMA_BASE_URL`` or lab default **172.20.1.66:11434**)."""
+    """Student Ollama base URL (``STUDENT_OLLAMA_BASE_URL`` or lab default **172.20.2.230:11434**)."""
     from renaissance_v4.game_theory.ollama_role_routing_v1 import student_ollama_base_url_v1
 
     return student_ollama_base_url_v1()

@@ -1,7 +1,7 @@
 """
 Minimal **internal dual-reasoning** helpers for Ask DATA.
 
-**Policy:** Qwen (``qwen3-coder:30b`` on the System Agent host) remains the primary builder.
+**Policy:** Qwen (``qwen2.5:7b`` on the System Agent host) remains the primary builder.
 Local **DeepSeek R1** on ``172.20.2.230`` acts as an adversarial second opinion — not authority,
 not execution. DATA validation stays downstream of model suggestions.
 

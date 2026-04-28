@@ -37,9 +37,14 @@ def test_system_agent_defaults(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.delenv("SYSTEM_AGENT_OLLAMA_BASE_URL", raising=False)
     monkeypatch.delenv("SYSTEM_AGENT_OLLAMA_MODEL", raising=False)
     monkeypatch.delenv("SYSTEM_AGENT_OLLAMA_MODEL_FALLBACK", raising=False)
-    assert system_agent_ollama_base_url() == "http://172.20.1.66:11434"
-    assert system_agent_ollama_model_primary() == "qwen3-coder:30b"
+    assert system_agent_ollama_base_url() == "http://172.20.2.230:11434"
+    assert system_agent_ollama_model_primary() == "qwen2.5:7b"
     assert system_agent_ollama_model_fallback() == "qwen2.5-coder:7b"
+
+
+def test_student_default_lab_host(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.delenv("STUDENT_OLLAMA_BASE_URL", raising=False)
+    assert student_ollama_base_url_v1() == "http://172.20.2.230:11434"
 
 
 def test_student_base_prefers_student_env(monkeypatch: pytest.MonkeyPatch) -> None:
@@ -61,4 +66,4 @@ def test_snapshot_schema(monkeypatch: pytest.MonkeyPatch) -> None:
     snap = ollama_role_routing_snapshot_v1()
     assert snap.get("schema") == "ollama_role_routing_snapshot_v1"
     assert snap["pml_lightweight"]["ollama_model"] == "qwen2.5:7b"
-    assert snap["system_agent"]["ollama_model_primary"] == "qwen3-coder:30b"
+    assert snap["system_agent"]["ollama_model_primary"] == "qwen2.5:7b"

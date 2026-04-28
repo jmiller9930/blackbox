@@ -200,7 +200,7 @@ def test_parse_llm_profile_requires_http_base(monkeypatch: pytest.MonkeyPatch) -
         {
             "exam_run_contract_v1": {
                 "student_brain_profile_v1": STUDENT_BRAIN_PROFILE_MEMORY_CONTEXT_LLM_STUDENT_V1,
-                "student_llm_v1": {"llm_model": "qwen3-coder:30b"},
+                "student_llm_v1": {"llm_model": "qwen2.5:7b"},
             }
         }
     )
@@ -212,12 +212,12 @@ def test_parse_llm_profile_rejects_non_approved_model() -> None:
         {
             "exam_run_contract_v1": {
                 "student_brain_profile_v1": STUDENT_BRAIN_PROFILE_MEMORY_CONTEXT_LLM_STUDENT_V1,
-                "student_llm_v1": {"llm_model": "qwen2.5:7b"},
+                "student_llm_v1": {"llm_model": "qwen3-coder:30b"},
             }
         }
     )
     assert out is None
-    assert err and "qwen3-coder:30b" in (err or "")
+    assert err and "qwen2.5:7b" in (err or "")
 
 
 def test_parse_legacy_llm_lane_infers_model(monkeypatch: pytest.MonkeyPatch) -> None:
@@ -231,7 +231,7 @@ def test_parse_legacy_llm_lane_infers_model(monkeypatch: pytest.MonkeyPatch) -> 
     )
     assert err is None and out is not None
     assert out["student_brain_profile_v1"] == STUDENT_BRAIN_PROFILE_MEMORY_CONTEXT_LLM_STUDENT_V1
-    assert out["student_llm_v1"].get("llm_model") == "qwen3-coder:30b"
+    assert out["student_llm_v1"].get("llm_model") == "qwen2.5:7b"
 
 
 def test_fixture_rows_use_brain_profiles() -> None:

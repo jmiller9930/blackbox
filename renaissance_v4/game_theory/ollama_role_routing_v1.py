@@ -7,8 +7,8 @@ validated tool layers and optional operator confirmation.
 | Role | Default base | Default model | Env override (base / model) |
 |------|----------------|---------------|-----------------------------|
 | **PML lightweight** (Barney, Ask DATA) | ``http://172.20.2.230:11434`` | ``qwen2.5:7b`` | ``PML_LIGHTWEIGHT_OLLAMA_BASE_URL`` / ``PML_LIGHTWEIGHT_OLLAMA_MODEL``; model falls back to ``OLLAMA_MODEL`` |
-| **Student** (parallel LLM seam) | **172.20.1.66:11434** (approved strong model host) | **qwen3-coder:30b** only (``exam_run_contract_v1``) | ``STUDENT_OLLAMA_BASE_URL`` overrides base **only** (CI/mocks) — not PML/lightweight |
-| **System Agent** (operator control brain; propose-only) | ``http://172.20.1.66:11434`` | ``qwen3-coder:30b`` | ``SYSTEM_AGENT_OLLAMA_BASE_URL`` / ``SYSTEM_AGENT_OLLAMA_MODEL`` |
+| **Student** (parallel LLM seam) | ``http://172.20.2.230:11434`` | ``qwen2.5:7b`` only (``exam_run_contract_v1``) | ``STUDENT_OLLAMA_BASE_URL`` overrides base **only** (CI/mocks) — not PML/lightweight |
+| **System Agent** (operator control brain; propose-only) | ``http://172.20.2.230:11434`` | ``qwen2.5:7b`` | ``SYSTEM_AGENT_OLLAMA_BASE_URL`` / ``SYSTEM_AGENT_OLLAMA_MODEL`` |
 | **System Agent fallback** | (same as primary) | ``qwen2.5-coder:7b`` | ``SYSTEM_AGENT_OLLAMA_MODEL_FALLBACK`` |
 | **DeepSeek internal reviewer** (adversarial second opinion; local) | ``http://172.20.2.230:11434`` | ``deepseek-r1:14b`` | ``DEEPSEEK_ESCALATION_OLLAMA_BASE_URL`` / ``DEEPSEEK_ESCALATION_OLLAMA_MODEL`` |
 
@@ -30,10 +30,10 @@ def _strip_base(url: str) -> str:
 
 # Lab defaults (override with env in non-lab deployments).
 _DEFAULT_PML_LIGHTWEIGHT_BASE = "http://172.20.2.230:11434"
-_DEFAULT_STUDENT_OLLAMA_BASE = "http://172.20.1.66:11434"
-_DEFAULT_SYSTEM_AGENT_BASE = "http://172.20.1.66:11434"
+_DEFAULT_STUDENT_OLLAMA_BASE = "http://172.20.2.230:11434"
+_DEFAULT_SYSTEM_AGENT_BASE = "http://172.20.2.230:11434"
 _DEFAULT_PML_LIGHTWEIGHT_MODEL = "qwen2.5:7b"
-_DEFAULT_SYSTEM_AGENT_MODEL = "qwen3-coder:30b"
+_DEFAULT_SYSTEM_AGENT_MODEL = "qwen2.5:7b"
 _DEFAULT_SYSTEM_AGENT_FALLBACK_MODEL = "qwen2.5-coder:7b"
 # Local DeepSeek R1 — pull on reviewer host: ``ollama pull deepseek-r1:14b``. Proof:
 # ``scripts/verify_deepseek_escalation_ollama_v1.sh``.
@@ -60,8 +60,8 @@ def pml_lightweight_ollama_model() -> str:
 
 def student_ollama_base_url_v1() -> str:
     """
-    Student LLM (``memory_context_llm_student``) — **approved** Ollama host (strong model; lab default
-    **172.20.1.66**). ``STUDENT_OLLAMA_BASE_URL`` may override for integration tests or non-lab
+    Student LLM (``memory_context_llm_student``) — **approved** Ollama host (lab default
+    **172.20.2.230**). ``STUDENT_OLLAMA_BASE_URL`` may override for integration tests or non-lab
     operators; there is **no** fallback to PML lightweight or generic ``OLLAMA_BASE_URL`` (avoids
     silent routing to the wrong host).
     """
@@ -118,8 +118,8 @@ def ollama_role_routing_snapshot_v1() -> dict[str, Any]:
         },
         "student_parallel_llm": {
             "ollama_base_url": student_ollama_base_url_v1(),
-            "ollama_model_approved_v1": "qwen3-coder:30b",
-            "note": "Student path is fixed to qwen3-coder:30b (exam_run_contract_v1); STUDENT_OLLAMA_BASE_URL overrides host only",
+            "ollama_model_approved_v1": "qwen2.5:7b",
+            "note": "Student path is fixed to qwen2.5:7b (exam_run_contract_v1); STUDENT_OLLAMA_BASE_URL overrides host only",
         },
         "system_agent": {
             "ollama_base_url": system_agent_ollama_base_url(),

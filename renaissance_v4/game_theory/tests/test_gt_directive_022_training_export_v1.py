@@ -75,7 +75,7 @@ def _populate_022_fixtures(sc: Path, st: Path) -> None:
                 "job_id": "run_promote_llm",
                 "status": "done",
                 "student_brain_profile_v1": "memory_context_llm_student",
-                "student_llm_v1": {"llm_model": "qwen3-coder:30b"},
+                "student_llm_v1": {"llm_model": "qwen2.5:7b"},
                 "exam_e_score_v1": 0.8125,
                 "exam_p_score_v1": 0.9,
                 "exam_pass_v1": True,

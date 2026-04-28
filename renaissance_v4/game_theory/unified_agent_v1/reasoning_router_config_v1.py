@@ -44,8 +44,8 @@ DEFAULTS: dict[str, Any] = {
     "max_memory_records_for_external": 3,
     "random_audit_sample_rate": 0.0,
     "enabled_escalation_reasons": list(ALLOWED_ESCALATION_REASONS),
-    "local_llm_model": "qwen3-coder:30b",
-    "local_ollama_base_url": "http://172.20.1.66:11434",
+    "local_llm_model": "qwen2.5:7b",
+    "local_ollama_base_url": "http://172.20.2.230:11434",
 }
 
 

@@ -1,5 +1,5 @@
 """
-GT_DIRECTIVE_026AI — Student local Ollama adapter (qwen3-coder:30b, single host; **no fallback**).
+GT_DIRECTIVE_026AI — Student local Ollama adapter (qwen2.5:7b, single host; **no fallback**).
 """
 
 from __future__ import annotations
