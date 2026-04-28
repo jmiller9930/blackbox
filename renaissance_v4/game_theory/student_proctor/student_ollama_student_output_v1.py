@@ -107,6 +107,39 @@ def _ollama_chat_once_v1(
     return content.strip(), None
 
 
+def _apply_canonical_student_action_v1(out: dict[str, Any]) -> None:
+    """
+    ``student_action_v1`` is the canonical decision; align ``act`` / ``direction`` before validation.
+
+    After normalization, ``validate_student_output_v1`` contract checks on ``student_action_v1`` vs
+    ``act``/``direction`` do not fail purely from LLM internal inconsistency.
+    """
+    sa = out.get("student_action_v1")
+    if isinstance(sa, str) and sa.strip():
+        sl = sa.strip().lower()
+        if sl == "enter_long":
+            out["act"] = True
+            out["direction"] = "long"
+            return
+        if sl == "enter_short":
+            out["act"] = True
+            out["direction"] = "short"
+            return
+        if sl == "no_trade":
+            out["act"] = False
+            out["direction"] = "flat"
+            return
+    act_v = out.get("act")
+    d_raw = out.get("direction")
+    d = str(d_raw or "flat").strip().lower()
+    if act_v is True and d == "long":
+        out["student_action_v1"] = "enter_long"
+    elif act_v is True and d == "short":
+        out["student_action_v1"] = "enter_short"
+    else:
+        out["student_action_v1"] = "no_trade"
+
+
 def _merge_optional_thesis_from_parsed_v1(parsed: dict[str, Any], out: dict[str, Any]) -> None:
     """
     Copy thesis + Student decision-protocol keys from LLM JSON into ``out`` (whitelisted only).
@@ -257,6 +290,7 @@ def emit_student_output_via_ollama_v1(
     if not pr or not all(isinstance(x, str) for x in pr):
         out["pattern_recipe_ids"] = [f"ollama_{llm_model.replace(':', '_')}_v1"]
     _merge_optional_thesis_from_parsed_v1(parsed, out)
+    _apply_canonical_student_action_v1(out)
     if require_directional_thesis_v1:
         _ensure_conflicting_indicators_llm_contract_v1(out)
     ve = validate_student_output_v1(out)
