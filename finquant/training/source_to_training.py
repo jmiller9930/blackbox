@@ -614,10 +614,13 @@ def iter_concept_staging(
     rng_ord.shuffle(math_order)
 
     fi = mj = nj = wj = ej = 0
-
-    for slot in range(500):
+    # Infinite deterministic cycle: fill_bucket may need >500 trials if gates reject rows.
+    slot_i = 0
+    while True:
+        slot = slot_i % 500
         kind = sched_perm[slot]
         adversarial = slot < 250
+        slot_i += 1
         if kind == "finqa":
             row = finqa_train[finqa_order[fi % len(finqa_order)]]
             fi += 1
@@ -770,7 +773,12 @@ def fill_bucket(
     trials = 0
     while len(out) < target and trials < max_trials:
         trials += 1
-        rec = next(gen)
+        try:
+            rec = next(gen)
+        except StopIteration as e:
+            raise RuntimeError(
+                "Staging generator exhausted before bucket filled — extend iterators or relax gates."
+            ) from e
         why = quality_gate_reject(rec)
         if why:
             rejected += 1
