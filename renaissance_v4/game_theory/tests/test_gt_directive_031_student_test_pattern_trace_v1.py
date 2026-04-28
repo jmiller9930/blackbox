@@ -45,8 +45,9 @@ def test_pattern_memory_emit_when_student_test_isolation_even_if_emit_traces_fal
 
         return Path("/dev/null")
 
+    # Instrumentation imports append at module load — patch that binding, not only learning_trace_events_v1.
     monkeypatch.setattr(
-        "renaissance_v4.game_theory.learning_trace_events_v1.append_learning_trace_event_from_kwargs_v1",
+        "renaissance_v4.game_theory.learning_trace_instrumentation_v1.append_learning_trace_event_from_kwargs_v1",
         _capture,
     )
 
