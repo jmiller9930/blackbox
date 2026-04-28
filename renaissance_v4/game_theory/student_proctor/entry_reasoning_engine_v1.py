@@ -518,13 +518,13 @@ def run_entry_reasoning_pipeline_v1(
     )
 
     ictx, ind_err, _ev = build_indicator_context_eval_v1(bars)
-    _t("indicator_context_evaluated", {"bars": len(bars)}, ictx, _ev)
+    _t("indicator_context_eval_v1", {"bars": len(bars)}, ictx, _ev)
     if ind_err:
         errs.extend(ind_err)
         if any("insufficient_bars" in e for e in ind_err) and (not isinstance(bars, list) or len(bars) < 2):
             fnodes.append(
                 make_fault_node_v1(
-                    "indicator_context_evaluated",
+                    "indicator_context_eval_v1",
                     STATUS_FAIL,
                     input_summary_v1="Bar history for signals.",
                     output_summary_v1="Not enough bars to form indicators.",
@@ -538,7 +538,7 @@ def run_entry_reasoning_pipeline_v1(
             return None, ind_err, trace, build_fault_map_v1(fnodes + skipped_nodes_from_index_v1(2))
     fnodes.append(
         make_fault_node_v1(
-            "indicator_context_evaluated",
+            "indicator_context_eval_v1",
             STATUS_PASS,
             input_summary_v1="Closed bars in the packet.",
             output_summary_v1="Trend, momentum, and range context are computed from those bars only.",
@@ -552,11 +552,48 @@ def run_entry_reasoning_pipeline_v1(
     )
 
     perps_state_model_v1 = compute_perps_state_model_v1(ictx, perps_market_inputs_available=False)
-    _t(
-        "perps_state_model_evaluated_v1",
-        {"rsi_state": (ictx or {}).get("rsi_state"), "ema_trend": (ictx or {}).get("ema_trend")},
-        perps_state_model_v1,
-        {"confidence_01": perps_state_model_v1.get("confidence_01")},
+    _vol_st = ictx.get("volume_state")
+    trace.append(
+        {
+            "stage": "perps_state_model_evaluated_v1",
+            "inputs": {
+                "rsi_state": (ictx or {}).get("rsi_state"),
+                "ema_trend": (ictx or {}).get("ema_trend"),
+                "atr_state": (ictx or {}).get("atr_volume_state"),
+                "volume_state": _vol_st,
+            },
+            "outputs": perps_state_model_v1,
+            "evidence": {"confidence_01": perps_state_model_v1.get("confidence_01")},
+        }
+    )
+    if emit_traces and job_id:
+        from renaissance_v4.game_theory.learning_trace_instrumentation_v1 import (
+            emit_perps_state_model_evaluated_directive_v1,
+        )
+
+        emit_perps_state_model_evaluated_directive_v1(
+            job_id=str(job_id).strip(),
+            fingerprint=fingerprint,
+            scenario_id=scenario_id,
+            trade_id=trade_id,
+            indicator_context_eval_v1=ictx,
+            perps_state_model_v1=perps_state_model_v1,
+        )
+
+    fnodes.append(
+        make_fault_node_v1(
+            "perps_state_model_evaluated_v1",
+            STATUS_PASS,
+            input_summary_v1="Indicator-derived inputs to RM state classification.",
+            output_summary_v1=f"trend_state={perps_state_model_v1.get('trend_state')!s}; momentum_state={perps_state_model_v1.get('momentum_state')!s}.",
+            evidence_fields_v1=["trend_state", "volatility_state", "confidence_01"],
+            evidence_values_v1={
+                "trend_state": perps_state_model_v1.get("trend_state"),
+                "volatility_state": perps_state_model_v1.get("volatility_state"),
+                "confidence_01": perps_state_model_v1.get("confidence_01"),
+            },
+            operator_message_v1="Deterministic perps state model from indicator context (Directive 2).",
+        )
     )
 
     last_close = float(bars[-1]["close"])
@@ -692,10 +729,10 @@ def run_entry_reasoning_pipeline_v1(
         "long_threshold": long_threshold,
         "short_threshold": short_threshold,
     }
-    _t("decision_synthesized", {"scores": {k: ds[k] for k in ("indicator_score", "memory_score", "prior_outcome_score")}}, ds, {"authority": "entry_reasoning_engine_v1"})
+    _t("decision_synthesis_v1", {"scores": {k: ds[k] for k in ("indicator_score", "memory_score", "prior_outcome_score")}}, ds, {"authority": "entry_reasoning_engine_v1"})
     fnodes.append(
         make_fault_node_v1(
-            "decision_synthesized",
+            "decision_synthesis_v1",
             STATUS_PASS,
             input_summary_v1="Indicator, memory, and history scores.",
             output_summary_v1="Engine action: " + str(ds.get("action") or "no_trade") + ".",
@@ -740,7 +777,7 @@ def run_entry_reasoning_pipeline_v1(
                 operator_message_v1="The entry reasoning record failed its validation pass. The issues in the error codes have to be fixed before anything downstream can treat this as final.",
             )
         )
-        return None, errs, trace, build_fault_map_v1(fnodes + skipped_nodes_from_index_v1(7))
+        return None, errs, trace, build_fault_map_v1(fnodes + skipped_nodes_from_index_v1(8))
     if errs:
         fnodes.append(
             make_fault_node_v1(
@@ -752,7 +789,7 @@ def run_entry_reasoning_pipeline_v1(
                 operator_message_v1="The record shape passed its checks, but earlier pipeline errors still block sealing.",
             )
         )
-        return None, errs, trace, build_fault_map_v1(fnodes + skipped_nodes_from_index_v1(7))
+        return None, errs, trace, build_fault_map_v1(fnodes + skipped_nodes_from_index_v1(8))
     fnodes.append(
         make_fault_node_v1(
             "entry_reasoning_validated",

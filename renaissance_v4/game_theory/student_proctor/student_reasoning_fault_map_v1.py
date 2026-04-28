@@ -14,11 +14,12 @@ CONTRACT_VERSION_FAULT_MAP = 1
 # Fixed order (026R + 026AI router + 026B lifecycle + 026C deterministic learning).
 NODE_IDS_ORDER: tuple[str, ...] = (
     "market_data_loaded",
-    "indicator_context_evaluated",
+    "indicator_context_eval_v1",
+    "perps_state_model_evaluated_v1",
     "memory_context_evaluated",
     "prior_outcomes_evaluated",
     "risk_reward_evaluated",
-    "decision_synthesized",
+    "decision_synthesis_v1",
     "entry_reasoning_validated",
     "llm_output_checked",
     "student_output_sealed",

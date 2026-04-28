@@ -197,7 +197,7 @@ def write_student_test_decision_fingerprint_report_md_v1(
             f"(`{STUDENT_TEST_ISOLATION_ENV_V1}=1`); expect zero retrieved promoted rows."
         )
         mdl = [x for x in by_st.get("market_data_loaded") or []]
-        ind_ev = [x for x in by_st.get("indicator_context_evaluated") or []]
+        ind_ev = [x for x in by_st.get("indicator_context_eval_v1") or []]
         if mdl:
             ep0 = mdl[-1].get("evidence_payload") if isinstance(mdl[-1].get("evidence_payload"), dict) else {}
             outs = ep0.get("outputs")
@@ -212,7 +212,7 @@ def write_student_test_decision_fingerprint_report_md_v1(
         if ind_ev:
             ep_i = ind_ev[-1].get("evidence_payload") if isinstance(ind_ev[-1].get("evidence_payload"), dict) else {}
             outs_i = ep_i.get("outputs")
-            lines.append("- **Indicators / signals (entry reasoning `indicator_context_evaluated` outputs):**")
+            lines.append("- **Indicators / signals (entry reasoning `indicator_context_eval_v1` outputs):**")
             try:
                 blob_i = json.dumps(outs_i, indent=2, ensure_ascii=False, default=str)
             except TypeError:

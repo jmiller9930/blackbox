@@ -165,3 +165,9 @@ Engineer should append:
 **Status:** pending architect review
 
 Architect will append acceptance when Directive 0 acknowledgment is complete.
+
+---
+
+## Directive closures (trace-validated)
+
+**Directive 2 — CLOSED (trace-validated state model)** — Engineering: learning trace co-located under `runtime/student_test/<job_id>/learning_trace_events_v1.jsonl` when `student_test_mode_v1` is active; each trade records `indicator_context_eval_v1` → `perps_state_model_evaluated_v1` (directive-shaped `inputs` / `outputs` + `timestamp_ms`) → `decision_synthesis_v1` → authority → sealed; verified against decision fingerprint.

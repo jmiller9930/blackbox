@@ -49,12 +49,12 @@ EVENT_STAGES_V1 = (
     "candle_timeframe_nexus_v1",
     "timeframe_mismatch_detected_v1",
     "market_data_loaded",
-    "indicator_context_evaluated",
+    "indicator_context_eval_v1",
     "perps_state_model_evaluated_v1",
     "memory_context_evaluated",
     "prior_outcomes_evaluated",
     "risk_reward_evaluated",
-    "decision_synthesized",
+    "decision_synthesis_v1",
     "entry_reasoning_validated",
     "entry_reasoning_sealed_v1",
     "student_reasoning_fault_map_v1",
@@ -97,12 +97,12 @@ STAGE_TO_NODE_IDS_V1: dict[str, tuple[str, ...]] = {
     "timeframe_mismatch_detected_v1": ("memory_retrieval", "referee_execution"),
     # GT_DIRECTIVE_026A_IMPL — entry reasoning engine stages.
     "market_data_loaded": ("student_reasoning", "llm_reasoning"),
-    "indicator_context_evaluated": ("student_reasoning", "llm_reasoning"),
+    "indicator_context_eval_v1": ("student_reasoning", "llm_reasoning"),
     "perps_state_model_evaluated_v1": ("student_reasoning", "llm_reasoning"),
     "memory_context_evaluated": ("student_reasoning", "llm_reasoning"),
     "prior_outcomes_evaluated": ("student_reasoning", "llm_reasoning"),
     "risk_reward_evaluated": ("student_reasoning", "llm_reasoning"),
-    "decision_synthesized": ("student_reasoning", "llm_reasoning"),
+    "decision_synthesis_v1": ("student_reasoning", "llm_reasoning"),
     "entry_reasoning_validated": ("student_reasoning", "llm_reasoning"),
     "entry_reasoning_sealed_v1": ("student_reasoning", "llm_reasoning"),
     "student_reasoning_fault_map_v1": ("student_reasoning", "llm_reasoning"),
@@ -148,8 +148,9 @@ def build_learning_trace_event_v1(
     producer: str,
     trade_id: str | None = None,
     scenario_id: str | None = None,
+    trace_extensions_v1: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
-    return {
+    ev: dict[str, Any] = {
         "schema": SCHEMA_EVENT,
         "schema_version": SCHEMA_VERSION,
         "job_id": str(job_id or "").strip(),
@@ -163,6 +164,9 @@ def build_learning_trace_event_v1(
         "evidence_payload": evidence_payload if isinstance(evidence_payload, dict) else {},
         "producer": str(producer or "").strip() or "unknown",
     }
+    if isinstance(trace_extensions_v1, dict) and trace_extensions_v1:
+        ev.update(trace_extensions_v1)
+    return ev
 
 
 def append_learning_trace_event_v1(
@@ -478,6 +482,7 @@ def append_learning_trace_event_from_kwargs_v1(
     trade_id: str | None = None,
     scenario_id: str | None = None,
     path: Path | None = None,
+    trace_extensions_v1: dict[str, Any] | None = None,
 ) -> Path:
     """Convenience: build + append."""
     ev = build_learning_trace_event_v1(
@@ -490,6 +495,7 @@ def append_learning_trace_event_from_kwargs_v1(
         producer=producer,
         trade_id=trade_id,
         scenario_id=scenario_id,
+        trace_extensions_v1=trace_extensions_v1,
     )
     return append_learning_trace_event_v1(ev, path=path)
 

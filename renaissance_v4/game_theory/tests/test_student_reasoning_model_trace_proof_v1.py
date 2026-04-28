@@ -49,11 +49,12 @@ def test_trace_proof_ok_synthetic_two_trades(tmp_path: Path) -> None:
         )
         for st in (
             "market_data_loaded",
-            "indicator_context_evaluated",
+            "indicator_context_eval_v1",
+            "perps_state_model_evaluated_v1",
             "memory_context_evaluated",
             "prior_outcomes_evaluated",
             "risk_reward_evaluated",
-            "decision_synthesized",
+            "decision_synthesis_v1",
             "entry_reasoning_validated",
             "entry_reasoning_sealed_v1",
         ):
@@ -133,11 +134,12 @@ def test_trace_proof_fails_when_authority_count_mismatch(tmp_path: Path) -> None
     )
     for st in (
         "market_data_loaded",
-        "indicator_context_evaluated",
+        "indicator_context_eval_v1",
+        "perps_state_model_evaluated_v1",
         "memory_context_evaluated",
         "prior_outcomes_evaluated",
         "risk_reward_evaluated",
-        "decision_synthesized",
+        "decision_synthesis_v1",
         "entry_reasoning_validated",
         "entry_reasoning_sealed_v1",
     ):

@@ -176,9 +176,12 @@ def apply_student_test_mode_env_v1(job_id: str, *, repo_root: Path | None = None
         d.mkdir(parents=True, exist_ok=True)
     # Repo root is only used for consistency checks; blackbox_repo_root() matches checkout.
     _ = repo_root
+    trace_jsonl = root / "learning_trace_events_v1.jsonl"
     env = {
         "BLACKBOX_PML_RUNTIME_ROOT": str(root),
         "PATTERN_GAME_MEMORY_ROOT": str(root),
+        # Final gate: trace must land next to fingerprint under the job dir (overrides global/default sinks).
+        "PATTERN_GAME_LEARNING_TRACE_EVENTS_JSONL": str(trace_jsonl),
         "PATTERN_GAME_TELEMETRY_DIR": str(telemetry),
         "PATTERN_GAME_SESSION_LOGS_ROOT": str(batches),
         "PATTERN_GAME_GROUNDHOG_BUNDLE": "0",

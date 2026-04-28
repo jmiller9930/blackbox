@@ -82,7 +82,15 @@ def default_ask_data_operator_feedback_jsonl() -> Path:
 
 
 def default_learning_trace_events_jsonl() -> Path:
-    """Append-only **learning_trace_events_v1** (runtime handoffs not reconstructable from scorecard alone)."""
+    """Append-only **learning_trace_events_v1** (runtime handoffs not reconstructable from scorecard alone).
+
+    When set, ``PATTERN_GAME_LEARNING_TRACE_EVENTS_JSONL`` wins over ``PATTERN_GAME_MEMORY_ROOT`` and the
+    repo-relative default — used by ``student_test_mode_v1`` to force co-location under
+    ``runtime/student_test/<job_id>/``.
+    """
+    ex = os.environ.get("PATTERN_GAME_LEARNING_TRACE_EVENTS_JSONL", "").strip()
+    if ex:
+        return Path(ex).expanduser().resolve()
     mr = memory_root()
     if mr:
         return mr / "learning_trace_events_v1.jsonl"

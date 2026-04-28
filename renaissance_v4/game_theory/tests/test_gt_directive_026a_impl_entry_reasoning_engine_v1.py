@@ -151,7 +151,11 @@ def test_trace_stages_order() -> None:
     assert not err
     names = [x["stage"] for x in tr]
     assert names[0] == "market_data_loaded"
-    assert "indicator_context_evaluated" in names
+    assert "indicator_context_eval_v1" in names
+    ic_ix = names.index("indicator_context_eval_v1")
+    ps_ix = names.index("perps_state_model_evaluated_v1")
+    ds_ix = names.index("decision_synthesis_v1")
+    assert ic_ix < ps_ix < ds_ix
     assert "entry_reasoning_sealed_v1" in names
 
 

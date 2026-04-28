@@ -218,11 +218,14 @@ def main() -> int:
     acc_path = root / "student_test_acceptance_v1.json"
     acc_path.write_text(json.dumps(acceptance, indent=2, ensure_ascii=False), encoding="utf-8")
     report_path = write_student_test_decision_fingerprint_report_md_v1(job_id, seam_audit=seam)
+    trace_jsonl = (root / "learning_trace_events_v1.jsonl").resolve()
     print(
         json.dumps(
             {
                 "ok": True,
                 "job_id": job_id,
+                "student_test_runtime_root": str(root),
+                "learning_trace_events_v1_jsonl": str(trace_jsonl),
                 "acceptance_path": str(acc_path),
                 "decision_fingerprint_report_md": str(report_path),
             },

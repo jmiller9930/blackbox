@@ -10,6 +10,7 @@ from __future__ import annotations
 
 import os
 import sys
+import time
 from typing import Any
 
 from renaissance_v4.game_theory.learning_trace_events_v1 import append_learning_trace_event_from_kwargs_v1
@@ -619,6 +620,74 @@ def emit_lifecycle_tape_summary_v1(
     )
 
 
+def emit_perps_state_model_evaluated_directive_v1(
+    *,
+    job_id: str,
+    fingerprint: str | None,
+    scenario_id: str | None,
+    trade_id: str | None,
+    indicator_context_eval_v1: dict[str, Any] | None,
+    perps_state_model_v1: dict[str, Any] | None,
+) -> None:
+    """
+    GT_DIRECTIVE_028 — Directive 2 trace gate: **one line** with ``event_type``, ``timestamp_ms``,
+    directive ``inputs`` / ``outputs`` (aligned with fingerprint / RM), after indicators and before synthesis.
+    """
+    from renaissance_v4.game_theory.learning_trace_events_v1 import learning_trace_memory_sink_active_v1
+    from renaissance_v4.game_theory.student_rm_trace_contract_v1 import student_rm_trace_mandate_emit_active_v1
+
+    if (
+        not learning_trace_instrumentation_enabled_v1()
+        and not learning_trace_memory_sink_active_v1()
+        and not student_rm_trace_mandate_emit_active_v1()
+    ):
+        return
+    ictx = indicator_context_eval_v1 if isinstance(indicator_context_eval_v1, dict) else {}
+    ps = perps_state_model_v1 if isinstance(perps_state_model_v1, dict) else {}
+    vol = ictx.get("volume_state")
+    inputs = {
+        "rsi_state": str(ictx.get("rsi_state") or ""),
+        "ema_trend": str(ictx.get("ema_trend") or ""),
+        "atr_state": str(ictx.get("atr_volume_state") or ""),
+        "volume_state": "" if vol is None else str(vol),
+    }
+    outputs = {
+        "trend_state": str(ps.get("trend_state") or ""),
+        "volatility_state": str(ps.get("volatility_state") or ""),
+        "structure_state": str(ps.get("structure_state") or ""),
+        "momentum_state": str(ps.get("momentum_state") or ""),
+        "confidence_01": float(ps.get("confidence_01") or 0.0),
+    }
+    trace_extensions_v1: dict[str, Any] = {
+        "event_type": "perps_state_model_evaluated_v1",
+        "timestamp_ms": int(time.time() * 1000),
+        "inputs": inputs,
+        "outputs": outputs,
+    }
+    sid = str(scenario_id).strip() if scenario_id and str(scenario_id).strip() else None
+    tid = str(trade_id).strip() if trade_id and str(trade_id).strip() else None
+    try:
+        append_learning_trace_event_from_kwargs_v1(
+            job_id=job_id,
+            fingerprint=fingerprint,
+            stage="perps_state_model_evaluated_v1",
+            status="pass",
+            summary="entry_reasoning_engine_v1: perps_state_model_evaluated_v1",
+            producer="entry_reasoning_engine_v1",
+            scenario_id=sid,
+            trade_id=tid,
+            evidence_payload={
+                "entry_reasoning_stage": "perps_state_model_evaluated_v1",
+                "inputs": inputs,
+                "outputs": outputs,
+                "evidence": {"confidence_01": outputs["confidence_01"]},
+            },
+            trace_extensions_v1=trace_extensions_v1,
+        )
+    except Exception as e:
+        print(f"[learning_trace_instrumentation_v1] emit_perps_state_model_evaluated_directive_v1 failed: {e}", file=sys.stderr)
+
+
 def emit_entry_reasoning_pipeline_stage_v1(
     *,
     job_id: str,
@@ -818,6 +887,7 @@ __all__ = [
     "emit_026c_learning_scoring_completed_v1",
     "emit_candle_timeframe_nexus_v1",
     "emit_entry_reasoning_pipeline_stage_v1",
+    "emit_perps_state_model_evaluated_directive_v1",
     "emit_lifecycle_reasoning_stage_v1",
     "emit_lifecycle_tape_summary_v1",
     "emit_reasoning_cost_governor_v1",

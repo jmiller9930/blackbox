@@ -58,7 +58,7 @@ def test_insufficient_bars_indicators_fails_at_indicator_node() -> None:
     )
     assert out is None
     assert fm["nodes_v1"][0]["status"] == STATUS_PASS
-    assert fm["nodes_v1"][1]["node_id"] == "indicator_context_evaluated"
+    assert fm["nodes_v1"][1]["node_id"] == "indicator_context_eval_v1"
     assert fm["nodes_v1"][1]["status"] == STATUS_FAIL
 
 
@@ -79,7 +79,7 @@ def test_success_pipeline_has_ten_nodes_and_validates() -> None:
     assert not err
     assert len(fm["nodes_v1"]) == len(NODE_IDS_ORDER)
     for i, n in enumerate(fm["nodes_v1"]):
-        if i < 7:
+        if i < 8:
             assert n["status"] in (STATUS_PASS, STATUS_NOT_PROVEN)
         else:
             assert n["status"] == STATUS_SKIPPED
