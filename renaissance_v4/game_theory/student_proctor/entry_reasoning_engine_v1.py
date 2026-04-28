@@ -35,6 +35,8 @@ from renaissance_v4.game_theory.student_proctor.student_reasoning_fault_map_v1 i
 )
 from renaissance_v4.utils.math_utils import ema as ema_last, safe_mean
 
+from renaissance_v4.game_theory.reasoning_model.perps_state_model_v1 import compute_perps_state_model_v1
+
 SCHEMA_ENTRY_REASONING_EVAL_V1 = "entry_reasoning_eval_v1"
 SCHEMA_ENTRY_REASONING_DIGEST_V1 = "entry_reasoning_eval_digest_v1"
 
@@ -548,6 +550,15 @@ def run_entry_reasoning_pipeline_v1(
             operator_message_v1="Indicators were derived from the packet; nothing was invented beyond the data shown.",
         )
     )
+
+    perps_state_model_v1 = compute_perps_state_model_v1(ictx, perps_market_inputs_available=False)
+    _t(
+        "perps_state_model_evaluated_v1",
+        {"rsi_state": (ictx or {}).get("rsi_state"), "ema_trend": (ictx or {}).get("ema_trend")},
+        perps_state_model_v1,
+        {"confidence_01": perps_state_model_v1.get("confidence_01")},
+    )
+
     last_close = float(bars[-1]["close"])
 
     scored = score_memory_records_v1(
@@ -703,6 +714,7 @@ def run_entry_reasoning_pipeline_v1(
         "candle_timeframe_minutes": int(run_candle_timeframe_minutes),
         "symbol": sym,
         "indicator_context_eval_v1": ictx,
+        "perps_state_model_v1": perps_state_model_v1,
         "memory_context_eval_v1": mctx,
         "prior_outcome_eval_v1": poe,
         "risk_inputs_v1": risk,

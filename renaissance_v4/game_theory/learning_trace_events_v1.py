@@ -50,6 +50,7 @@ EVENT_STAGES_V1 = (
     "timeframe_mismatch_detected_v1",
     "market_data_loaded",
     "indicator_context_evaluated",
+    "perps_state_model_evaluated_v1",
     "memory_context_evaluated",
     "prior_outcomes_evaluated",
     "risk_reward_evaluated",
@@ -97,6 +98,7 @@ STAGE_TO_NODE_IDS_V1: dict[str, tuple[str, ...]] = {
     # GT_DIRECTIVE_026A_IMPL — entry reasoning engine stages.
     "market_data_loaded": ("student_reasoning", "llm_reasoning"),
     "indicator_context_evaluated": ("student_reasoning", "llm_reasoning"),
+    "perps_state_model_evaluated_v1": ("student_reasoning", "llm_reasoning"),
     "memory_context_evaluated": ("student_reasoning", "llm_reasoning"),
     "prior_outcomes_evaluated": ("student_reasoning", "llm_reasoning"),
     "risk_reward_evaluated": ("student_reasoning", "llm_reasoning"),

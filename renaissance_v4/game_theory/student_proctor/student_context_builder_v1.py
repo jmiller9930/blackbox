@@ -254,6 +254,9 @@ def build_student_context_annex_v1_from_entry_reasoning_eval_v1(
     ic = ere.get("indicator_context_eval_v1")
     if isinstance(ic, dict):
         indicator_context["indicator_context_eval_v1"] = copy.deepcopy(ic)
+    ps = ere.get("perps_state_model_v1")
+    if isinstance(ps, dict):
+        indicator_context["perps_state_model_v1"] = copy.deepcopy(ps)
 
     structure_context: dict[str, Any] = {}
     for key in (

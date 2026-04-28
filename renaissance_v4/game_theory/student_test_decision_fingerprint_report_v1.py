@@ -168,6 +168,19 @@ def write_student_test_decision_fingerprint_report_md_v1(
             lines.append(
                 f"- **bars_in_packet (with annex on same packet):** `{ep_pre.get('bars_in_packet')!s}`"
             )
+            ind_annex = annex_snap.get("indicator_context") if isinstance(annex_snap.get("indicator_context"), dict) else {}
+            ps_rm = ind_annex.get("perps_state_model_v1") if isinstance(ind_annex.get("perps_state_model_v1"), dict) else {}
+            if ps_rm:
+                lines.append("- **RM — `perps_state_model_v1` (deterministic, Directive 2):**")
+                try:
+                    ps_blob = json.dumps(ps_rm, indent=2, ensure_ascii=False, default=str)
+                except TypeError:
+                    ps_blob = str(ps_rm)
+                lines.append(_fence_md("perps_state_model_v1", ps_blob[:16000], lang="json"))
+            else:
+                lines.append(
+                    "- **RM — `perps_state_model_v1`:** _(absent from annex — expected after Directive 2 wiring)._"
+                )
         else:
             lines.append(
                 "- **Structured pre-reveal annex:** _(no `student_test_pre_reveal_structured_context_v1` row — "
