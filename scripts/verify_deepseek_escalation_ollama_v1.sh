@@ -1,18 +1,17 @@
 #!/usr/bin/env bash
-# Proof gate — DeepSeek V4 Flash (cloud tag) must appear in Ollama tags and /api/generate must succeed.
-# Usage (from any machine that can reach the escalation host):
+# Proof gate — local DeepSeek R1 reviewer model must appear in Ollama tags and /api/generate must succeed.
+# Usage (from any machine that can reach the reviewer host):
 #   ./scripts/verify_deepseek_escalation_ollama_v1.sh
 # Optional:
-#   DEEPSEEK_ESCALATION_OLLAMA_BASE_URL=http://172.20.2.230:11434 DEEPSEEK_ESCALATION_OLLAMA_MODEL=deepseek-v4-flash:cloud ./scripts/verify_deepseek_escalation_ollama_v1.sh
+#   DEEPSEEK_ESCALATION_OLLAMA_BASE_URL=http://172.20.2.230:11434 DEEPSEEK_ESCALATION_OLLAMA_MODEL=deepseek-r1:14b ./scripts/verify_deepseek_escalation_ollama_v1.sh
 #
 # Exit 0 only if both checks pass. Operator: install on host first — typically:
-#   ollama pull deepseek-v4-flash:cloud
-#   (and `ollama signin` or org policy if cloud models require auth).
+#   ollama pull deepseek-r1:14b
 
 set -euo pipefail
 BASE="${DEEPSEEK_ESCALATION_OLLAMA_BASE_URL:-http://172.20.2.230:11434}"
 BASE="${BASE%/}"
-MODEL="${DEEPSEEK_ESCALATION_OLLAMA_MODEL:-deepseek-v4-flash:cloud}"
+MODEL="${DEEPSEEK_ESCALATION_OLLAMA_MODEL:-deepseek-r1:14b}"
 
 echo "verify_deepseek_escalation_ollama_v1: BASE=$BASE MODEL=$MODEL"
 

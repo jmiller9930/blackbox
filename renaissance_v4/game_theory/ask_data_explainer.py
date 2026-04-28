@@ -3,7 +3,9 @@ Ask DATA — bounded PML self-explainer (run + system facts + **system dictionar
 
 When LLM is enabled, an **intent router** (``ask_data_router_v1``) picks the best **read-only**
 tier: fast **PML lightweight**, stronger **system_agent** for schema/API-style questions, or
-**deepseek_escalation** for explicit ``[debug]`` / ``[escalation]`` prompts. Models never execute
+**deepseek_escalation** for explicit ``[debug]`` / ``[escalation]`` prompts. **Internal dual-reasoning**
+(``internal_dual_reasoning_v1``) may run **Qwen-only**, **DeepSeek-only**, or **parallel Qwen + local DeepSeek R1**
+when topics warrant second-opinion review — override with ``INTERNAL_REASONING_MODE``. Models never execute
 mutations. Disable: ``ASK_DATA_ROUTER=0``; force tier: ``ASK_DATA_ROUTE=lightweight|system_agent|deepseek``.
 Operator **signals** (``ask_data_operator_feedback_v1``): append-only JSONL + ``POST /api/ask-data/feedback``;
 rollups inject ``operator_feedback_signals`` into the bundle (telemetry, not Referee). Disable:
@@ -17,7 +19,9 @@ import os
 import re
 import sys
 from pathlib import Path
-from typing import Any
+from typing import Any, Literal
+
+AskDataPromptRoleV1 = Literal["builder", "adversarial_reviewer"]
 
 from renaissance_v4.game_theory.ask_data_operator_surface_v1 import (
     ASK_DATA_UI_CONTEXT_ALLOWED as _UI_CONTEXT_ALLOWED,
@@ -698,23 +702,32 @@ def build_ask_data_bundle_v1(
     }
 
 
-def ask_data_format_with_llm(
+def build_ask_data_llm_prompt_v1(
     bundle: dict[str, Any],
     question: str,
     *,
     route: str,
-    timeout: float | None = None,
-) -> tuple[str, str | None]:
-    from renaissance_v4.game_theory.ask_data_router_v1 import ask_data_ollama_target_for_route_v1
-
-    ollama_generate = _runtime_imports()
-    base, model, default_timeout = ask_data_ollama_target_for_route_v1(route)  # type: ignore[arg-type]
-    eff_timeout = default_timeout if timeout is None else timeout
+    role: AskDataPromptRoleV1 = "builder",
+) -> str:
+    """Shared normalized Ask DATA prompt body (same bundle JSON for builder vs adversarial reviewer)."""
     payload = json.dumps(bundle, indent=2, ensure_ascii=False)
-    prompt = (
-        "You are **Ask DATA** — a Pattern Machine Learning (PML) **self-explainer** for operators.\n\n"
-        f"ROUTING_TIER: **{route}** — you were selected for this tier to balance speed vs depth. "
-        "Same honesty rules apply; you still do **not** execute mutations or call live tools.\n\n"
+    if role == "builder":
+        header = (
+            "You are **Ask DATA** — a Pattern Machine Learning (PML) **self-explainer** for operators.\n\n"
+            f"ROUTING_TIER: **{route}** — you were selected for this tier to balance speed vs depth. "
+            "Same honesty rules apply; you still do **not** execute mutations or call live tools.\n\n"
+        )
+    else:
+        header = (
+            "You are **Ask DATA — adversarial internal reviewer** (local DeepSeek R1 tier). "
+            "Your job is to **challenge** conclusions implied by the operator question using **only** the bundle: "
+            "surface edge cases, fragile assumptions, replay/PnL/risk/memory blind spots, strategy overfitting cues, "
+            "and execution-gating gaps — ask **what could be wrong here**. "
+            "You are **not** ground truth and **not** final authority; DATA (SQLite, logs, manifests, replay, "
+            "policy registries) proves operational facts.\n\n"
+            f"ROUTING_TIER: **{route}** | INTERNAL_ROLE: **adversarial_reviewer**\n\n"
+        )
+    rules = (
         "RULES (hard):\n"
         "- Answer ONLY using: (1) the JSON bundle sections `static_knowledge`, `system_dictionary`, `barney_facts`, "
         "`scorecard_snapshot`, `ui_context`, `operator_strategy_upload_state`, `job_resolution`, "
@@ -762,6 +775,22 @@ def ask_data_format_with_llm(
         "--- BUNDLE JSON ---\n"
         + payload
     )
+    return header + rules
+
+
+def ask_data_format_with_llm(
+    bundle: dict[str, Any],
+    question: str,
+    *,
+    route: str,
+    timeout: float | None = None,
+) -> tuple[str, str | None]:
+    from renaissance_v4.game_theory.ask_data_router_v1 import ask_data_ollama_target_for_route_v1
+
+    ollama_generate = _runtime_imports()
+    base, model, default_timeout = ask_data_ollama_target_for_route_v1(route)  # type: ignore[arg-type]
+    eff_timeout = default_timeout if timeout is None else timeout
+    prompt = build_ask_data_llm_prompt_v1(bundle, question, route=route, role="builder")
     res = ollama_generate(prompt, base_url=base, model=model, timeout=eff_timeout)
     if res.error:
         return "", res.error
@@ -783,6 +812,11 @@ def ask_data_answer(
         rollup_operator_feedback_for_fingerprint_v1,
     )
     from renaissance_v4.game_theory.ask_data_router_v1 import classify_ask_data_route_v1
+    from renaissance_v4.game_theory.internal_dual_reasoning_v1 import (
+        classify_internal_reasoning_mode_v1,
+        run_ask_data_deepseek_only_v1,
+        run_ask_data_dual_review_v1,
+    )
 
     q = (question or "").strip()
     if not q:
@@ -807,6 +841,7 @@ def ask_data_answer(
         answer_source: str,
         error: Any,
         router_label: str,
+        internal_reasoning_v1: dict[str, Any] | None = None,
     ) -> dict[str, Any]:
         out: dict[str, Any] = {
             "ok": ok,
@@ -816,6 +851,8 @@ def ask_data_answer(
             "ask_data_route": route,
             "ask_data_router": router_label,
         }
+        if internal_reasoning_v1:
+            out["internal_reasoning_v1"] = internal_reasoning_v1
         if ask_data_operator_feedback_enabled_v1():
             iid = new_interaction_id_v1()
             append_ask_data_interaction_telemetry_v1(
@@ -844,7 +881,54 @@ def ask_data_answer(
         txt, src = _fallback_answer_from_bundle(q, eff_bundle)
         return _finalize(ok=True, text=txt, answer_source=src, error=None, router_label="off_llm")
 
+    mode, mode_meta = classify_internal_reasoning_mode_v1(q, ask_data_route=route, job_resolution=job_res)
+
+    if mode == "dual_review":
+        txt, err, evidence = run_ask_data_dual_review_v1(eff_bundle, q, ask_data_route=route)
+        internal_v1 = {**mode_meta, **evidence}
+        if err == "both_failed" or (err and not (txt or "").strip()):
+            fb, src = _fallback_answer_from_bundle(q, eff_bundle)
+            return _finalize(
+                ok=True,
+                text=fb + ("\n\n(Dual-review failed: both internal models errored.)" if err else ""),
+                answer_source=src + "+fallback",
+                error=err,
+                router_label="fallback_dual_review_both_failed",
+                internal_reasoning_v1=internal_v1,
+            )
+        return _finalize(
+            ok=True,
+            text=txt,
+            answer_source="llm_dual_review",
+            error=None,
+            router_label="llm_dual_review",
+            internal_reasoning_v1=internal_v1,
+        )
+
+    if mode == "deepseek_only":
+        txt, err, evidence = run_ask_data_deepseek_only_v1(eff_bundle, q, ask_data_route=route)
+        internal_v1 = {**mode_meta, **evidence}
+        if err or not txt:
+            fb, src = _fallback_answer_from_bundle(q, eff_bundle)
+            return _finalize(
+                ok=True,
+                text=fb + ("\n\n(DeepSeek reviewer unavailable: " + str(err) + ")" if err else ""),
+                answer_source=src + "+fallback",
+                error=err,
+                router_label="fallback_after_deepseek_error",
+                internal_reasoning_v1=internal_v1,
+            )
+        return _finalize(
+            ok=True,
+            text=txt,
+            answer_source="llm_deepseek_reviewer",
+            error=None,
+            router_label="llm_deepseek_reviewer",
+            internal_reasoning_v1=internal_v1,
+        )
+
     txt, err = ask_data_format_with_llm(eff_bundle, q, route=route)
+    base_ir = {**mode_meta, "internal_reasoning_mode_v1": "qwen_only", "external_openai_invoked_v1": False}
     if err or not txt:
         fb, src = _fallback_answer_from_bundle(q, eff_bundle)
         return _finalize(
@@ -853,5 +937,13 @@ def ask_data_answer(
             answer_source=src + "+fallback",
             error=err,
             router_label="fallback_after_llm_error",
+            internal_reasoning_v1=base_ir,
         )
-    return _finalize(ok=True, text=txt, answer_source="llm", error=None, router_label="llm")
+    return _finalize(
+        ok=True,
+        text=txt,
+        answer_source="llm",
+        error=None,
+        router_label="llm",
+        internal_reasoning_v1=base_ir,
+    )
