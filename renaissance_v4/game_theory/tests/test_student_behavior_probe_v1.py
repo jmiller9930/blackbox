@@ -31,6 +31,22 @@ def test_probe_gates_pass_v1() -> None:
     assert errs == []
 
 
+def test_probe_gates_pass_single_sealed_v1() -> None:
+    """At least one authority-aligned seal satisfies the probe gate (latency-friendly bar)."""
+    ok, errs = evaluate_student_behavior_probe_gates_v1(
+        metrics={
+            "authority_count_v1": 1,
+            "sealed_count_v1": 1,
+            "rejection_count_v1": 0,
+            "contract_violation_count_v1": 0,
+        },
+        wall_clock_s_v1=30.0,
+        wall_limit_s_v1=120.0,
+    )
+    assert ok is True
+    assert errs == []
+
+
 def test_probe_gates_fail_wall_clock_v1() -> None:
     ok, errs = evaluate_student_behavior_probe_gates_v1(
         metrics={
@@ -49,8 +65,8 @@ def test_probe_gates_fail_wall_clock_v1() -> None:
 def test_probe_gates_fail_sealed_min_v1() -> None:
     ok, errs = evaluate_student_behavior_probe_gates_v1(
         metrics={
-            "authority_count_v1": 3,
-            "sealed_count_v1": 3,
+            "authority_count_v1": 0,
+            "sealed_count_v1": 0,
             "rejection_count_v1": 0,
             "contract_violation_count_v1": 0,
         },

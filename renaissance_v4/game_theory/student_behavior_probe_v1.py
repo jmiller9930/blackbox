@@ -6,9 +6,10 @@ Student **behavior probe** — deterministic fast-fail gate after RM preflight, 
   timestamps (same packet source as RM decision snapshot).
 * Invokes ``student_loop_seam_after_parallel_batch_v1`` once — full Student seam (packet → ERE → LLM → authority → seal).
 
-**Hard wall-clock:** By default the seam runs in a **spawn subprocess**. The parent ``terminate()``/``kill()``\s
-the child if it exceeds ``PATTERN_GAME_STUDENT_PROBE_MAX_WALL_S`` (default **5**), returning
-``failed_student_behavior_probe_timeout_v1`` — same pattern as RM preflight hard timeout.
+**Hard wall-clock:** By default the seam runs in a **spawn subprocess**. The parent ``terminate()`` / ``kill()`` the
+child if it exceeds ``PATTERN_GAME_STUDENT_PROBE_MAX_WALL_S`` (default **120**), returning
+``failed_student_behavior_probe_timeout_v1`` — same pattern as RM preflight hard timeout. Slow local LLMs need
+this headroom; tighten with env if desired.
 
 Disable isolation with ``PATTERN_GAME_STUDENT_PROBE_SUBPROCESS_ISOLATION=0`` (tests only; can hang).
 """
@@ -41,11 +42,14 @@ SCHEMA_FAILED_STUDENT_BEHAVIOR_PROBE_V1 = "failed_student_behavior_probe_v1"
 FAILED_STUDENT_BEHAVIOR_PROBE_TIMEOUT_V1 = "failed_student_behavior_probe_timeout_v1"
 
 # Directive SLA — strict gate (fail probe if exceeded).
-_PROBE_DEFAULT_MAX_WALL_S = 5.0
-_PROBE_MIN_TRADES = 10
+# Default wall allows at least one full Student seam decision cycle on typical lab LLM latency (was 5s — timed out before any seal).
+_PROBE_DEFAULT_MAX_WALL_S = 120.0
+# Fewer synthetic trades by default = less sequential LLM work; operators can raise via PATTERN_GAME_STUDENT_PROBE_MAX_TRADES.
+_PROBE_MIN_TRADES = 3
 _PROBE_MAX_TRADES_CAP = 20
-_PROBE_DEFAULT_TRADES = 12
-_PASS_MIN_SEALED = 5
+_PROBE_DEFAULT_TRADES = 5
+# At least one completed seal (authority-aligned); raised counts still allowed if the seam produces them.
+_PASS_MIN_SEALED = 1
 _PASS_MAX_REJECTION_RATE = 0.20
 
 

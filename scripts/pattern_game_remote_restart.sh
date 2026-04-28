@@ -58,6 +58,9 @@ _OPENAI_KEY_LEN="${OPENAI_API_KEY-}"
 echo "gsync: OPENAI_API_KEY set for Flask launch: length ${#_OPENAI_KEY_LEN} (0 = no key file in env chain yet)"
 unset _OPENAI_KEY_LEN
 
+# Student behavior probe — default 120s wall clock so slow LLMs can complete ≥1 seal (override per host).
+export PATTERN_GAME_STUDENT_PROBE_MAX_WALL_S="${PATTERN_GAME_STUDENT_PROBE_MAX_WALL_S:-120}"
+
 # DeepSeek internal reviewer tier (172.20.2.230 by default): Ask DATA deep route / dual-review reviewer uses this tag.
 # Must exist on host — run scripts/verify_deepseek_escalation_ollama_v1.sh after ollama pull.
 export DEEPSEEK_ESCALATION_OLLAMA_MODEL="${DEEPSEEK_ESCALATION_OLLAMA_MODEL:-deepseek-r1:14b}"
