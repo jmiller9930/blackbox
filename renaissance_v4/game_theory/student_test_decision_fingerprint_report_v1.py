@@ -192,33 +192,39 @@ def write_student_test_decision_fingerprint_report_md_v1(
         pm_ev = pm_rows[-1] if pm_rows else {}
         ep_pm = pm_ev.get("evidence_payload") if isinstance(pm_ev.get("evidence_payload"), dict) else {}
         pm_blob = ep_pm.get("pattern_memory_eval_v1")
+        sig_direct = ep_pm.get("perps_pattern_signature_v1")
         if isinstance(pm_blob, dict) and pm_blob:
-            lines.append("- **RM — Pattern memory (Directive 3, `pattern_memory_evaluated_v1`):**")
+            lines.append("#### Pattern memory (RM — Directive 3)\n")
+            lines.append(
+                "- **`pattern_memory_evaluated_v1` trace:** present for this trade "
+                f"(producer `{pm_ev.get('producer')!s}`)."
+            )
             try:
                 pm_json = json.dumps(pm_blob, indent=2, ensure_ascii=False, default=str)
             except TypeError:
                 pm_json = str(pm_blob)
             lines.append(_fence_md("pattern_memory_eval_v1", pm_json[:32000], lang="json"))
             sig = pm_blob.get("perps_pattern_signature_v1")
+            if isinstance(sig_direct, dict) and sig_direct:
+                sig = sig_direct
+            lines.append("##### Pattern Signature\n")
             if isinstance(sig, dict):
                 lines.append(
-                    f"- **Pattern signature hash:** `{sig.get('signature_hash_v1')!s}` "
-                    f"(symbol `{sig.get('symbol')!s}`, tf `{sig.get('timeframe_minutes')!s}m`)"
+                    f"- **signature_hash_v1:** `{sig.get('signature_hash_v1')!s}` "
+                    f"(symbol `{sig.get('symbol')!s}`, timeframe `{sig.get('timeframe_minutes')!s}m`)"
                 )
-            stats = pm_blob.get("pattern_outcome_stats_v1")
-            if isinstance(stats, dict):
-                lines.append(
-                    f"- **Historical outcomes (similar rows):** count={stats.get('count')!s}, "
-                    f"win_fraction={stats.get('wins_total_fraction_v1')!s}, "
-                    f"avg_pnl={stats.get('avg_pnl')!s}"
-                )
-            eff = pm_blob.get("pattern_effect_to_score_v1")
+            else:
+                lines.append("- _(signature object missing — FAIL closure criteria)._")
+            lines.append("##### Matches Found\n")
+            mc = pm_blob.get("matched_count_v1")
+            tf = ep_pm.get("top_matches_v1")
+            tn = pm_blob.get("top_matches_v1")
+            tops = tf if isinstance(tf, list) else (tn if isinstance(tn, list) else [])
             lines.append(
-                f"- **Pattern influence (`pattern_effect_to_score_v1` additive to RM final_score):** `{eff!s}`"
+                f"- **matched_count_v1:** `{mc!s}` · **top_matches_v1 length:** `{len(tops) if isinstance(tops, list) else 0}`"
             )
-            tops = pm_blob.get("top_matches_v1")
             if isinstance(tops, list) and tops:
-                lines.append("- **Top signature matches (record_id / similarity / historical pnl):**")
+                lines.append("- **Top rows (record_id / similarity / historical pnl):**")
                 for row in tops[:8]:
                     if not isinstance(row, dict):
                         continue
@@ -226,6 +232,19 @@ def write_student_test_decision_fingerprint_report_md_v1(
                         f"  - `{row.get('record_id')!s}` sim={row.get('similarity_v1')!s} "
                         f"pnl={row.get('historical_pnl')!s}"
                     )
+            lines.append("##### Pattern Effect\n")
+            eff = pm_blob.get("pattern_effect_to_score_v1")
+            if ep_pm.get("pattern_effect_to_score_v1") is not None:
+                eff = ep_pm.get("pattern_effect_to_score_v1")
+            lines.append(
+                f"- **pattern_effect_to_score_v1** (additive to RM `final_score`): **`{eff!s}`**"
+            )
+            stats = pm_blob.get("pattern_outcome_stats_v1")
+            if isinstance(stats, dict):
+                lines.append(
+                    f"- **Outcome stats (eligible rows):** count={stats.get('count')!s}, "
+                    f"win_fraction={stats.get('wins_total_fraction_v1')!s}, avg_pnl={stats.get('avg_pnl')!s}"
+                )
         else:
             lines.append(
                 "- **RM — Pattern memory:** _(no `pattern_memory_evaluated_v1` trace row for this trade — "

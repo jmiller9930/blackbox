@@ -38,6 +38,7 @@ from renaissance_v4.utils.math_utils import ema as ema_last, safe_mean
 
 from renaissance_v4.game_theory.reasoning_model.pattern_memory_v1 import evaluate_pattern_memory_v1
 from renaissance_v4.game_theory.reasoning_model.perps_state_model_v1 import compute_perps_state_model_v1
+from renaissance_v4.game_theory.student_test_mode_v1 import student_test_mode_isolation_active_v1
 
 SCHEMA_ENTRY_REASONING_EVAL_V1 = "entry_reasoning_eval_v1"
 SCHEMA_ENTRY_REASONING_DIGEST_V1 = "entry_reasoning_eval_digest_v1"
@@ -614,7 +615,9 @@ def run_entry_reasoning_pipeline_v1(
             "evidence": {"pattern_effect_to_score_v1": pattern_mem_eval.get("pattern_effect_to_score_v1")},
         }
     )
-    if emit_traces and job_id:
+    # GT_DIRECTIVE_031 — persist pattern_memory_evaluated_v1 for student_test even if emit_traces is tuned off elsewhere.
+    _emit_pm = bool(str(job_id).strip()) and (emit_traces or student_test_mode_isolation_active_v1())
+    if _emit_pm:
         from renaissance_v4.game_theory.learning_trace_instrumentation_v1 import (
             emit_pattern_memory_evaluated_directive_v1,
         )

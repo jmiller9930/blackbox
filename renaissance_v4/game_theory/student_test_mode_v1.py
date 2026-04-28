@@ -188,7 +188,8 @@ def apply_student_test_mode_env_v1(job_id: str, *, repo_root: Path | None = None
         STUDENT_TEST_ISOLATION_ENV_V1: "1",
     }
     # Proof harness expects learning-loop JSONL (decision fingerprint report reads trace).
-    env["PATTERN_GAME_LEARNING_TRACE_EVENTS"] = os.environ.get("PATTERN_GAME_LEARNING_TRACE_EVENTS", "1").strip() or "1"
+    # GT_DIRECTIVE_031 — student_test MUST persist RM stages (no operator override of trace off).
+    env["PATTERN_GAME_LEARNING_TRACE_EVENTS"] = "1"
     return env
 
 

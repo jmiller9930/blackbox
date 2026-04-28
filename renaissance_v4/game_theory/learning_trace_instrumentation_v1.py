@@ -697,26 +697,39 @@ def emit_pattern_memory_evaluated_directive_v1(
     pattern_memory_eval_v1: dict[str, Any] | None,
 ) -> None:
     """
-    GT_DIRECTIVE_030 — pattern memory gate: signature, top matches, stats, additive score delta.
+    GT_DIRECTIVE_030 / 031 — pattern memory gate: signature, top matches, stats, additive score delta.
+
+    GT_DIRECTIVE_031 — student_test isolation MUST still persist rows even if global trace flags differ.
     """
     from renaissance_v4.game_theory.learning_trace_events_v1 import learning_trace_memory_sink_active_v1
     from renaissance_v4.game_theory.student_rm_trace_contract_v1 import student_rm_trace_mandate_emit_active_v1
+    from renaissance_v4.game_theory.student_test_mode_v1 import student_test_mode_isolation_active_v1
 
     if (
         not learning_trace_instrumentation_enabled_v1()
         and not learning_trace_memory_sink_active_v1()
         and not student_rm_trace_mandate_emit_active_v1()
+        and not student_test_mode_isolation_active_v1()
     ):
         return
     pm = pattern_memory_eval_v1 if isinstance(pattern_memory_eval_v1, dict) else {}
     sig = pm.get("perps_pattern_signature_v1") if isinstance(pm.get("perps_pattern_signature_v1"), dict) else {}
+    tops = pm.get("top_matches_v1")
+    if not isinstance(tops, list):
+        tops = []
+    peff = pm.get("pattern_effect_to_score_v1")
+    try:
+        peff_f = float(peff) if peff is not None else 0.0
+    except (TypeError, ValueError):
+        peff_f = 0.0
     trace_extensions_v1: dict[str, Any] = {
         "event_type": "pattern_memory_evaluated_v1",
         "timestamp_ms": int(time.time() * 1000),
         "current_signature_hash_v1": sig.get("signature_hash_v1"),
-        "top_matches_v1": pm.get("top_matches_v1"),
+        "top_matches_v1": tops,
+        "matched_count_v1": pm.get("matched_count_v1"),
         "pattern_outcome_stats_v1": pm.get("pattern_outcome_stats_v1"),
-        "pattern_effect_to_score_v1": pm.get("pattern_effect_to_score_v1"),
+        "pattern_effect_to_score_v1": peff_f,
         "mean_similarity_top_v1": pm.get("mean_similarity_top_v1"),
     }
     sid = str(scenario_id).strip() if scenario_id and str(scenario_id).strip() else None
@@ -733,8 +746,10 @@ def emit_pattern_memory_evaluated_directive_v1(
             trade_id=tid,
             evidence_payload={
                 "entry_reasoning_stage": "pattern_memory_evaluated_v1",
+                "perps_pattern_signature_v1": sig,
                 "pattern_memory_eval_v1": pm,
-                "pattern_effect_to_score_v1": pm.get("pattern_effect_to_score_v1"),
+                "top_matches_v1": tops,
+                "pattern_effect_to_score_v1": peff_f,
             },
             trace_extensions_v1=trace_extensions_v1,
         )

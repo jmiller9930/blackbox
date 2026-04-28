@@ -231,6 +231,7 @@ def evaluate_pattern_memory_v1(
             "contract_version": 1,
             "disabled_reason_v1": "pattern_memory_disabled_by_env",
             "perps_pattern_signature_v1": sig,
+            "matched_count_v1": 0,
             "top_matches_v1": [],
             "pattern_outcome_stats_v1": {"schema": "pattern_outcome_stats_v1", "count": 0},
             "pattern_effect_to_score_v1": 0.0,
@@ -277,6 +278,8 @@ def evaluate_pattern_memory_v1(
         cap=cap,
     )
 
+    matched_count_v1 = len(scored)
+
     top_payload = []
     for rec, sim in matched[:8]:
         psig = rec.get("perps_pattern_signature_v1")
@@ -297,6 +300,7 @@ def evaluate_pattern_memory_v1(
         "store_path_resolved_v1": str(sp),
         "perps_pattern_signature_v1": sig,
         "similarity_floor_v1": floor,
+        "matched_count_v1": int(matched_count_v1),
         "top_matches_v1": top_payload,
         "pattern_outcome_stats_v1": pst,
         "mean_similarity_top_v1": mean_sim,
