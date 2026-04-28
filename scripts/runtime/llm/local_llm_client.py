@@ -39,6 +39,14 @@ def ollama_generate(
     try:
         with urllib.request.urlopen(req, timeout=timeout) as r:
             data = json.loads(r.read().decode("utf-8"))
-        return LlmResult(text=(data.get("response") or "").strip(), model=m, error=None)
+        if not isinstance(data, dict):
+            return LlmResult(text="", model=m, error="invalid_json_response")
+        # Prefer model name returned by Ollama (proof of what actually ran).
+        resolved_model = str(data.get("model") or m).strip() or m
+        return LlmResult(
+            text=(data.get("response") or "").strip(),
+            model=resolved_model,
+            error=None,
+        )
     except Exception as e:
         return LlmResult(text="", model=m, error=str(e))

@@ -62,6 +62,14 @@ def deepseek_escalation_generate_v1(prompt: str, *, timeout: float = 240.0) -> t
     base = deepseek_escalation_ollama_base_url()
     model = deepseek_escalation_ollama_model()
     res = gen(prompt, base_url=base, model=model, timeout=timeout)
+    # Audit line for operator proof (Pattern Game log / stderr): requested vs Ollama-reported model.
+    print(
+        "[deepseek_escalation_v1] "
+        f"base_url={base} requested_model={model} ollama_reported_model={res.model} "
+        f"error={res.error!r}",
+        file=sys.stderr,
+        flush=True,
+    )
     if res.error:
         return "", res.error
     return (res.text or "").strip(), None
