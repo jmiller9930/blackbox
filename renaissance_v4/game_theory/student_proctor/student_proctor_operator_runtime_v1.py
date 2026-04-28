@@ -92,6 +92,8 @@ from renaissance_v4.game_theory.student_proctor.lifecycle_deterministic_learning
     FIELD_RETRIEVED_LIFECYCLE_LEARNING_026C,
 )
 from renaissance_v4.game_theory.unified_agent_v1.external_api_l1_v1 import l1_fields_from_router_decision_v1
+from renaissance_v4.game_theory.student_test_mode_v1 import student_test_mode_isolation_active_v1
+from renaissance_v4.game_theory.learning_trace_events_v1 import append_learning_trace_event_v1, build_learning_trace_event_v1
 from renaissance_v4.game_theory.student_proctor.student_execution_intent_v1 import (
     build_student_execution_intent_from_sealed_output_v1,
 )
@@ -863,6 +865,7 @@ def student_loop_seam_after_parallel_batch_v1(
                             )
                             ollama_attempts += 1
                             llm_trade_i += 1
+                            _io_capture_v1: dict[str, Any] | None = {} if student_test_mode_isolation_active_v1() else None
                             so, soe = emit_student_output_via_ollama_v1(
                                 pkt,
                                 graded_unit_id=o.trade_id,
@@ -871,6 +874,7 @@ def student_loop_seam_after_parallel_batch_v1(
                                 ollama_base_url=base_url_resolved,
                                 prompt_version=pv,
                                 require_directional_thesis_v1=True,
+                                llm_io_capture_v1=_io_capture_v1,
                             )
                             if soe or so is None:
                                 llm_student_output_rejections_v1 += 1
@@ -922,6 +926,28 @@ def student_loop_seam_after_parallel_batch_v1(
                                 scenario_id=sid,
                                 trade_id=str(o.trade_id),
                             )
+                            if _io_capture_v1 is not None:
+                                try:
+                                    append_learning_trace_event_v1(
+                                        build_learning_trace_event_v1(
+                                            job_id=str(run_id).strip(),
+                                            fingerprint=fp_emit,
+                                            stage="student_test_llm_turn_v1",
+                                            status="pass",
+                                            summary="student_test_mode_v1 full prompt and raw assistant text",
+                                            producer="student_test_mode_v1",
+                                            scenario_id=sid,
+                                            trade_id=str(o.trade_id),
+                                            evidence_payload={
+                                                "user_prompt_v1": str(_io_capture_v1.get("user_prompt_v1") or ""),
+                                                "raw_assistant_text_v1": str(
+                                                    _io_capture_v1.get("raw_assistant_text_v1") or ""
+                                                ),
+                                            },
+                                        )
+                                    )
+                                except Exception:
+                                    pass
                     else:
                         so, soe = emit_shadow_stub_student_output_v1(
                             pkt,
@@ -1130,6 +1156,27 @@ def student_loop_seam_after_parallel_batch_v1(
                         student_action_v1_echo=str(so.get("student_action_v1") or "").strip() or None,
                         decision_protocol_extras_v1=protocol_extras,
                     )
+                    if student_test_mode_isolation_active_v1() and isinstance(so, dict):
+                        try:
+                            snap = json.loads(json.dumps(so, default=str))
+                        except Exception:
+                            snap = {"_snapshot_error_v1": "json_roundtrip_failed"}
+                        try:
+                            append_learning_trace_event_v1(
+                                build_learning_trace_event_v1(
+                                    job_id=str(run_id).strip(),
+                                    fingerprint=fp_emit,
+                                    stage="student_test_sealed_output_snapshot_v1",
+                                    status="pass",
+                                    summary="student_test_mode_v1 sealed student_output_v1 snapshot",
+                                    producer="student_test_mode_v1",
+                                    scenario_id=sid,
+                                    trade_id=str(o.trade_id),
+                                    evidence_payload={"student_output_v1": snap},
+                                )
+                            )
+                        except Exception:
+                            pass
                     seal_emitted_this_trade_v1 = True
                     if primary_trade_shadow_student_v1 is None and isinstance(so, dict):
                         primary_student_output_v1 = so

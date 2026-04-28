@@ -80,6 +80,9 @@ def main() -> int:
     from renaissance_v4.game_theory.student_proctor.student_proctor_operator_runtime_v1 import (
         student_loop_seam_after_parallel_batch_v1,
     )
+    from renaissance_v4.game_theory.student_test_decision_fingerprint_report_v1 import (
+        write_student_test_decision_fingerprint_report_md_v1,
+    )
 
     recipe_id_in = str(args.recipe_id).strip()
     meta = recipe_meta_by_id(recipe_id_in)
@@ -214,7 +217,18 @@ def main() -> int:
     }
     acc_path = root / "student_test_acceptance_v1.json"
     acc_path.write_text(json.dumps(acceptance, indent=2, ensure_ascii=False), encoding="utf-8")
-    print(json.dumps({"ok": True, "job_id": job_id, "acceptance_path": str(acc_path)}, indent=2))
+    report_path = write_student_test_decision_fingerprint_report_md_v1(job_id, seam_audit=seam)
+    print(
+        json.dumps(
+            {
+                "ok": True,
+                "job_id": job_id,
+                "acceptance_path": str(acc_path),
+                "decision_fingerprint_report_md": str(report_path),
+            },
+            indent=2,
+        )
+    )
     if seam.get("fatal_authority_seal_mismatch_v1"):
         return 5
     return 0

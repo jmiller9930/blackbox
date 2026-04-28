@@ -66,6 +66,9 @@ EVENT_STAGES_V1 = (
     "student_decision_authority_v1",
     # Runtime contract — seam/job terminal when authority rows exceed sealed (after mandate processing).
     "fatal_authority_seal_mismatch_v1",
+    # student_test_mode_v1 proof harness (prompt + raw LLM + sealed snapshot).
+    "student_test_llm_turn_v1",
+    "student_test_sealed_output_snapshot_v1",
 )
 
 # Map persisted ``stage`` → graph node ``id`` (reconstructed trace) for merge / provenance.

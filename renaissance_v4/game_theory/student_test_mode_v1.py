@@ -176,7 +176,7 @@ def apply_student_test_mode_env_v1(job_id: str, *, repo_root: Path | None = None
         d.mkdir(parents=True, exist_ok=True)
     # Repo root is only used for consistency checks; blackbox_repo_root() matches checkout.
     _ = repo_root
-    return {
+    env = {
         "BLACKBOX_PML_RUNTIME_ROOT": str(root),
         "PATTERN_GAME_MEMORY_ROOT": str(root),
         "PATTERN_GAME_TELEMETRY_DIR": str(telemetry),
@@ -184,6 +184,9 @@ def apply_student_test_mode_env_v1(job_id: str, *, repo_root: Path | None = None
         "PATTERN_GAME_GROUNDHOG_BUNDLE": "0",
         STUDENT_TEST_ISOLATION_ENV_V1: "1",
     }
+    # Proof harness expects learning-loop JSONL (decision fingerprint report reads trace).
+    env["PATTERN_GAME_LEARNING_TRACE_EVENTS"] = os.environ.get("PATTERN_GAME_LEARNING_TRACE_EVENTS", "1").strip() or "1"
+    return env
 
 
 def student_test_mode_isolation_active_v1() -> bool:

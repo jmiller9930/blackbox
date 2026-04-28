@@ -209,6 +209,7 @@ def emit_student_output_via_ollama_v1(
     ollama_base_url: str,
     prompt_version: str,
     require_directional_thesis_v1: bool = True,
+    llm_io_capture_v1: dict[str, Any] | None = None,
 ) -> tuple[dict[str, Any] | None, list[str]]:
     """
     One Ollama completion → ``student_output_v1`` or validation errors.
@@ -217,6 +218,9 @@ def emit_student_output_via_ollama_v1(
 
     When ``require_directional_thesis_v1`` is True (default), output must include the full §1.0 thesis
     bundle for ``memory_context_llm_student`` — precondition for **GT_DIRECTIVE_017**.
+
+    ``llm_io_capture_v1``: optional mutable dict; when provided, receives ``user_prompt_v1`` and
+    ``raw_assistant_text_v1`` for ``student_test_mode_v1`` trace proof (no behavior change).
     """
     pkt_json = json.dumps(packet, ensure_ascii=False, default=str)[:12000]
     thesis_lines = (
@@ -260,7 +264,11 @@ def emit_student_output_via_ollama_v1(
         + "Pre-reveal decision packet (JSON):\n"
         + f"{pkt_json}\n"
     )
+    if isinstance(llm_io_capture_v1, dict):
+        llm_io_capture_v1["user_prompt_v1"] = user
     text, err = _ollama_chat_once_v1(base_url=ollama_base_url, model=llm_model, user_prompt=user)
+    if isinstance(llm_io_capture_v1, dict):
+        llm_io_capture_v1["raw_assistant_text_v1"] = text if isinstance(text, str) else None
     if err or text is None:
         return None, [err or "ollama_empty"]
 
