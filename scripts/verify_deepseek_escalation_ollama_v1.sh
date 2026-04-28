@@ -29,9 +29,23 @@ fi
 echo "OK: '${MODEL}' appears in /api/tags"
 
 echo "--- POST /api/generate (non-streaming smoke) ---"
+GEN_PAYLOAD=$(MODEL="$MODEL" python3 <<'PY'
+import json, os
+print(
+    json.dumps(
+        {
+            "model": os.environ["MODEL"],
+            "prompt": "Reply with exactly: OK",
+            "stream": False,
+        },
+        ensure_ascii=False,
+    )
+)
+PY
+)
 GEN=$(curl -sS --connect-timeout 15 --max-time 180 -X POST "${BASE}/api/generate" \
   -H 'Content-Type: application/json' \
-  -d "$(python3 -c "import json; print(json.dumps({'model':'${MODEL}','prompt':'Reply with exactly: OK','stream':False}))")") || {
+  -d "$GEN_PAYLOAD") || {
   echo "FAIL: generate request failed"
   exit 1
 }
