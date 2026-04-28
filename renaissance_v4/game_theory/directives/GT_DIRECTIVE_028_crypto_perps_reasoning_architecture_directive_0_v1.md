@@ -96,7 +96,7 @@ Skipping earlier phases produces exams or grades that **cannot** trace back to *
 | Phase | Title | Intent |
 |-------|--------|--------|
 | **0** | **Architecture alignment (this memo)** | Reasoning Model refactor — **centralize the brain**; no duplicate intelligence surfaces |
-| **1** | Quant / perps **data capability audit** | Inventory OHLCV, funding, OI, liquidations, spread, volume delta, order book, etc. |
+| **1** | Quant / perps **data & math capability audit** | **`GT_DIRECTIVE_029`** — inventory DATA, math, decision path, memory usability; deliverable `docs/rm_directive_1_quant_perps_data_math_capability_audit_v1.md` |
 | **2** | **Perps state model v1** | Regime output inside **RM** (hook for HMM/NH-HMM later) |
 | **3** | **Pattern fingerprint + similarity memory v1** | RM-owned pattern vectors + retrieval |
 | **4** | **EV / risk-cost layer v1** | RM-owned EV for long, short, no-trade |

@@ -126,6 +126,8 @@ Each phase is a **future GT directive** (files to be created under `renaissance_
 
 ### Directive 1 — Data / math capability audit (maps to Phase A)
 
+**Issued as:** [`GT_DIRECTIVE_029_directive_1_quant_perps_data_math_capability_audit_v1.md`](../renaissance_v4/game_theory/directives/GT_DIRECTIVE_029_directive_1_quant_perps_data_math_capability_audit_v1.md). Canonical audit deliverable: **`docs/rm_directive_1_quant_perps_data_math_capability_audit_v1.md`** (to be created by engineering).
+
 | Item | Detail |
 |------|--------|
 | **Goal** | Inventory OHLCV, funding, OI, liquidations, spread/liquidity, volume delta, order book **as available**; list all indicator/scoring/memory/promotion formulas and thresholds in use. |
