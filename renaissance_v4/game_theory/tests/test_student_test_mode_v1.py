@@ -14,6 +14,7 @@ from renaissance_v4.game_theory.student_test_mode_v1 import (
     STUDENT_TEST_ISOLATION_ENV_V1,
     StudentTestInsufficientTradesError,
     apply_student_test_mode_env_v1,
+    build_student_test_mode_parallel_results_from_db_anchors_v1,
     count_replay_outcomes_parallel_results_v1,
     student_test_mode_isolation_active_v1,
     truncate_parallel_results_to_trade_budget_v1,
@@ -53,6 +54,12 @@ def test_retrieve_026c_empty_when_isolation_env(monkeypatch: pytest.MonkeyPatch,
         )
         == []
     )
+
+
+def test_build_student_test_from_db_anchors_empty_scenarios() -> None:
+    rows, err = build_student_test_mode_parallel_results_from_db_anchors_v1(scenarios=[])
+    assert rows is None
+    assert err == "student_test_empty_scenarios_v1"
 
 
 def test_apply_env_sets_expected_keys(monkeypatch: pytest.MonkeyPatch) -> None:

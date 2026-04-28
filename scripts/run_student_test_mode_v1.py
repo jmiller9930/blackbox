@@ -1,11 +1,18 @@
 #!/usr/bin/env python3
 """
 Engineering entry point for student_test_mode_v1 — isolated Student memory under
-``runtime/student_test/<job_id>/``, read-only market bars, exactly 10 replay trades for the seam.
+``runtime/student_test/<job_id>/``, read-only market SQLite for anchors, exactly **10** seam trades.
+
+Trade rows are **deterministic DB-anchor shells** (latest 10 ``market_bars_5m`` open times for the scenario
+manifest symbol — same family as the Student behavior probe). This guarantees 10 ``replay_outcomes_json``
+entries without depending on Referee replay producing closed trades.
 
 Usage::
 
     python3 scripts/run_student_test_mode_v1.py --recipe-id pattern_learning
+
+Use ``pattern_learning`` (single scenario) unless you know what you are doing; multi-scenario recipes
+attach 10 trades only to scenario index 0.
 
 Environment for isolation is applied before importing pattern-game modules (paths resolve under the job dir).
 """
@@ -41,17 +48,15 @@ def main() -> int:
         default="memory_context_llm_student",
         help="student_brain_profile_v1 for exam contract",
     )
-    parser.add_argument("--max-workers", type=int, default=None)
     args = parser.parse_args()
 
     job_id = (args.job_id or "").strip() or str(uuid.uuid4())
 
     from renaissance_v4.game_theory.student_test_mode_v1 import (
-        STUDENT_TEST_INSUFFICIENT_TRADE_COUNT_V1,
-        StudentTestInsufficientTradesError,
+        STUDENT_TEST_INSUFFICIENT_DB_ANCHOR_TIMES_V1,
         apply_student_test_mode_env_v1,
+        build_student_test_mode_parallel_results_from_db_anchors_v1,
         student_test_job_runtime_root_v1,
-        truncate_parallel_results_to_trade_budget_v1,
     )
 
     os.environ.update(apply_student_test_mode_env_v1(job_id))
@@ -68,7 +73,6 @@ def main() -> int:
     )
     from renaissance_v4.game_theory.exam_run_contract_v1 import parse_exam_run_contract_request_v1
     from renaissance_v4.game_theory.operator_recipes import build_scenarios_for_recipe, recipe_meta_by_id
-    from renaissance_v4.game_theory.parallel_runner import run_scenarios_parallel
     from renaissance_v4.game_theory.policy_framework import attach_policy_framework_audits
     from renaissance_v4.game_theory.scenario_contract import validate_scenarios
     from renaissance_v4.game_theory.rm_preflight_wiring_v1 import run_rm_preflight_wiring_v1
@@ -80,7 +84,11 @@ def main() -> int:
     recipe_id_in = str(args.recipe_id).strip()
     meta = recipe_meta_by_id(recipe_id_in)
     if not meta:
-        print(f"Unknown recipe_id: {recipe_id_in!r}", file=sys.stderr)
+        print(
+            f"Unknown recipe_id: {recipe_id_in!r}. "
+            f"Use an id from operator recipes (default: pattern_learning).",
+            file=sys.stderr,
+        )
         return 2
 
     try:
@@ -165,26 +173,20 @@ def main() -> int:
         print(json.dumps({"rm_preflight_failed": True, "audit": pf}, indent=2))
         return 3
 
-    telem_dir = Path(os.environ["PATTERN_GAME_TELEMETRY_DIR"])
-    results = run_scenarios_parallel(
-        scenarios,
-        max_workers=args.max_workers,
-        experience_log_path=None,
-        progress_callback=None,
-        telemetry_job_id=job_id,
-        telemetry_dir=telem_dir,
-        cancel_check=lambda: False,
-    )
-
-    try:
-        results = truncate_parallel_results_to_trade_budget_v1(results)
-    except StudentTestInsufficientTradesError as e:
+    results, bench_err = build_student_test_mode_parallel_results_from_db_anchors_v1(scenarios=scenarios)
+    if bench_err or not results:
         out_path = student_test_job_runtime_root_v1(job_id) / "student_test_failure_v1.json"
+        reason = STUDENT_TEST_INSUFFICIENT_DB_ANCHOR_TIMES_V1
+        if bench_err and STUDENT_TEST_INSUFFICIENT_DB_ANCHOR_TIMES_V1 not in str(bench_err):
+            reason = "student_test_mode_build_failed_v1"
         payload = {
             "schema": "student_test_mode_failure_v1",
-            "failure_reason": STUDENT_TEST_INSUFFICIENT_TRADE_COUNT_V1,
-            "detail": str(e),
-            "trade_count_v1": e.total,
+            "failure_reason": reason,
+            "detail": bench_err or "build_student_test_mode_parallel_results_from_db_anchors_v1 returned empty",
+            "hint_v1": (
+                "Ingest or restore market_bars_5m so at least 10 rows exist for the manifest symbol, "
+                "or run on the lab host with a populated bars DB."
+            ),
         }
         out_path.write_text(json.dumps(payload, indent=2), encoding="utf-8")
         print(json.dumps(payload, indent=2))
