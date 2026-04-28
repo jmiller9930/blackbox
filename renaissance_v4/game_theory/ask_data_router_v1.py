@@ -7,7 +7,7 @@ Tiers
 -----
 
 * **pml_lightweight** — default: fast glossary + run/scorecard Q&A (``qwen2.5:7b`` on PML host).
-* **system_agent** — structured / schema / API / workflow wording (default ``qwen2.5:7b`` via API Gateway / role routing).
+* **system_agent** — structured / schema / API / workflow wording (``qwen3-coder:30b`` on System Agent host).
 * **deepseek_escalation** — local **DeepSeek R1** adversarial path (default ``deepseek-r1:14b`` on ``172.20.2.230``). Combine with ``INTERNAL_REASONING_MODE=dual_review`` or topic hints for parallel Qwen + DeepSeek.
 
 Disable router (always lightweight LLM): ``ASK_DATA_ROUTER=0``.

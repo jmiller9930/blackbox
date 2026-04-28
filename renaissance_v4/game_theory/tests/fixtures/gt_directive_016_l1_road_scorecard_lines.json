@@ -34,7 +34,7 @@
       "run_config_fingerprint_sha256_40": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
     },
     "student_brain_profile_v1": "memory_context_llm_student",
-    "llm_model": "qwen2.5:7b",
+    "llm_model": "qwen3-coder:30b",
     "expectancy_per_trade": 0.05,
     "referee_win_pct": 45.0,
     "student_l1_process_score_v1": 0.4
@@ -48,7 +48,7 @@
       "run_config_fingerprint_sha256_40": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
     },
     "student_brain_profile_v1": "memory_context_llm_student",
-    "llm_model": "qwen2.5:7b",
+    "llm_model": "qwen3-coder:30b",
     "expectancy_per_trade": 0.25,
     "referee_win_pct": 70.0,
     "student_l1_process_score_v1": 0.65

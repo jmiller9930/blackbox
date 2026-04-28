@@ -44,9 +44,8 @@ DEFAULTS: dict[str, Any] = {
     "max_memory_records_for_external": 3,
     "random_audit_sample_rate": 0.0,
     "enabled_escalation_reasons": list(ALLOWED_ESCALATION_REASONS),
-    "local_llm_model": "qwen2.5:7b",
-    # Dev default; lab sets RUNTIME_LLM_API_GATEWAY_BASE_URL — runtime must not use trx40 (172.20.1.66).
-    "local_ollama_base_url": "http://127.0.0.1:11434",
+    "local_llm_model": "qwen3-coder:30b",
+    "local_ollama_base_url": "http://172.20.1.66:11434",
 }
 
 
@@ -71,20 +70,12 @@ def _as_int(s: str | None, default: int) -> int:
 def apply_environment_overrides_v1(base: dict[str, Any]) -> dict[str, Any]:
     """
     Documented overrides (non-exhaustive; only safe toggles and caps from env):
-    - RUNTIME_LLM_API_GATEWAY_BASE_URL → local_ollama_base_url (API Gateway for Ollama-compatible /api)
-    - RUNTIME_LOCAL_LLM_MODEL → local_llm_model (optional; default qwen2.5:7b)
     - OPENAI_REASONING_MODEL → external_model
     - OPENAI_MAX_DOLLARS_PER_RUN → max_estimated_cost_usd_per_run
     - OPENAI_MAX_TOKENS_PER_RUN → max_total_tokens_per_run
     - OPENAI_ESCALATION_ENABLED=1|0 → external_api_enabled (see merge below: operator UI wins when not off).
     """
     out = deepcopy(base)
-    gw = (os.environ.get("RUNTIME_LLM_API_GATEWAY_BASE_URL") or "").strip()
-    if gw:
-        out["local_ollama_base_url"] = gw.rstrip("/")
-    rlm = (os.environ.get("RUNTIME_LOCAL_LLM_MODEL") or "").strip()
-    if rlm:
-        out["local_llm_model"] = rlm
     m = (os.environ.get("OPENAI_REASONING_MODEL") or "").strip()
     if m:
         out["external_model"] = m

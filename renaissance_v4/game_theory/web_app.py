@@ -8216,8 +8216,8 @@ PAGE_HTML = """<!DOCTYPE html>
               <div class="pg-controls-min-grid" style="grid-template-columns:minmax(10rem,38%) 1fr;align-items:center">
                 <label for="examLlmModelPick">Legacy model (debug pick)</label>
                 <select id="examLlmModelPick" aria-label="Legacy llm_model for debug override only">
-                  <option value="qwen2.5:7b" selected>__STUDENT_LLM_APPROVED_MODEL_V1__ (production)</option>
-                  <option value="qwen3-coder:30b">qwen3-coder:30b (legacy — fails contract)</option>
+                  <option value="qwen3-coder:30b" selected>__STUDENT_LLM_APPROVED_MODEL_V1__ (production)</option>
+                  <option value="qwen2.5:7b">qwen2.5:7b (legacy — fails contract)</option>
                   <option value="deepseek-r1:14b">deepseek-r1:14b (legacy — fails contract; internal reviewer lives on reviewer host)</option>
                 </select>
               </div>

@@ -197,7 +197,7 @@ def l1_road_legend_v1() -> dict[str, Any]:
             ),
             STUDENT_BRAIN_PROFILE_MEMORY_CONTEXT_LLM_STUDENT_V1: (
                 "Operator **Student**: unified path — entry/lifecycle reasoning, 026C retrieval, 026AI router, "
-                "governed Ollama (``qwen2.5:7b``; ``STUDENT_OLLAMA_BASE_URL`` / API Gateway)."
+                "governed Ollama (``qwen3-coder:30b``; ``STUDENT_OLLAMA_BASE_URL``)."
             ),
         },
         "band_a": (
@@ -234,7 +234,7 @@ def l1_road_legend_v1() -> dict[str, Any]:
             "same as Student panel L1 anchor logic."
         ),
         "llm_model": (
-            "Student Ollama model tag (fixed: ``qwen2.5:7b``) for ``memory_context_llm_student`` "
+            "Student Ollama model tag (fixed: ``qwen3-coder:30b``) for ``memory_context_llm_student`` "
             "only; null for other profiles."
         ),
         "group_avg_exam_e_score_v1": (

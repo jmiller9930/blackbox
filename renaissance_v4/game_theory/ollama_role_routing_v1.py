@@ -1,84 +1,53 @@
 """
 Role-based Ollama routing (GT operator stack).
 
-**FinQuant training isolation:** trx40 (**172.20.1.66**) must not receive runtime inference traffic.
-Runtime LLM calls must enter via the **API Gateway** base URL (``RUNTIME_LLM_API_GATEWAY_BASE_URL``),
-which forwards to inference backends (e.g. **172.20.2.230:11434**). Do not configure Pattern Machine
-to POST ``/api/chat`` directly to bare Ollama on .230 — that bypasses the gateway.
-
 **Critical:** Models do not execute mutations. Callers must route side effects through
 validated tool layers and optional operator confirmation.
 
-| Role | Resolution order | Default when unset (dev) |
-|------|-------------------|---------------------------|
-| **Student** (parallel LLM seam) | ``STUDENT_OLLAMA_BASE_URL`` → ``RUNTIME_LLM_API_GATEWAY_BASE_URL`` → ``RUNTIME_LLM_DEV_FALLBACK_BASE_URL`` (127.0.0.1:11434) | localhost |
-| **PML lightweight** | ``PML_LIGHTWEIGHT_OLLAMA_BASE_URL`` / ``OLLAMA_BASE_URL`` → gateway → ``http://127.0.0.1:11434`` | localhost |
-| **System Agent** | ``SYSTEM_AGENT_OLLAMA_BASE_URL`` → gateway → localhost | localhost |
-| **DeepSeek escalation** | ``DEEPSEEK_ESCALATION_OLLAMA_BASE_URL`` → gateway → localhost | localhost |
+| Role | Default base | Default model | Env override (base / model) |
+|------|----------------|---------------|-----------------------------|
+| **PML lightweight** (Barney, Ask DATA) | ``http://172.20.2.230:11434`` | ``qwen2.5:7b`` | ``PML_LIGHTWEIGHT_OLLAMA_BASE_URL`` / ``PML_LIGHTWEIGHT_OLLAMA_MODEL``; model falls back to ``OLLAMA_MODEL`` |
+| **Student** (parallel LLM seam) | **172.20.1.66:11434** (approved strong model host) | **qwen3-coder:30b** only (``exam_run_contract_v1``) | ``STUDENT_OLLAMA_BASE_URL`` overrides base **only** (CI/mocks) — not PML/lightweight |
+| **System Agent** (operator control brain; propose-only) | ``http://172.20.1.66:11434`` | ``qwen3-coder:30b`` | ``SYSTEM_AGENT_OLLAMA_BASE_URL`` / ``SYSTEM_AGENT_OLLAMA_MODEL`` |
+| **System Agent fallback** | (same as primary) | ``qwen2.5-coder:7b`` | ``SYSTEM_AGENT_OLLAMA_MODEL_FALLBACK`` |
+| **DeepSeek internal reviewer** (adversarial second opinion; local) | ``http://172.20.2.230:11434`` | ``deepseek-r1:14b`` | ``DEEPSEEK_ESCALATION_OLLAMA_BASE_URL`` / ``DEEPSEEK_ESCALATION_OLLAMA_MODEL`` |
 
-Lab operators **must** set ``RUNTIME_LLM_API_GATEWAY_BASE_URL`` to the operator API Gateway URL that
-proxies to **172.20.2.230** (not trx40).
+Lab defaults are **overridden** by explicit env in any environment where those IPs are wrong.
+``OLLAMA_BASE_URL`` alone still applies to :func:`scripts.runtime._ollama.ollama_base_url` (Anna
+and other legacy callers); Barney / Ask DATA **do not** use that unless
+``PML_LIGHTWEIGHT_OLLAMA_BASE_URL`` is unset and you set ``OLLAMA_BASE_URL`` as the shared host.
 """
 
 from __future__ import annotations
 
-import logging
 import os
 from typing import Any
-from urllib.parse import urlparse
-
-_LOG = logging.getLogger(__name__)
-
-# trx40 — reserved for FinQuant training; runtime inference must not use this host.
-_TRX40_RUNTIME_LLM_BLOCKED_HOST_V1 = "172.20.1.66"
 
 
 def _strip_base(url: str) -> str:
     return (url or "").strip().rstrip("/")
 
 
-def runtime_llm_api_gateway_base_url_v1() -> str | None:
-    """Canonical API Gateway base for Ollama-compatible ``/api/*`` (no trailing slash)."""
-    v = (os.environ.get("RUNTIME_LLM_API_GATEWAY_BASE_URL") or "").strip()
-    return _strip_base(v) if v else None
-
-
-def guard_runtime_llm_url_not_trx40_finquant_v1(base_url: str) -> None:
-    """
-    Block runtime inference URLs that target trx40. Logs ``api_gw_blocked_trx40_training_v1``.
-    """
-    u = _strip_base(base_url)
-    if not u:
-        return
-    host = (urlparse(u).hostname or "").strip().lower()
-    if host == _TRX40_RUNTIME_LLM_BLOCKED_HOST_V1:
-        _LOG.error("api_gw_blocked_trx40_training_v1 host=%s url=%s", host, u)
-        raise RuntimeError("api_gw_blocked_trx40_training_v1")
-
-
-def _dev_fallback_ollama_base_v1() -> str:
-    return _strip_base(os.environ.get("RUNTIME_LLM_DEV_FALLBACK_BASE_URL", "http://127.0.0.1:11434"))
-
-
+# Lab defaults (override with env in non-lab deployments).
+_DEFAULT_PML_LIGHTWEIGHT_BASE = "http://172.20.2.230:11434"
+_DEFAULT_STUDENT_OLLAMA_BASE = "http://172.20.1.66:11434"
+_DEFAULT_SYSTEM_AGENT_BASE = "http://172.20.1.66:11434"
 _DEFAULT_PML_LIGHTWEIGHT_MODEL = "qwen2.5:7b"
-_DEFAULT_SYSTEM_AGENT_MODEL = "qwen2.5:7b"
-_DEFAULT_SYSTEM_AGENT_FALLBACK_MODEL = "deepseek-r1:14b"
+_DEFAULT_SYSTEM_AGENT_MODEL = "qwen3-coder:30b"
+_DEFAULT_SYSTEM_AGENT_FALLBACK_MODEL = "qwen2.5-coder:7b"
+# Local DeepSeek R1 — pull on reviewer host: ``ollama pull deepseek-r1:14b``. Proof:
+# ``scripts/verify_deepseek_escalation_ollama_v1.sh``.
+_DEFAULT_DEEPSEEK_INTERNAL_BASE = "http://172.20.2.230:11434"
 _DEFAULT_DEEPSEEK_ESCALATION_MODEL = "deepseek-r1:14b"
 
 
 def pml_lightweight_ollama_base_url() -> str:
-    """Barney + Ask DATA — prefer gateway during FinQuant isolation; never trx40."""
-    v = os.environ.get("PML_LIGHTWEIGHT_OLLAMA_BASE_URL")
-    if v and str(v).strip():
-        out = _strip_base(str(v))
-    elif os.environ.get("OLLAMA_BASE_URL", "").strip():
-        out = _strip_base(os.environ["OLLAMA_BASE_URL"])
-    elif runtime_llm_api_gateway_base_url_v1():
-        out = runtime_llm_api_gateway_base_url_v1()  # type: ignore[assignment]
-    else:
-        out = _dev_fallback_ollama_base_v1()
-    guard_runtime_llm_url_not_trx40_finquant_v1(out)
-    return out
+    """Barney + Ask DATA — fast, UI-responsive path."""
+    for key in ("PML_LIGHTWEIGHT_OLLAMA_BASE_URL", "OLLAMA_BASE_URL"):
+        v = os.environ.get(key)
+        if v and str(v).strip():
+            return _strip_base(str(v))
+    return _DEFAULT_PML_LIGHTWEIGHT_BASE
 
 
 def pml_lightweight_ollama_model() -> str:
@@ -91,28 +60,23 @@ def pml_lightweight_ollama_model() -> str:
 
 def student_ollama_base_url_v1() -> str:
     """
-    Student LLM — **must** use the API Gateway URL in lab (``RUNTIME_LLM_API_GATEWAY_BASE_URL`` or
-    explicit ``STUDENT_OLLAMA_BASE_URL``). Dev fallback: ``RUNTIME_LLM_DEV_FALLBACK_BASE_URL`` or localhost.
+    Student LLM (``memory_context_llm_student``) — **approved** Ollama host (strong model; lab default
+    **172.20.1.66**). ``STUDENT_OLLAMA_BASE_URL`` may override for integration tests or non-lab
+    operators; there is **no** fallback to PML lightweight or generic ``OLLAMA_BASE_URL`` (avoids
+    silent routing to the wrong host).
     """
-    if os.environ.get("STUDENT_OLLAMA_BASE_URL", "").strip():
-        out = _strip_base(os.environ["STUDENT_OLLAMA_BASE_URL"])
-    elif runtime_llm_api_gateway_base_url_v1():
-        out = runtime_llm_api_gateway_base_url_v1()  # type: ignore[assignment]
-    else:
-        out = _dev_fallback_ollama_base_v1()
-    guard_runtime_llm_url_not_trx40_finquant_v1(out)
-    return out
+    v = os.environ.get("STUDENT_OLLAMA_BASE_URL")
+    if v and str(v).strip():
+        return _strip_base(str(v))
+    return _DEFAULT_STUDENT_OLLAMA_BASE
 
 
 def system_agent_ollama_base_url() -> str:
-    if os.environ.get("SYSTEM_AGENT_OLLAMA_BASE_URL", "").strip():
-        out = _strip_base(os.environ["SYSTEM_AGENT_OLLAMA_BASE_URL"])
-    elif runtime_llm_api_gateway_base_url_v1():
-        out = runtime_llm_api_gateway_base_url_v1()  # type: ignore[assignment]
-    else:
-        out = _dev_fallback_ollama_base_v1()
-    guard_runtime_llm_url_not_trx40_finquant_v1(out)
-    return out
+    """Operator System Agent — structured workflows; **not** Barney/Ask DATA."""
+    v = os.environ.get("SYSTEM_AGENT_OLLAMA_BASE_URL")
+    if v and str(v).strip():
+        return _strip_base(str(v))
+    return _DEFAULT_SYSTEM_AGENT_BASE
 
 
 def system_agent_ollama_model_primary() -> str:
@@ -130,14 +94,11 @@ def system_agent_ollama_model_fallback() -> str:
 
 
 def deepseek_escalation_ollama_base_url() -> str:
-    if os.environ.get("DEEPSEEK_ESCALATION_OLLAMA_BASE_URL", "").strip():
-        out = _strip_base(os.environ["DEEPSEEK_ESCALATION_OLLAMA_BASE_URL"])
-    elif runtime_llm_api_gateway_base_url_v1():
-        out = runtime_llm_api_gateway_base_url_v1()  # type: ignore[assignment]
-    else:
-        out = _dev_fallback_ollama_base_v1()
-    guard_runtime_llm_url_not_trx40_finquant_v1(out)
-    return out
+    """Local DeepSeek reviewer host — defaults to lab reviewer IP (not PML lightweight fallback)."""
+    v = os.environ.get("DEEPSEEK_ESCALATION_OLLAMA_BASE_URL")
+    if v and str(v).strip():
+        return _strip_base(str(v))
+    return _DEFAULT_DEEPSEEK_INTERNAL_BASE
 
 
 def deepseek_escalation_ollama_model() -> str:
@@ -149,25 +110,16 @@ def deepseek_escalation_ollama_model() -> str:
 
 def ollama_role_routing_snapshot_v1() -> dict[str, Any]:
     """Non-secret JSON for health checks / operator proof (no prompts)."""
-    from renaissance_v4.game_theory.exam_run_contract_v1 import STUDENT_LLM_APPROVED_MODEL_V1
-
-    gw = runtime_llm_api_gateway_base_url_v1()
     return {
         "schema": "ollama_role_routing_snapshot_v1",
-        "runtime_llm_api_gateway_base_url_v1": gw,
-        "policy_finquant_runtime_v1": (
-            "Student/runtime inference must use RUNTIME_LLM_API_GATEWAY_BASE_URL (API GW entry); "
-            "trx40 (172.20.1.66) blocked; gateway backends target 172.20.2.230 — prove path on host, "
-            "not direct curl to Ollama."
-        ),
         "pml_lightweight": {
             "ollama_base_url": pml_lightweight_ollama_base_url(),
             "ollama_model": pml_lightweight_ollama_model(),
         },
         "student_parallel_llm": {
             "ollama_base_url": student_ollama_base_url_v1(),
-            "ollama_model_approved_v1": STUDENT_LLM_APPROVED_MODEL_V1,
-            "note": "Base URL must be API GW in lab; approved model from exam_run_contract_v1",
+            "ollama_model_approved_v1": "qwen3-coder:30b",
+            "note": "Student path is fixed to qwen3-coder:30b (exam_run_contract_v1); STUDENT_OLLAMA_BASE_URL overrides host only",
         },
         "system_agent": {
             "ollama_base_url": system_agent_ollama_base_url(),
@@ -201,11 +153,9 @@ def ollama_role_routing_snapshot_v1() -> dict[str, Any]:
 __all__ = [
     "deepseek_escalation_ollama_base_url",
     "deepseek_escalation_ollama_model",
-    "guard_runtime_llm_url_not_trx40_finquant_v1",
     "ollama_role_routing_snapshot_v1",
     "pml_lightweight_ollama_base_url",
     "pml_lightweight_ollama_model",
-    "runtime_llm_api_gateway_base_url_v1",
     "student_ollama_base_url_v1",
     "system_agent_ollama_base_url",
     "system_agent_ollama_model_fallback",

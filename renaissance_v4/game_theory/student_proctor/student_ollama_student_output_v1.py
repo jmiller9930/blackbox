@@ -20,11 +20,6 @@ from typing import Any
 _NS_OLLAMA_REF = uuid.UUID("b2c3d4e5-f6a7-8b9c-0d1e-2f3a4b5c6d7e")
 
 
-from renaissance_v4.game_theory.exam_run_contract_v1 import (
-    STUDENT_LLM_APPROVED_MODEL_V1,
-    STUDENT_LLM_FALLBACK_MODEL_V1,
-)
-from renaissance_v4.game_theory.ollama_role_routing_v1 import guard_runtime_llm_url_not_trx40_finquant_v1
 from renaissance_v4.game_theory.student_proctor.contracts_v1 import (
     CONFLICTING_INDICATORS_NO_CONFLICT_PACKET_LABEL_V1,
     CONTRACT_VERSION_STUDENT_PROCTOR_V1,
@@ -76,7 +71,6 @@ def _ollama_chat_once_v1(
     timeout_s: float = 180.0,
 ) -> tuple[str | None, str | None]:
     """Returns ``(assistant_text, error)``."""
-    guard_runtime_llm_url_not_trx40_finquant_v1(base_url)
     base = base_url.rstrip("/")
     url = f"{base}/api/chat"
     payload = json.dumps(
@@ -111,47 +105,6 @@ def _ollama_chat_once_v1(
     if not isinstance(content, str) or not content.strip():
         return None, "ollama_response_empty_content"
     return content.strip(), None
-
-
-def _ollama_chat_student_with_primary_fallback_v1(
-    *,
-    base_url: str,
-    primary_model: str,
-    user_prompt: str,
-    timeout_s: float = 180.0,
-) -> tuple[str | None, str | None, str]:
-    """Primary ``STUDENT_LLM_APPROVED_MODEL_V1``, then ``STUDENT_LLM_FALLBACK_MODEL_V1`` on failure."""
-    guard_runtime_llm_url_not_trx40_finquant_v1(base_url)
-    t1, e1 = _ollama_chat_once_v1(
-        base_url=base_url, model=primary_model, user_prompt=user_prompt, timeout_s=timeout_s
-    )
-    if not e1 and t1:
-        return t1, None, primary_model
-    el = (e1 or "").lower()
-    retry = any(
-        x in el
-        for x in (
-            "timeout",
-            "request_failed",
-            "empty",
-            "missing_message",
-            "http_",
-            "connection",
-            "broken pipe",
-            "reset",
-        )
-    )
-    if primary_model != STUDENT_LLM_APPROVED_MODEL_V1 or not retry:
-        return t1, e1 or "ollama_empty", primary_model
-    t2, e2 = _ollama_chat_once_v1(
-        base_url=base_url,
-        model=STUDENT_LLM_FALLBACK_MODEL_V1,
-        user_prompt=user_prompt,
-        timeout_s=timeout_s,
-    )
-    if not e2 and t2:
-        return t2, None, STUDENT_LLM_FALLBACK_MODEL_V1
-    return t1, e1 or e2 or "ollama_empty", primary_model
 
 
 def _apply_canonical_student_action_v1(out: dict[str, Any]) -> None:
@@ -327,11 +280,7 @@ def emit_student_output_via_ollama_v1(
     )
     if isinstance(llm_io_capture_v1, dict):
         llm_io_capture_v1["user_prompt_v1"] = user
-    text, err, _model_used = _ollama_chat_student_with_primary_fallback_v1(
-        base_url=ollama_base_url,
-        primary_model=llm_model,
-        user_prompt=user,
-    )
+    text, err = _ollama_chat_once_v1(base_url=ollama_base_url, model=llm_model, user_prompt=user)
     if isinstance(llm_io_capture_v1, dict):
         llm_io_capture_v1["raw_assistant_text_v1"] = text if isinstance(text, str) else None
     if err or text is None:
