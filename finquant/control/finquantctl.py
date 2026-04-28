@@ -1,14 +1,20 @@
 #!/usr/bin/env python3
 """
-FinQuant control plane CLI — M1 scaffolding only.
+FinQuant control plane CLI — M1 (dry registry only; non-negotiable scope).
 
-- Default `submit` is dry registration (no training subprocess).
-- Training subprocess is NOT started in M1 even with `--execute` (deferred to later phases).
+M1 contract
+-----------
+- Default ``submit`` is **dry registration** only: creates run folder + JSON/YAML artifacts.
+- ``--execute`` records operator **intent** in ``submit.json`` / ``run_state.json`` only.
+  It must **not** start ``train_qlora.py``, run training shells, touch adapter directories,
+  or interact with an active training job (e.g. Phase 6). Training/job launch belongs in **M2+**
+  after current training and proof complete.
+- Acceptable subprocess in M1: read-only ``nvidia-smi`` for VRAM guard diagnostics only.
 
-Deploy: symlink or PATH to finquantctl:
-  /data/finquant-1/control/finquantctl.py
+Deploy: symlink or PATH to finquantctl, e.g. ``/data/finquant-1/control/finquantctl.py``.
 
-Does not modify adapters, active configs on disk used by other processes, or kill Ollama.
+Does not kill Ollama. Copying the submitted YAML into ``resolved_config.yaml`` does not modify
+the source config file.
 """
 from __future__ import annotations
 
@@ -148,8 +154,8 @@ def cmd_submit(args: argparse.Namespace, base: Path) -> int:
     elif args.execute:
         state = "execute_recorded_no_subprocess_m1"
         blocked_reason = (
-            "M1 does not spawn train_qlora.py; --execute only records intent. "
-            "Future phases will launch training here."
+            "M1 is dry-only: --execute records intent only (no train_qlora.py, no training/job "
+            "subprocess). Actual launch is M2+ after Phase 6 training and proof complete."
         )
     else:
         state = "dry_registered"
@@ -163,7 +169,10 @@ def cmd_submit(args: argparse.Namespace, base: Path) -> int:
         "config_resolved_path": str(resolved_dst),
         "vram_guard": {"blocked": vram_blocked, "detail": vram_note},
         "blocked_reason": blocked_reason or None,
-        "m1_note": "No training subprocess started by finquantctl M1.",
+        "m1_note": (
+            "M1 dry-only: finquantctl does not start train_qlora.py or training/job subprocesses; "
+            "--execute is intent-only."
+        ),
         "updated_at_utc": datetime.now(timezone.utc).isoformat(),
     }
     (run_dir / "run_state.json").write_text(json.dumps(run_state, indent=2), encoding="utf-8")
@@ -246,7 +255,10 @@ def main() -> None:
     sp.add_argument(
         "--execute",
         action="store_true",
-        help="Record execute intent only (M1 does not start training subprocess)",
+        help=(
+            "Record intent to execute later in registry only; M1 never starts train_qlora.py "
+            "or training/job subprocesses"
+        ),
     )
 
     st = sub.add_parser("status", help="Show run_state.json for a run")
