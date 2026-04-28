@@ -1780,6 +1780,7 @@ def create_app() -> Flask:
                 fingerprint_for_parallel_job_v1,
             )
             from renaissance_v4.game_theory.student_behavior_probe_v1 import (
+                FAILED_STUDENT_BEHAVIOR_PROBE_TIMEOUT_V1,
                 evaluate_full_student_run_contract_v1,
                 execute_student_behavior_probe_v1,
                 profile_requires_student_behavior_probe_v1,
@@ -2098,23 +2099,43 @@ def create_app() -> Flask:
                         operator_batch_audit=operator_batch_audit if isinstance(operator_batch_audit, dict) else None,
                         telemetry_dir=telem_dir,
                         strategy_id=op_rid_pf,
+                        probe_progress_line_cb_v1=lambda ln: _parallel_job_append_rm_preflight_line_v1(job_id, ln),
                     )
                     pm = probe_sum.get("probe_summary_v1") if isinstance(probe_sum, dict) else {}
                     _pa = int((pm or {}).get("authority_count_v1") or 0)
                     _ps = int((pm or {}).get("sealed_count_v1") or 0)
                     _pr = int((pm or {}).get("rejection_count_v1") or 0)
                     _pv = int((pm or {}).get("contract_violation_count_v1") or 0)
-                    _probe_detail = (
-                        f"DETAIL: authority={_pa} sealed={_ps} rejected={_pr} violations={_pv}"
-                    )
+                    _wto = bool(probe_sum.get("probe_timeout_v1")) if isinstance(probe_sum, dict) else False
+                    _wclk = probe_sum.get("probe_wall_clock_s_v1") if isinstance(probe_sum, dict) else None
+                    _wbud = probe_sum.get("probe_wall_limit_s_v1") if isinstance(probe_sum, dict) else None
+                    if _wto:
+                        _probe_detail = (
+                            f"DETAIL: TIMEOUT wall_clock={_wclk}s budget={_wbud}s "
+                            f"(authority={_pa} sealed={_ps} rejected={_pr} violations={_pv})"
+                        )
+                    else:
+                        _probe_detail = (
+                            f"DETAIL: authority={_pa} sealed={_ps} rejected={_pr} violations={_pv}"
+                        )
                     if sb_fail is None:
                         _parallel_job_append_rm_preflight_line_v1(job_id, "GATE: Student behavior probe = PASS")
                         _parallel_job_append_rm_preflight_line_v1(job_id, _probe_detail)
                     else:
-                        _parallel_job_append_rm_preflight_line_v1(job_id, "GATE: Student behavior probe = FAIL")
+                        _gate_probe = (
+                            "GATE: Student behavior probe = TIMEOUT"
+                            if _wto or sb_fail.get("probe_timeout_v1")
+                            else "GATE: Student behavior probe = FAIL"
+                        )
+                        _parallel_job_append_rm_preflight_line_v1(job_id, _gate_probe)
                         _parallel_job_append_rm_preflight_line_v1(job_id, _probe_detail)
+                        _term_st = (
+                            FAILED_STUDENT_BEHAVIOR_PROBE_TIMEOUT_V1
+                            if _wto or sb_fail.get("probe_timeout_v1")
+                            else FAILED_STUDENT_BEHAVIOR_PROBE_STATUS_V1
+                        )
                         err_sb = (
-                            f"{FAILED_STUDENT_BEHAVIOR_PROBE_STATUS_V1}: "
+                            f"{_term_st}: "
                             + str(sb_fail.get("explicit_failure_reason_v1") or "")
                             + (
                                 " — "
@@ -2134,7 +2155,7 @@ def create_app() -> Flask:
                         )
                         if isinstance(exam_line_sb, dict):
                             exam_line_sb["failed_student_behavior_probe_v1"] = sb_fail
-                            exam_line_sb["batch_terminal_status_v1"] = FAILED_STUDENT_BEHAVIOR_PROBE_STATUS_V1
+                            exam_line_sb["batch_terminal_status_v1"] = _term_st
                         timing_sb = record_parallel_batch_finished(
                             job_id=job_id,
                             started_at_utc=started_iso,
@@ -2154,14 +2175,18 @@ def create_app() -> Flask:
                             "failed_student_behavior_probe_v1": sb_fail,
                             "student_behavior_probe_summary_v1": probe_sum,
                             "batch_timing": timing_sb,
-                            "status_v1": FAILED_STUDENT_BEHAVIOR_PROBE_STATUS_V1,
+                            "status_v1": _term_st,
                             "rm_preflight_audit_v1": pf_audit,
                         }
                         with _JOBS_LOCK:
                             jsb = _JOBS.get(job_id)
                             if jsb:
                                 jsb["status"] = "error"
-                                jsb["preflight_display_status_v1"] = "student_behavior_probe_failed_v1"
+                                jsb["preflight_display_status_v1"] = (
+                                    "student_behavior_probe_timeout_v1"
+                                    if _wto or sb_fail.get("probe_timeout_v1")
+                                    else "student_behavior_probe_failed_v1"
+                                )
                                 jsb["completed"] = 0
                                 jsb["error"] = err_sb
                                 jsb["batch_timing"] = timing_sb
@@ -2929,6 +2954,7 @@ def create_app() -> Flask:
                 fingerprint_for_parallel_job_v1,
             )
             from renaissance_v4.game_theory.student_behavior_probe_v1 import (
+                FAILED_STUDENT_BEHAVIOR_PROBE_TIMEOUT_V1,
                 evaluate_full_student_run_contract_v1,
                 execute_student_behavior_probe_v1,
                 profile_requires_student_behavior_probe_v1,
@@ -3074,23 +3100,43 @@ def create_app() -> Flask:
                     operator_batch_audit=operator_batch_audit if isinstance(operator_batch_audit, dict) else None,
                     telemetry_dir=telem_dir,
                     strategy_id=op_rid_pf_b,
+                    probe_progress_line_cb_v1=lambda ln: _parallel_job_append_rm_preflight_line_v1(job_id, ln),
                 )
                 pm_b = probe_sum_b.get("probe_summary_v1") if isinstance(probe_sum_b, dict) else {}
                 _pab = int((pm_b or {}).get("authority_count_v1") or 0)
                 _psb = int((pm_b or {}).get("sealed_count_v1") or 0)
                 _prb = int((pm_b or {}).get("rejection_count_v1") or 0)
                 _pvb = int((pm_b or {}).get("contract_violation_count_v1") or 0)
-                _probe_detail_b = (
-                    f"DETAIL: authority={_pab} sealed={_psb} rejected={_prb} violations={_pvb}"
-                )
+                _wto_b = bool(probe_sum_b.get("probe_timeout_v1")) if isinstance(probe_sum_b, dict) else False
+                _wclk_b = probe_sum_b.get("probe_wall_clock_s_v1") if isinstance(probe_sum_b, dict) else None
+                _wbud_b = probe_sum_b.get("probe_wall_limit_s_v1") if isinstance(probe_sum_b, dict) else None
+                if _wto_b:
+                    _probe_detail_b = (
+                        f"DETAIL: TIMEOUT wall_clock={_wclk_b}s budget={_wbud_b}s "
+                        f"(authority={_pab} sealed={_psb} rejected={_prb} violations={_pvb})"
+                    )
+                else:
+                    _probe_detail_b = (
+                        f"DETAIL: authority={_pab} sealed={_psb} rejected={_prb} violations={_pvb}"
+                    )
                 if sb_fail_b is None:
                     _parallel_job_append_rm_preflight_line_v1(job_id, "GATE: Student behavior probe = PASS")
                     _parallel_job_append_rm_preflight_line_v1(job_id, _probe_detail_b)
                 else:
-                    _parallel_job_append_rm_preflight_line_v1(job_id, "GATE: Student behavior probe = FAIL")
+                    _gate_probe_b = (
+                        "GATE: Student behavior probe = TIMEOUT"
+                        if _wto_b or sb_fail_b.get("probe_timeout_v1")
+                        else "GATE: Student behavior probe = FAIL"
+                    )
+                    _parallel_job_append_rm_preflight_line_v1(job_id, _gate_probe_b)
                     _parallel_job_append_rm_preflight_line_v1(job_id, _probe_detail_b)
+                    _term_st_b = (
+                        FAILED_STUDENT_BEHAVIOR_PROBE_TIMEOUT_V1
+                        if _wto_b or sb_fail_b.get("probe_timeout_v1")
+                        else FAILED_STUDENT_BEHAVIOR_PROBE_STATUS_V1
+                    )
                     err_sbb = (
-                        f"{FAILED_STUDENT_BEHAVIOR_PROBE_STATUS_V1}: "
+                        f"{_term_st_b}: "
                         + str(sb_fail_b.get("explicit_failure_reason_v1") or "")
                         + (
                             " — "
@@ -3110,7 +3156,7 @@ def create_app() -> Flask:
                     )
                     if isinstance(exam_line_sbb, dict):
                         exam_line_sbb["failed_student_behavior_probe_v1"] = sb_fail_b
-                        exam_line_sbb["batch_terminal_status_v1"] = FAILED_STUDENT_BEHAVIOR_PROBE_STATUS_V1
+                        exam_line_sbb["batch_terminal_status_v1"] = _term_st_b
                     timing_sbb = record_parallel_batch_finished(
                         job_id=job_id,
                         started_at_utc=started_iso,
@@ -3130,7 +3176,7 @@ def create_app() -> Flask:
                         "failed_student_behavior_probe_v1": sb_fail_b,
                         "student_behavior_probe_summary_v1": probe_sum_b,
                         "batch_timing": timing_sbb,
-                        "status_v1": FAILED_STUDENT_BEHAVIOR_PROBE_STATUS_V1,
+                        "status_v1": _term_st_b,
                         "rm_preflight_audit_v1": pf_audit_block,
                     }
                     _panel_sbb = pf_audit_block.get("rm_preflight_results_panel_v1")
@@ -3141,7 +3187,11 @@ def create_app() -> Flask:
                         jsbb = _JOBS.get(job_id)
                         if isinstance(jsbb, dict):
                             jsbb["status"] = "error"
-                            jsbb["preflight_display_status_v1"] = "student_behavior_probe_failed_v1"
+                            jsbb["preflight_display_status_v1"] = (
+                                "student_behavior_probe_timeout_v1"
+                                if _wto_b or sb_fail_b.get("probe_timeout_v1")
+                                else "student_behavior_probe_failed_v1"
+                            )
                             jsbb["completed"] = 0
                             jsbb["error"] = err_sbb
                             jsbb["batch_timing"] = timing_sbb

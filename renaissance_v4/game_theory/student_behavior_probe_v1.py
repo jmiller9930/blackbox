@@ -6,14 +6,20 @@ Student **behavior probe** — deterministic fast-fail gate after RM preflight, 
   timestamps (same packet source as RM decision snapshot).
 * Invokes ``student_loop_seam_after_parallel_batch_v1`` once — full Student seam (packet → ERE → LLM → authority → seal).
 
-Wall-clock SLA: default **5.0s** (``PATTERN_GAME_STUDENT_PROBE_MAX_WALL_S``). Exceeding fails the probe.
+**Hard wall-clock:** By default the seam runs in a **spawn subprocess**. The parent ``terminate()``/``kill()``\s
+the child if it exceeds ``PATTERN_GAME_STUDENT_PROBE_MAX_WALL_S`` (default **5**), returning
+``failed_student_behavior_probe_timeout_v1`` — same pattern as RM preflight hard timeout.
+
+Disable isolation with ``PATTERN_GAME_STUDENT_PROBE_SUBPROCESS_ISOLATION=0`` (tests only; can hang).
 """
 
 from __future__ import annotations
 
 import copy
+import multiprocessing
 import os
 import sqlite3
+import threading
 import time
 from pathlib import Path
 from typing import Any
@@ -32,6 +38,7 @@ from renaissance_v4.utils.db import DB_PATH
 
 
 SCHEMA_FAILED_STUDENT_BEHAVIOR_PROBE_V1 = "failed_student_behavior_probe_v1"
+FAILED_STUDENT_BEHAVIOR_PROBE_TIMEOUT_V1 = "failed_student_behavior_probe_timeout_v1"
 
 # Directive SLA — strict gate (fail probe if exceeded).
 _PROBE_DEFAULT_MAX_WALL_S = 5.0
@@ -56,6 +63,12 @@ def student_behavior_probe_max_wall_seconds_v1() -> float:
     except ValueError:
         t = _PROBE_DEFAULT_MAX_WALL_S
     return max(1.0, min(t, 120.0))
+
+
+def student_behavior_probe_subprocess_isolation_enabled_v1() -> bool:
+    """When true (default), seam body runs in a spawn child and is SIGKILL/terminate on SLA (like RM preflight)."""
+    v = (os.environ.get("PATTERN_GAME_STUDENT_PROBE_SUBPROCESS_ISOLATION") or "1").strip().lower()
+    return v not in ("0", "false", "off", "no")
 
 
 def student_behavior_probe_trade_count_v1() -> int:
@@ -333,74 +346,48 @@ def build_failed_student_behavior_probe_payload_v1(
     }
 
 
-def execute_student_behavior_probe_v1(
+def build_failed_student_behavior_probe_timeout_payload_v1(
     *,
-    scenarios: list[dict[str, Any]],
     main_job_id: str,
+    trace_job_id: str,
+    wall_clock_s_v1: float,
+    wall_limit_s_v1: float,
+) -> dict[str, Any]:
+    return {
+        "schema": SCHEMA_FAILED_STUDENT_BEHAVIOR_PROBE_V1,
+        "ok_v1": False,
+        "status_v1": FAILED_STUDENT_BEHAVIOR_PROBE_TIMEOUT_V1,
+        "probe_timeout_v1": True,
+        "job_id": main_job_id,
+        "behavior_probe_trace_job_id_v1": trace_job_id,
+        "authority_count_v1": None,
+        "sealed_count_v1": None,
+        "rejection_count_v1": None,
+        "contract_violation_count_v1": None,
+        "probe_wall_clock_s_v1": wall_clock_s_v1,
+        "probe_wall_limit_s_v1": wall_limit_s_v1,
+        "gate_errors_v1": [FAILED_STUDENT_BEHAVIOR_PROBE_TIMEOUT_V1],
+        "explicit_failure_reason_v1": FAILED_STUDENT_BEHAVIOR_PROBE_TIMEOUT_V1,
+        "rejection_reasons_v1": [],
+        "first_three_failure_examples_v1": [],
+    }
+
+
+def _run_probe_seam_body_v1(
+    *,
+    results: list[dict[str, Any]],
+    main_job_id: str,
+    trace_jid: str,
+    n_tr: int,
+    wall_limit: float,
     exam_run_contract_request_v1: dict[str, Any] | None,
     operator_batch_audit: dict[str, Any] | None,
-    telemetry_dir: Any,
     strategy_id: str | None,
 ) -> tuple[dict[str, Any] | None, dict[str, Any]]:
-    """
-    Run seam directly on synthetic minimal outcomes.
-
-    Returns ``(failure_payload_or_none, probe_summary_v1)``. On PASS, failure is ``None`` and summary carries counts.
-
-    Does **not** invoke ``run_scenarios_parallel``.
-    """
-    from pathlib import Path
-
-    from renaissance_v4.game_theory.live_telemetry_v1 import clear_job_telemetry_files
+    """Seam + trace scan + gates (runs in main process or probe subprocess)."""
     from renaissance_v4.game_theory.student_proctor.student_proctor_operator_runtime_v1 import (
         student_loop_seam_after_parallel_batch_v1,
     )
-
-    empty_m = {
-        "authority_count_v1": 0,
-        "sealed_count_v1": 0,
-        "rejection_count_v1": 0,
-        "contract_violation_count_v1": 0,
-        "failure_samples_v1": [],
-        "rejection_reasons_v1": [],
-    }
-    if not scenarios:
-        fl = build_failed_student_behavior_probe_payload_v1(
-            main_job_id=main_job_id,
-            trace_job_id="",
-            metrics=empty_m,
-            gate_errors_v1=["gate_probe_scenarios_nonempty_v1"],
-            wall_clock_s_v1=0.0,
-            wall_limit_s_v1=student_behavior_probe_max_wall_seconds_v1(),
-            explicit_failure_reason_v1="probe_no_scenarios_v1",
-        )
-        return fl, {"probe_summary_v1": empty_m, "probe_pass_v1": False}
-
-    n_tr = student_behavior_probe_trade_count_v1()
-    trace_jid = behavior_probe_trace_job_id_v1(main_job_id)
-    wall_limit = student_behavior_probe_max_wall_seconds_v1()
-
-    td = Path(str(telemetry_dir)) if telemetry_dir is not None else None
-    if td is not None:
-        clear_job_telemetry_files(trace_jid, base=td)
-
-    scen0 = copy.deepcopy(scenarios[0])
-    results, prep_err = build_probe_minimal_results_v1(
-        scenario=scen0,
-        exam_run_contract_request_v1=exam_run_contract_request_v1,
-        max_trades=n_tr,
-    )
-    if prep_err or not results:
-        fl = build_failed_student_behavior_probe_payload_v1(
-            main_job_id=main_job_id,
-            trace_job_id=trace_jid,
-            metrics=empty_m,
-            gate_errors_v1=[f"probe_build_failed_v1:{prep_err or 'unknown'}"],
-            wall_clock_s_v1=0.0,
-            wall_limit_s_v1=wall_limit,
-            explicit_failure_reason_v1=str(prep_err or "probe_build_failed_v1"),
-        )
-        return fl, {"probe_summary_v1": empty_m, "probe_pass_v1": False}
 
     prev_llm_cap = (os.environ.get("PATTERN_GAME_STUDENT_LLM_MAX_TRADES") or "").strip()
     os.environ["PATTERN_GAME_STUDENT_LLM_MAX_TRADES"] = str(max(n_tr + 2, _PROBE_MAX_TRADES_CAP))
@@ -432,12 +419,13 @@ def execute_student_behavior_probe_v1(
         wall_clock_s_v1=wall_s,
         wall_limit_s_v1=wall_limit,
     )
-    summary = {
+    summary: dict[str, Any] = {
         "probe_summary_v1": metrics,
         "probe_wall_clock_s_v1": wall_s,
         "probe_wall_limit_s_v1": wall_limit,
         "behavior_probe_trace_job_id_v1": trace_jid,
         "probe_pass_v1": ok_gate,
+        "probe_outcome_v1": "PASS" if ok_gate else "FAIL",
     }
     if ok_gate:
         return None, summary
@@ -457,15 +445,241 @@ def execute_student_behavior_probe_v1(
     )
 
 
+def _student_behavior_probe_child_main_v1(q: Any, kwargs: dict[str, Any]) -> None:
+    """Spawn entry point — must stay module-level for ``multiprocessing`` spawn."""
+    try:
+        pair = _run_probe_seam_body_v1(**kwargs)
+        q.put(("ok", pair[0], pair[1]))
+    except Exception:
+        import traceback
+
+        q.put(("err", traceback.format_exc()[:12000]))
+
+
+def execute_student_behavior_probe_v1(
+    *,
+    scenarios: list[dict[str, Any]],
+    main_job_id: str,
+    exam_run_contract_request_v1: dict[str, Any] | None,
+    operator_batch_audit: dict[str, Any] | None,
+    telemetry_dir: Any,
+    strategy_id: str | None,
+    probe_progress_line_cb_v1: Any | None = None,
+) -> tuple[dict[str, Any] | None, dict[str, Any]]:
+    """
+    Run seam directly on synthetic minimal outcomes.
+
+    Returns ``(failure_payload_or_none, probe_summary_v1)``. On PASS, failure is ``None`` and summary carries counts.
+
+    By default the seam body runs in a **spawn subprocess** and is **terminated** if it exceeds the wall SLA
+    (RM-preflight-style hard timeout). Optional ``probe_progress_line_cb_v1(line: str)`` receives elapsed/budget
+    ticks and PASS/FAIL/TIMEOUT lines for the operator terminal.
+
+    Does **not** invoke ``run_scenarios_parallel``.
+    """
+    from pathlib import Path
+
+    from renaissance_v4.game_theory.live_telemetry_v1 import clear_job_telemetry_files
+
+    def _line(msg: str) -> None:
+        if probe_progress_line_cb_v1 is not None:
+            try:
+                probe_progress_line_cb_v1(msg)
+            except Exception:
+                pass
+
+    empty_m = {
+        "authority_count_v1": 0,
+        "sealed_count_v1": 0,
+        "rejection_count_v1": 0,
+        "contract_violation_count_v1": 0,
+        "failure_samples_v1": [],
+        "rejection_reasons_v1": [],
+    }
+    if not scenarios:
+        fl = build_failed_student_behavior_probe_payload_v1(
+            main_job_id=main_job_id,
+            trace_job_id="",
+            metrics=empty_m,
+            gate_errors_v1=["gate_probe_scenarios_nonempty_v1"],
+            wall_clock_s_v1=0.0,
+            wall_limit_s_v1=student_behavior_probe_max_wall_seconds_v1(),
+            explicit_failure_reason_v1="probe_no_scenarios_v1",
+        )
+        return fl, {"probe_summary_v1": empty_m, "probe_pass_v1": False, "probe_outcome_v1": "FAIL"}
+
+    n_tr = student_behavior_probe_trade_count_v1()
+    trace_jid = behavior_probe_trace_job_id_v1(main_job_id)
+    wall_limit = student_behavior_probe_max_wall_seconds_v1()
+    _line(f"PROBE: started budget={wall_limit:.2f}s (hard timeout; subprocess={student_behavior_probe_subprocess_isolation_enabled_v1()})")
+
+    td = Path(str(telemetry_dir)) if telemetry_dir is not None else None
+    if td is not None:
+        clear_job_telemetry_files(trace_jid, base=td)
+
+    scen0 = copy.deepcopy(scenarios[0])
+    results, prep_err = build_probe_minimal_results_v1(
+        scenario=scen0,
+        exam_run_contract_request_v1=exam_run_contract_request_v1,
+        max_trades=n_tr,
+    )
+    if prep_err or not results:
+        fl = build_failed_student_behavior_probe_payload_v1(
+            main_job_id=main_job_id,
+            trace_job_id=trace_jid,
+            metrics=empty_m,
+            gate_errors_v1=[f"probe_build_failed_v1:{prep_err or 'unknown'}"],
+            wall_clock_s_v1=0.0,
+            wall_limit_s_v1=wall_limit,
+            explicit_failure_reason_v1=str(prep_err or "probe_build_failed_v1"),
+        )
+        _line("PROBE: FAIL (could not build minimal outcomes)")
+        return fl, {"probe_summary_v1": empty_m, "probe_pass_v1": False, "probe_outcome_v1": "FAIL"}
+
+    seam_kw: dict[str, Any] = {
+        "results": results,
+        "main_job_id": main_job_id,
+        "trace_jid": trace_jid,
+        "n_tr": n_tr,
+        "wall_limit": wall_limit,
+        "exam_run_contract_request_v1": exam_run_contract_request_v1
+        if isinstance(exam_run_contract_request_v1, dict)
+        else None,
+        "operator_batch_audit": operator_batch_audit if isinstance(operator_batch_audit, dict) else None,
+        "strategy_id": strategy_id,
+    }
+
+    use_subproc = student_behavior_probe_subprocess_isolation_enabled_v1()
+    t_wall0 = time.monotonic()
+    stop_hb = threading.Event()
+
+    def _heartbeat_loop_v1() -> None:
+        while not stop_hb.wait(1.0):
+            el = time.monotonic() - t_wall0
+            _line(f"PROBE: elapsed={el:.2f}s budget={wall_limit:.2f}s")
+
+    hb_thread = threading.Thread(target=_heartbeat_loop_v1, name="student_behavior_probe_hb_v1", daemon=True)
+    hb_thread.start()
+
+    failure: dict[str, Any] | None = None
+    summary: dict[str, Any] = {}
+
+    try:
+        if use_subproc:
+            ctx = multiprocessing.get_context("spawn")
+            q = ctx.Queue(maxsize=1)
+            proc = ctx.Process(target=_student_behavior_probe_child_main_v1, args=(q, seam_kw))
+            proc.start()
+            proc.join(timeout=float(wall_limit))
+            if proc.is_alive():
+                proc.terminate()
+                proc.join(2.0)
+                if proc.is_alive():
+                    proc.kill()
+                    proc.join(2.0)
+                elapsed = time.monotonic() - t_wall0
+                _line(f"PROBE: TIMEOUT elapsed={elapsed:.2f}s budget={wall_limit:.2f}s — seam subprocess terminated")
+                fl = build_failed_student_behavior_probe_timeout_payload_v1(
+                    main_job_id=main_job_id,
+                    trace_job_id=trace_jid,
+                    wall_clock_s_v1=elapsed,
+                    wall_limit_s_v1=wall_limit,
+                )
+                return fl, {
+                    "probe_summary_v1": empty_m,
+                    "probe_wall_clock_s_v1": elapsed,
+                    "probe_wall_limit_s_v1": wall_limit,
+                    "behavior_probe_trace_job_id_v1": trace_jid,
+                    "probe_pass_v1": False,
+                    "probe_outcome_v1": "TIMEOUT",
+                    "probe_timeout_v1": True,
+                }
+            try:
+                raw = q.get(timeout=5.0)
+            except Exception:
+                raw = None
+            if raw is None or not isinstance(raw, tuple) or len(raw) < 1:
+                elapsed = time.monotonic() - t_wall0
+                _line(f"PROBE: TIMEOUT — invalid subprocess result")
+                fl = build_failed_student_behavior_probe_timeout_payload_v1(
+                    main_job_id=main_job_id,
+                    trace_job_id=trace_jid,
+                    wall_clock_s_v1=elapsed,
+                    wall_limit_s_v1=wall_limit,
+                )
+                return fl, {
+                    "probe_summary_v1": empty_m,
+                    "probe_wall_clock_s_v1": elapsed,
+                    "probe_wall_limit_s_v1": wall_limit,
+                    "behavior_probe_trace_job_id_v1": trace_jid,
+                    "probe_pass_v1": False,
+                    "probe_outcome_v1": "TIMEOUT",
+                    "probe_timeout_v1": True,
+                }
+            kind = raw[0]
+            if kind == "err":
+                msg = str(raw[1]) if len(raw) > 1 else "unknown_err"
+                elapsed = time.monotonic() - t_wall0
+                fl = build_failed_student_behavior_probe_payload_v1(
+                    main_job_id=main_job_id,
+                    trace_job_id=trace_jid,
+                    metrics=empty_m,
+                    gate_errors_v1=[f"probe_subprocess_exception_v1:{msg[:2000]}"],
+                    wall_clock_s_v1=elapsed,
+                    wall_limit_s_v1=wall_limit,
+                    explicit_failure_reason_v1="probe_subprocess_exception_v1",
+                )
+                _line(f"PROBE: FAIL elapsed={elapsed:.2f}s (subprocess error)")
+                return fl, {
+                    "probe_summary_v1": empty_m,
+                    "probe_wall_clock_s_v1": elapsed,
+                    "probe_wall_limit_s_v1": wall_limit,
+                    "behavior_probe_trace_job_id_v1": trace_jid,
+                    "probe_pass_v1": False,
+                    "probe_outcome_v1": "FAIL",
+                    "probe_subprocess_traceback_v1": msg[:8000],
+                }
+            if kind != "ok" or len(raw) != 3:
+                elapsed = time.monotonic() - t_wall0
+                fl = build_failed_student_behavior_probe_payload_v1(
+                    main_job_id=main_job_id,
+                    trace_job_id=trace_jid,
+                    metrics=empty_m,
+                    gate_errors_v1=["probe_subprocess_protocol_error_v1"],
+                    wall_clock_s_v1=elapsed,
+                    wall_limit_s_v1=wall_limit,
+                    explicit_failure_reason_v1="probe_subprocess_protocol_error_v1",
+                )
+                _line(f"PROBE: FAIL elapsed={elapsed:.2f}s (protocol)")
+                return fl, {"probe_summary_v1": empty_m, "probe_pass_v1": False, "probe_outcome_v1": "FAIL"}
+            failure, summary = raw[1], raw[2]
+        else:
+            failure, summary = _run_probe_seam_body_v1(**seam_kw)
+    finally:
+        stop_hb.set()
+
+    ws = float(summary.get("probe_wall_clock_s_v1") or 0.0)
+    outcome = str(summary.get("probe_outcome_v1") or ("PASS" if failure is None else "FAIL"))
+    if failure is None:
+        _line(f"PROBE: PASS wall_clock={ws:.2f}s budget={wall_limit:.2f}s")
+    elif outcome != "TIMEOUT":
+        _line(f"PROBE: FAIL wall_clock={ws:.2f}s budget={wall_limit:.2f}s")
+
+    return failure, summary
+
+
 __all__ = [
+    "FAILED_STUDENT_BEHAVIOR_PROBE_TIMEOUT_V1",
     "SCHEMA_FAILED_STUDENT_BEHAVIOR_PROBE_V1",
     "behavior_probe_trace_job_id_v1",
     "build_failed_student_behavior_probe_payload_v1",
+    "build_failed_student_behavior_probe_timeout_payload_v1",
     "evaluate_full_student_run_contract_v1",
     "evaluate_student_behavior_probe_gates_v1",
     "execute_student_behavior_probe_v1",
     "profile_requires_student_behavior_probe_v1",
     "student_behavior_probe_enabled_v1",
     "student_behavior_probe_max_wall_seconds_v1",
+    "student_behavior_probe_subprocess_isolation_enabled_v1",
     "student_behavior_probe_trade_count_v1",
 ]
