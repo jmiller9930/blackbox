@@ -320,7 +320,10 @@ def run_student_decision_authority_for_trade_v1(
 ) -> dict[str, Any]:
     """
     Compute authority, optionally patch ``ere`` (active), emit learning trace.
-    Call after entry reasoning (+ optional lifecycle) is attached to ``ere``.
+
+    Call **after** entry reasoning (+ optional lifecycle) **and after** a sealable raw Student line
+    exists (LLM or stub returned ``student_output_v1`` — parse/normalize succeeded). Invoke **before**
+    ``apply_engine_authority_to_student_output_v1`` so patched ``ere`` drives the merge.
 
     When ``mandate_active_v1`` is True (non-baseline Student mode), a persisted trace line is
     **required**; otherwise raises ``RuntimeError``. On success, sets ``ere["student_decision_authority_binding_v1"]``.

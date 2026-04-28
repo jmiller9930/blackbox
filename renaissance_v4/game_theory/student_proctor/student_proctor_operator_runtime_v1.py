@@ -63,6 +63,7 @@ from renaissance_v4.game_theory.student_proctor.learning_memory_promotion_v1 imp
 from renaissance_v4.game_theory.learning_trace_instrumentation_v1 import (
     emit_candle_timeframe_nexus_v1,
     emit_fatal_authority_seal_mismatch_v1,
+    emit_student_decision_failed_before_authority_v1,
     emit_governance_decided_v1,
     emit_learning_record_appended_v1,
     emit_llm_called_v1,
@@ -798,36 +799,6 @@ def student_loop_seam_after_parallel_batch_v1(
                                     if _pfm_learn is not None:
                                         pfm = _pfm_learn
                                         ere["student_reasoning_fault_map_v1"] = pfm
-                    if isinstance(ere, dict):
-                        from renaissance_v4.game_theory.student_proctor.student_decision_authority_v1 import (
-                            run_student_decision_authority_for_trade_v1,
-                        )
-
-                        try:
-                            run_student_decision_authority_for_trade_v1(
-                                job_id=str(run_id).strip(),
-                                fingerprint=fp_emit,
-                                scenario_id=sid,
-                                trade_id=str(o.trade_id),
-                                ere=ere,
-                                pkt=pkt,
-                                unified_router_enabled=unified_router,
-                                exam_run_contract_request_v1=ex_req if isinstance(ex_req, dict) else None,
-                                mandate_active_v1=mandate_active_v1,
-                            )
-                            authority_commit_emitted_v1 = True
-                        except RuntimeError as rde:
-                            if mandate_active_v1:
-                                _raise_fatal_authority_seal_mismatch_v1(
-                                    job_id=str(run_id).strip(),
-                                    fingerprint=fp_emit,
-                                    scenario_id=sid,
-                                    trade_id=str(o.trade_id),
-                                    reason_code="student_decision_authority_runtime_v1",
-                                    detail=str(rde),
-                                )
-                            errors.append(f"{sid} trade={o.trade_id}: student_decision_authority_runtime: {rde}")
-                            continue
                     allowed_mids = frozenset(
                         str(z.get("record_id") or "").strip()
                         for z in rxx
@@ -908,16 +879,14 @@ def student_loop_seam_after_parallel_batch_v1(
                                     trade_id=str(o.trade_id),
                                     student_reasoning_fault_map_v1=_llm_rej_fm,
                                 )
-                                # No stub fallback for LLM profile — thesis or explicit failure (precondition for 017).
-                                if mandate_active_v1:
-                                    _raise_fatal_authority_seal_mismatch_v1(
-                                        job_id=str(run_id).strip(),
-                                        fingerprint=fp_emit,
-                                        scenario_id=sid,
-                                        trade_id=str(o.trade_id),
-                                        reason_code="llm_student_output_rejected_v1",
-                                        detail="; ".join(str(x) for x in (soe or []))[:4000],
-                                    )
+                                emit_student_decision_failed_before_authority_v1(
+                                    job_id=str(run_id).strip(),
+                                    fingerprint=fp_emit,
+                                    scenario_id=sid,
+                                    trade_id=str(o.trade_id),
+                                    reason_code="llm_student_output_rejected_v1",
+                                    detail="; ".join(str(x) for x in (soe or []))[:4000],
+                                )
                                 continue
                             ollama_ok += 1
                             emit_llm_output_received_v1(
@@ -956,16 +925,45 @@ def student_loop_seam_after_parallel_batch_v1(
                         )
                     if soe or so is None:
                         errors.append(f"{sid} trade={o.trade_id}: student_output {'; '.join(soe)}")
-                        if mandate_active_v1:
-                            _raise_fatal_authority_seal_mismatch_v1(
+                        emit_student_decision_failed_before_authority_v1(
+                            job_id=str(run_id).strip(),
+                            fingerprint=fp_emit,
+                            scenario_id=sid,
+                            trade_id=str(o.trade_id),
+                            reason_code="student_output_empty_or_errors_v1",
+                            detail="; ".join(str(x) for x in (soe or []))[:4000],
+                        )
+                        continue
+                    if isinstance(ere, dict):
+                        from renaissance_v4.game_theory.student_proctor.student_decision_authority_v1 import (
+                            run_student_decision_authority_for_trade_v1,
+                        )
+
+                        try:
+                            run_student_decision_authority_for_trade_v1(
                                 job_id=str(run_id).strip(),
                                 fingerprint=fp_emit,
                                 scenario_id=sid,
                                 trade_id=str(o.trade_id),
-                                reason_code="student_output_empty_or_errors_v1",
-                                detail="; ".join(str(x) for x in (soe or []))[:4000],
+                                ere=ere,
+                                pkt=pkt,
+                                unified_router_enabled=unified_router,
+                                exam_run_contract_request_v1=ex_req if isinstance(ex_req, dict) else None,
+                                mandate_active_v1=mandate_active_v1,
                             )
-                        continue
+                            authority_commit_emitted_v1 = True
+                        except RuntimeError as rde:
+                            if mandate_active_v1:
+                                _raise_fatal_authority_seal_mismatch_v1(
+                                    job_id=str(run_id).strip(),
+                                    fingerprint=fp_emit,
+                                    scenario_id=sid,
+                                    trade_id=str(o.trade_id),
+                                    reason_code="student_decision_authority_runtime_v1",
+                                    detail=str(rde),
+                                )
+                            errors.append(f"{sid} trade={o.trade_id}: student_decision_authority_runtime: {rde}")
+                            continue
                     so, auth_errs = apply_engine_authority_to_student_output_v1(
                         so,
                         ere,

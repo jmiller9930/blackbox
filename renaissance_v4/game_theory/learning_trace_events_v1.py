@@ -69,6 +69,8 @@ EVENT_STAGES_V1 = (
     # student_test_mode_v1 proof harness (prompt + raw LLM + sealed snapshot).
     "student_test_llm_turn_v1",
     "student_test_sealed_output_snapshot_v1",
+    # LLM/stub failed before student_decision_authority_v1 — no authority/seal orphan.
+    "student_decision_failed_before_authority_v1",
 )
 
 # Map persisted ``stage`` → graph node ``id`` (reconstructed trace) for merge / provenance.
@@ -108,6 +110,7 @@ STAGE_TO_NODE_IDS_V1: dict[str, tuple[str, ...]] = {
     "lifecycle_tape_summary_v1": ("student_reasoning", "llm_reasoning"),
     "student_decision_authority_v1": ("student_decision", "student_reasoning"),
     "fatal_authority_seal_mismatch_v1": ("student_decision",),
+    "student_decision_failed_before_authority_v1": ("student_decision", "llm_reasoning"),
 }
 
 

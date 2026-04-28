@@ -972,6 +972,19 @@ def run_rm_preflight_decision_snapshot_v1(
                 bundle_wall_ms_v1=float(_bundle_ms) if isinstance(_bundle_ms, (int, float)) else None,
             )
 
+            audit.enter("output_seal_v1")
+            so, soe = emit_shadow_stub_student_output_v1(
+                pkt,
+                graded_unit_id=trade_id,
+                decision_at_ms=cut_ms,
+            )
+            if soe or so is None:
+                audit.end(error="; ".join(soe) if soe else "stub_none")
+                return _fail(
+                    missing=["preflight_shadow_stub_failed_v1"],
+                    human="; ".join(soe) if soe else "stub_none",
+                )
+
             audit.enter("student_decision_authority_v1")
             run_student_decision_authority_for_trade_v1(
                 job_id=jid,
@@ -985,19 +998,6 @@ def run_rm_preflight_decision_snapshot_v1(
                 mandate_active_v1=mandate_active_v1,
             )
             audit.end()
-
-            audit.enter("output_seal_v1")
-            so, soe = emit_shadow_stub_student_output_v1(
-                pkt,
-                graded_unit_id=trade_id,
-                decision_at_ms=cut_ms,
-            )
-            if soe or so is None:
-                audit.end(error="; ".join(soe) if soe else "stub_none")
-                return _fail(
-                    missing=["preflight_shadow_stub_failed_v1"],
-                    human="; ".join(soe) if soe else "stub_none",
-                )
 
             so, auth_errs = apply_engine_authority_to_student_output_v1(
                 so,
