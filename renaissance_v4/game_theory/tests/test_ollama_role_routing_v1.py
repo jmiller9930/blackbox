@@ -52,7 +52,7 @@ def test_deepseek_escalation_defaults(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.delenv("DEEPSEEK_ESCALATION_OLLAMA_BASE_URL", raising=False)
     monkeypatch.delenv("DEEPSEEK_ESCALATION_OLLAMA_MODEL", raising=False)
     monkeypatch.delenv("PML_LIGHTWEIGHT_OLLAMA_BASE_URL", raising=False)
-    assert deepseek_escalation_ollama_model() == "deepseek-v4-flash:cloud"
+    assert deepseek_escalation_ollama_model() == "deepseek-r1:14b"
     assert deepseek_escalation_ollama_base_url() == "http://172.20.2.230:11434"
 
 

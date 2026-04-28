@@ -55,4 +55,4 @@ def test_ask_data_ollama_target_fallback_when_deepseek_unset(monkeypatch: pytest
         monkeypatch.delenv(k, raising=False)
     b, m, _ = ask_data_ollama_target_for_route_v1("deepseek_escalation")
     assert b == "http://h1:11434"
-    assert m == "deepseek-v4-flash:cloud"
+    assert m == "deepseek-r1:14b"
