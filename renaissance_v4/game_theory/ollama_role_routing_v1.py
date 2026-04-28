@@ -10,7 +10,7 @@ validated tool layers and optional operator confirmation.
 | **Student** (parallel LLM seam) | **172.20.1.66:11434** (approved strong model host) | **qwen3-coder:30b** only (``exam_run_contract_v1``) | ``STUDENT_OLLAMA_BASE_URL`` overrides base **only** (CI/mocks) — not PML/lightweight |
 | **System Agent** (operator control brain; propose-only) | ``http://172.20.1.66:11434`` | ``qwen3-coder:30b`` | ``SYSTEM_AGENT_OLLAMA_BASE_URL`` / ``SYSTEM_AGENT_OLLAMA_MODEL`` |
 | **System Agent fallback** | (same as primary) | ``qwen2.5-coder:7b`` | ``SYSTEM_AGENT_OLLAMA_MODEL_FALLBACK`` |
-| **DeepSeek escalation** (diagnostic / debug only) | ``http://172.20.2.230:11434`` | ``deepseek-r1:14b`` (installed GGUF; override env for cloud tags) | ``DEEPSEEK_ESCALATION_OLLAMA_BASE_URL`` / ``DEEPSEEK_ESCALATION_OLLAMA_MODEL`` |
+| **DeepSeek escalation** (diagnostic / debug only) | ``http://172.20.2.230:11434`` | ``deepseek-v4-flash:cloud`` | ``DEEPSEEK_ESCALATION_OLLAMA_BASE_URL`` / ``DEEPSEEK_ESCALATION_OLLAMA_MODEL`` |
 
 Lab defaults are **overridden** by explicit env in any environment where those IPs are wrong.
 ``OLLAMA_BASE_URL`` alone still applies to :func:`scripts.runtime._ollama.ollama_base_url` (Anna
@@ -35,10 +35,11 @@ _DEFAULT_SYSTEM_AGENT_BASE = "http://172.20.1.66:11434"
 _DEFAULT_PML_LIGHTWEIGHT_MODEL = "qwen2.5:7b"
 _DEFAULT_SYSTEM_AGENT_MODEL = "qwen3-coder:30b"
 _DEFAULT_SYSTEM_AGENT_FALLBACK_MODEL = "qwen2.5-coder:7b"
-# Lab-verified on 172.20.2.230 ``/api/tags`` (2026-04): ``deepseek-v4-flash:cloud`` is **not** present and
-# ``/api/generate`` returns ``{"error":"unauthorized"}`` for that tag without cloud auth. Default matches the
-# installed DeepSeek image until operators ``ollama pull`` + authorize cloud models or set ``DEEPSEEK_ESCALATION_OLLAMA_MODEL``.
-_DEFAULT_DEEPSEEK_ESCALATION_MODEL = "deepseek-r1:14b"
+# Target escalation model (Ollama library). **Must** be installed and callable on the escalation host
+# (``ollama pull deepseek-v4-flash:cloud`` + cloud auth as required). Proof:
+# ``scripts/verify_deepseek_escalation_ollama_v1.sh``. Student parallel LLM stays **qwen3-coder:30b** on
+# ``172.20.1.66`` — separate host/model from this tier.
+_DEFAULT_DEEPSEEK_ESCALATION_MODEL = "deepseek-v4-flash:cloud"
 
 
 def pml_lightweight_ollama_base_url() -> str:

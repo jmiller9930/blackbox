@@ -58,6 +58,10 @@ _OPENAI_KEY_LEN="${OPENAI_API_KEY-}"
 echo "gsync: OPENAI_API_KEY set for Flask launch: length ${#_OPENAI_KEY_LEN} (0 = no key file in env chain yet)"
 unset _OPENAI_KEY_LEN
 
+# DeepSeek escalation tier (172.20.2.230 by default): Ask DATA deep route / diagnostic helpers use this tag.
+# Must exist on host — run scripts/verify_deepseek_escalation_ollama_v1.sh after ollama pull + cloud auth.
+export DEEPSEEK_ESCALATION_OLLAMA_MODEL="${DEEPSEEK_ESCALATION_OLLAMA_MODEL:-deepseek-v4-flash:cloud}"
+
 # Do not shell-redirect stdout/stderr to /tmp — RotatingFileHandler in web_app consumes logs.
 nohup python3 -m renaissance_v4.game_theory.web_app --host 0.0.0.0 --port 8765 </dev/null >/dev/null 2>&1 &
 echo "gsync: pattern-game web started (PID $!); log: $PATTERN_GAME_WEB_LOG_FILE"

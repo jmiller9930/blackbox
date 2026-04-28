@@ -8,7 +8,7 @@ Tiers
 
 * **pml_lightweight** — default: fast glossary + run/scorecard Q&A (``qwen2.5:7b`` on PML host).
 * **system_agent** — structured / schema / API / workflow wording (``qwen3-coder:30b`` on System Agent host).
-* **deepseek_escalation** — explicit debug / deep reasoning (default ``deepseek-r1:14b`` on escalation host ``172.20.2.230`` unless ``DEEPSEEK_ESCALATION_OLLAMA_MODEL`` overrides).
+* **deepseek_escalation** — explicit debug / deep reasoning (default ``deepseek-v4-flash:cloud`` on ``172.20.2.230``).
 
 Disable router (always lightweight LLM): ``ASK_DATA_ROUTER=0``.
 Force tier (operator override): ``ASK_DATA_ROUTE=lightweight|system_agent|deepseek`` (aliases: ``pml``, ``agent``, ``deep``, ``deepseek_escalation``).
