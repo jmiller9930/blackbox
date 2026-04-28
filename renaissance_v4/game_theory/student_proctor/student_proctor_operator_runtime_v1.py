@@ -735,17 +735,21 @@ def student_loop_seam_after_parallel_batch_v1(
                             run_student_decision_authority_for_trade_v1,
                         )
 
-                        run_student_decision_authority_for_trade_v1(
-                            job_id=str(run_id).strip(),
-                            fingerprint=fp_emit,
-                            scenario_id=sid,
-                            trade_id=str(o.trade_id),
-                            ere=ere,
-                            pkt=pkt,
-                            unified_router_enabled=unified_router,
-                            exam_run_contract_request_v1=ex_req if isinstance(ex_req, dict) else None,
-                            mandate_active_v1=mandate_active_v1,
-                        )
+                        try:
+                            run_student_decision_authority_for_trade_v1(
+                                job_id=str(run_id).strip(),
+                                fingerprint=fp_emit,
+                                scenario_id=sid,
+                                trade_id=str(o.trade_id),
+                                ere=ere,
+                                pkt=pkt,
+                                unified_router_enabled=unified_router,
+                                exam_run_contract_request_v1=ex_req if isinstance(ex_req, dict) else None,
+                                mandate_active_v1=mandate_active_v1,
+                            )
+                        except RuntimeError as rde:
+                            errors.append(f"{sid} trade={o.trade_id}: student_decision_authority_runtime: {rde}")
+                            continue
                     allowed_mids = frozenset(
                         str(z.get("record_id") or "").strip()
                         for z in rxx
@@ -1155,6 +1159,12 @@ def student_loop_seam_after_parallel_batch_v1(
                     errors.append(f"{sid} trade={o.trade_id}: {ve!r}")
                 except OSError as oe:
                     errors.append(f"{sid} trade={o.trade_id}: {type(oe).__name__}: {oe}")
+                except Exception as exc:
+                    # One trade must never abort the entire seam (939 outcomes); capture and continue.
+                    errors.append(
+                        f"{sid} trade={o.trade_id}: seam_trade_unhandled_exception: "
+                        f"{type(exc).__name__}: {exc}"
+                    )
 
         if trades_seen <= 0:
             emit_referee_used_student_output_batch_truth_v1(

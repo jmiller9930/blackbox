@@ -21,6 +21,7 @@ _NS_OLLAMA_REF = uuid.UUID("b2c3d4e5-f6a7-8b9c-0d1e-2f3a4b5c6d7e")
 
 
 from renaissance_v4.game_theory.student_proctor.contracts_v1 import (
+    CONFLICTING_INDICATORS_NO_CONFLICT_PACKET_LABEL_V1,
     CONTRACT_VERSION_STUDENT_PROCTOR_V1,
     GRADED_UNIT_TYPE_V1,
     SCHEMA_STUDENT_OUTPUT_V1,
@@ -33,7 +34,8 @@ def _student_llm_max_trades_v1() -> int | None:
     """
     Cap Ollama calls per batch for safety (full batch can be hundreds of trades).
 
-    ``PATTERN_GAME_STUDENT_LLM_MAX_TRADES`` unset → **20**. ``none`` / ``0`` / ``-1`` → unlimited.
+    ``PATTERN_GAME_STUDENT_LLM_MAX_TRADES`` unset / ``none`` / ``0`` / ``-1`` → **unlimited** (``None``).
+    Invalid integer → default cap **20**.
     """
     raw = (os.environ.get("PATTERN_GAME_STUDENT_LLM_MAX_TRADES") or "").strip().lower()
     if raw in ("", "none", "unlimited", "-1"):
@@ -45,6 +47,20 @@ def _student_llm_max_trades_v1() -> int | None:
         return n if n > 0 else None
     except ValueError:
         return 20
+
+
+def _ensure_conflicting_indicators_llm_contract_v1(out: dict[str, Any]) -> None:
+    """
+    Hard contract (no schema relaxation): ``conflicting_indicators`` must be a non-empty list.
+
+    When the model leaves it empty, inject the explicit no-contrary-evidence packet label so the
+    Student line remains honest and machine-checkable.
+    """
+    ci = out.get("conflicting_indicators")
+    if not isinstance(ci, list):
+        return
+    if len(ci) == 0:
+        out["conflicting_indicators"] = [CONFLICTING_INDICATORS_NO_CONFLICT_PACKET_LABEL_V1]
 
 
 def _ollama_chat_once_v1(
@@ -179,7 +195,9 @@ def emit_student_output_via_ollama_v1(
         "2) Hypothesis — hypothesis_kind_v1: exactly one of trend_continuation | mean_reversion | no_clear_edge; "
         "hypothesis_text_v1: one concise sentence stating the trade idea or explicit lack of edge.\n"
         "3) Evidence — supporting_indicators: string[] (min 1); conflicting_indicators: string[] (min 1); "
-        "each entry a short label grounded in the packet (fusion, regime, indicator, structure).\n"
+        "each entry a short label grounded in the packet (fusion, regime, indicator, structure). "
+        "If you see **no** contrary evidence in the packet, set conflicting_indicators to exactly "
+        f"one element: {CONFLICTING_INDICATORS_NO_CONFLICT_PACKET_LABEL_V1!r} (do not leave the list empty).\n"
         "4) Resolution — confidence_band: low | medium | high; context_fit: short string "
         "(e.g. trend | chop | reversal | breakout | exhaustion | range | unknown).\n"
         "5) Decision — student_action_v1: enter_long | enter_short | no_trade "
@@ -239,6 +257,8 @@ def emit_student_output_via_ollama_v1(
     if not pr or not all(isinstance(x, str) for x in pr):
         out["pattern_recipe_ids"] = [f"ollama_{llm_model.replace(':', '_')}_v1"]
     _merge_optional_thesis_from_parsed_v1(parsed, out)
+    if require_directional_thesis_v1:
+        _ensure_conflicting_indicators_llm_contract_v1(out)
     ve = validate_student_output_v1(out)
     if ve:
         return None, [f"student_output_invalid: {'; '.join(ve)}"]

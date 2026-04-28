@@ -61,6 +61,9 @@ _HYPOTHESIS_KINDS_V1 = frozenset({"trend_continuation", "mean_reversion", "no_cl
 
 # Precondition for **GT_DIRECTIVE_017** + Student decision protocol: LLM profile must seal a full
 # structured reasoning chain or reject before persist (see ``emit_student_output_via_ollama_v1``).
+# Explicit packet-grounded label when the Student sees no contrary evidence (LLM profile — not optional).
+CONFLICTING_INDICATORS_NO_CONFLICT_PACKET_LABEL_V1 = "none_observed_from_packet_v1"
+
 THESIS_REQUIRED_FOR_LLM_PROFILE_V1: tuple[str, ...] = (
     "context_interpretation_v1",
     "hypothesis_kind_v1",
@@ -94,10 +97,17 @@ def validate_student_output_directional_thesis_required_for_llm_profile_v1(doc: 
     for k in ("supporting_indicators", "conflicting_indicators"):
         v = doc.get(k)
         if isinstance(v, list) and len(v) == 0:
-            errs.append(
-                f"directional_thesis_required_for_llm_profile: {k} must be non-empty "
-                "(name at least one concrete packet-derived label per side)"
-            )
+            if k == "conflicting_indicators":
+                errs.append(
+                    "directional_thesis_required_for_llm_profile: conflicting_indicators must be non-empty "
+                    f"(use {CONFLICTING_INDICATORS_NO_CONFLICT_PACKET_LABEL_V1!r} when no contrary evidence "
+                    "is visible in the packet)"
+                )
+            else:
+                errs.append(
+                    f"directional_thesis_required_for_llm_profile: {k} must be non-empty "
+                    "(name at least one concrete packet-derived label per side)"
+                )
     if errs:
         return errs
     return _validate_student_output_optional_thesis_v1(doc)

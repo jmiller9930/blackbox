@@ -76,6 +76,50 @@ def test_ollama_rejects_json_missing_decision_protocol_fields(decision_packet: d
     assert err and any("thesis" in e.lower() or "llm_profile" in e.lower() for e in err)
 
 
+def test_ollama_empty_conflicting_indicators_normalized_to_packet_no_conflict_label(decision_packet: dict) -> None:
+    """Empty conflicting_indicators → explicit none_observed label (hard contract, not optional field)."""
+    from renaissance_v4.game_theory.student_proctor.contracts_v1 import (
+        CONFLICTING_INDICATORS_NO_CONFLICT_PACKET_LABEL_V1,
+    )
+
+    payload = {
+        "act": True,
+        "direction": "long",
+        "confidence_01": 0.55,
+        "pattern_recipe_ids": ["x"],
+        "reasoning_text": "protocol ok",
+        "student_decision_ref": "550e8400-e29b-41d4-a716-446655440000",
+        "context_interpretation_v1": "Packet shows range-bound action with neutral RSI on TESTUSDT.",
+        "hypothesis_kind_v1": "trend_continuation",
+        "hypothesis_text_v1": "Lean long while structure holds.",
+        "supporting_indicators": ["ema_bearish_packet_echo"],
+        "conflicting_indicators": [],
+        "confidence_band": "medium",
+        "context_fit": "range",
+        "invalidation_text": "Close below recent swing low voids the idea.",
+        "student_action_v1": "enter_long",
+    }
+
+    def fake_once(**_kwargs: object) -> tuple[str, str | None]:
+        return json.dumps(payload), None
+
+    with mock.patch(
+        "renaissance_v4.game_theory.student_proctor.student_ollama_student_output_v1._ollama_chat_once_v1",
+        fake_once,
+    ):
+        out, err = emit_student_output_via_ollama_v1(
+            decision_packet,
+            graded_unit_id="tr_ollama_conflict_empty",
+            decision_at_ms=5_000_000,
+            llm_model="stub-model",
+            ollama_base_url="http://127.0.0.1:11434",
+            prompt_version="test_pv",
+            require_directional_thesis_v1=True,
+        )
+    assert err == [] and isinstance(out, dict)
+    assert out.get("conflicting_indicators") == [CONFLICTING_INDICATORS_NO_CONFLICT_PACKET_LABEL_V1]
+
+
 def test_ollama_rejects_json_missing_thesis(decision_packet: dict) -> None:
     minimal = {
         "act": True,
