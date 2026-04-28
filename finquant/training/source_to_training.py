@@ -162,9 +162,10 @@ def dedupe_hash(instruction: str, input_text: str) -> str:
 
 
 _BANNED_SIMPLE_SIGNAL = re.compile(
-    r"(?is)rsi\s*[<>]=?\s*\d+.{0,40}(buy|long|sell|short)|"
-    r"(?is)macd\s+cross.{0,30}(buy|sell)|"
-    r"(?is)buy\s+signal.*rsi"
+    r"(?is)"
+    r"rsi\s*[<>]=?\s*\d+.{0,40}(buy|long|sell|short)|"
+    r"macd\s+cross.{0,30}(buy|sell)|"
+    r"buy\s+signal.*rsi"
 )
 _UNSUPPORTED_PRED = re.compile(
     r"(?i)\b(will\s+(definitely|certainly)|guaranteed\s+to\s+reach|sure\s+bet)\b"
