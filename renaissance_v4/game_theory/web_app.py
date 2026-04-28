@@ -386,7 +386,101 @@ _JOBS: dict[str, dict[str, Any]] = {}
 _JOB_MAX_AGE_SEC = 7200
 
 
+def _parallel_batch_watchdog_wall_sec_v1() -> int:
+    """
+    Wall-clock ceiling for **preflight** / **running** jobs without a terminal transition.
+
+    When exceeded, the job is marked ``status: error`` with ``stuck_parallel_batch_watchdog_v1`` and a
+    persisted terminal record so the scorecard / polling UI clear **without** restarting Flask.
+
+    ``PATTERN_GAME_BATCH_STUCK_AFTER_SEC`` — default **3600** (1 hour). Set **0** to disable.
+    Legitimate long batches: raise this (and ensure workers complete within it).
+    """
+    raw = (os.environ.get("PATTERN_GAME_BATCH_STUCK_AFTER_SEC") or "").strip()
+    if not raw:
+        return 3600
+    try:
+        n = int(raw)
+    except ValueError:
+        return 3600
+    return max(0, n)
+
+
+def _parallel_batch_watchdog_v1() -> None:
+    """Mark long-running parallel jobs as terminal **error** so UI/scorecard do not stay stuck on hourglass."""
+    limit = _parallel_batch_watchdog_wall_sec_v1()
+    if limit <= 0:
+        return
+    now = time.time()
+    candidates: list[str] = []
+    with _JOBS_LOCK:
+        for jid, v in list(_JOBS.items()):
+            if not isinstance(v, dict) or v.get("batch_watchdog_terminal_v1"):
+                continue
+            st = str(v.get("status") or "").strip().lower()
+            if st not in ("running", "preflight"):
+                continue
+            try:
+                created = float(v.get("created") or 0)
+            except (TypeError, ValueError):
+                continue
+            if now - created <= float(limit):
+                continue
+            candidates.append(str(jid))
+    for jid in candidates:
+        err_detail = ""
+        td_raw: str | None = None
+        age_s = 0.0
+        with _JOBS_LOCK:
+            j = _JOBS.get(jid)
+            if not isinstance(j, dict) or j.get("batch_watchdog_terminal_v1"):
+                continue
+            st = str(j.get("status") or "").strip().lower()
+            if st not in ("running", "preflight"):
+                continue
+            try:
+                created = float(j.get("created") or 0)
+            except (TypeError, ValueError):
+                continue
+            if now - created <= float(limit):
+                continue
+            age_s = now - created
+            err_detail = (
+                f"stuck_parallel_batch_watchdog_v1: batch remained {st} for ~{age_s:.0f}s "
+                f"(limit {limit}s) without finishing — marked terminal so the UI can recover. "
+                "A stuck Python worker thread may still consume CPU until Flask restarts; check logs."
+            )
+            result: dict[str, Any] = {
+                "ok": False,
+                "job_id": jid,
+                "error": err_detail,
+                "status_v1": "stuck_parallel_batch_watchdog_v1",
+                "batch_watchdog_v1": {"elapsed_sec_approx": age_s, "limit_sec": limit},
+            }
+            j["status"] = "error"
+            j["error"] = err_detail
+            j["result"] = result
+            j["preflight_display_status_v1"] = "batch_watchdog_timeout_v1"
+            j["batch_watchdog_terminal_v1"] = True
+            td_raw = str(j.get("telemetry_dir") or "").strip() or None
+        td_path = Path(td_raw) if td_raw else None
+        _persist_parallel_terminal_v1(
+            jid,
+            "error",
+            {
+                "ok": False,
+                "job_id": jid,
+                "error": err_detail,
+                "status_v1": "stuck_parallel_batch_watchdog_v1",
+                "batch_watchdog_v1": {"elapsed_sec_approx": age_s, "limit_sec": limit},
+            },
+            session_log_batch_dir=None,
+            telemetry_dir=td_path,
+        )
+
+
 def _prune_jobs() -> None:
+    _parallel_batch_watchdog_v1()
     now = time.time()
     with _JOBS_LOCK:
         stale = [k for k, v in _JOBS.items() if now - float(v.get("created", 0)) > _JOB_MAX_AGE_SEC]
