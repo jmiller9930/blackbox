@@ -1,6 +1,0 @@
-{
-  "schema": "student_test_mode_failure_v1",
-  "failure_reason": "student_test_insufficient_trade_count_v1",
-  "detail": "student_test_insufficient_trade_count_v1: got 0, need 10",
-  "trade_count_v1": 0
-}

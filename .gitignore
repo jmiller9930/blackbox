@@ -106,6 +106,9 @@ _tmp*.sqlite3
 # Student Proctor default learning JSONL (host-local; override via PATTERN_GAME_STUDENT_LEARNING_STORE)
 runtime/student_learning/
 
+# student_test_mode_v1 isolated harness output (engineering; never commit proof trees)
+runtime/student_test/
+
 # Learning-loop runtime trace JSONL (append-only; host-local under memory root or game_theory)
 renaissance_v4/game_theory/learning_trace_events_v1.jsonl
 **/learning_trace_events_v1.jsonl
