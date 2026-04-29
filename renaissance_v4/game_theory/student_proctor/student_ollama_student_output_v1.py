@@ -74,6 +74,14 @@ _OLLAMA_OPTIONS_STUDENT_TEST_CONTRACT_V1: dict[str, Any] = {
 }
 
 
+_GT036_SYSTEM_PROMPT_V1 = (
+    "You are a strict JSON emitter for the Student exam. Reply with EXACTLY one JSON object — "
+    "no markdown, no ``` fences, no numbered prose, no analysis sections. "
+    "Do not answer in Chinese prose outside JSON strings. "
+    "If you output anything that is not parseable JSON, you fail the exam."
+)
+
+
 def _ollama_chat_once_v1(
     *,
     base_url: str,
@@ -81,6 +89,7 @@ def _ollama_chat_once_v1(
     user_prompt: str,
     timeout_s: float = 180.0,
     options: dict[str, Any] | None = None,
+    system_prompt: str | None = None,
 ) -> tuple[str | None, str | None]:
     """Returns ``(assistant_text, error)``."""
     base = base_url.rstrip("/")
@@ -88,10 +97,14 @@ def _ollama_chat_once_v1(
     opts = dict(_OLLAMA_OPTIONS_DEFAULT_V1)
     if isinstance(options, dict) and options:
         opts.update(options)
+    messages: list[dict[str, str]] = []
+    if isinstance(system_prompt, str) and system_prompt.strip():
+        messages.append({"role": "system", "content": system_prompt.strip()})
+    messages.append({"role": "user", "content": user_prompt})
     payload = json.dumps(
         {
             "model": model,
-            "messages": [{"role": "user", "content": user_prompt}],
+            "messages": messages,
             "stream": False,
             "options": opts,
         }
@@ -304,6 +317,20 @@ def _finalize_student_output_from_assistant_text_v1(
     return out, []
 
 
+def _truncate_middle_for_repair_prompt_v1(text: str, *, max_chars: int = 52000) -> str:
+    """Large OHLCV dumps can exceed context; keep tail where annex + recent bars usually live."""
+    if len(text) <= max_chars:
+        return text
+    head = max_chars // 8
+    tail = max_chars - head - 80
+    return (
+        f"[TRUNCATED_MIDDLE original_chars={len(text)}]\n"
+        + text[:head]
+        + "\n…\n"
+        + text[-tail:]
+    )
+
+
 def _gt036_json_repair_prompt_v1(
     *,
     failed_raw_assistant: str,
@@ -312,6 +339,7 @@ def _gt036_json_repair_prompt_v1(
 ) -> str:
     reasons = [str(x) for x in failure_reasons if str(x).strip()][:40]
     raw_snip = (failed_raw_assistant or "")[:12000]
+    body = _truncate_middle_for_repair_prompt_v1(original_prompt)
     return (
         "GT_DIRECTIVE_036 — JSON REPAIR (exactly one retry).\n"
         "Your previous response was rejected. Output ONLY one corrected JSON object.\n"
@@ -323,7 +351,7 @@ def _gt036_json_repair_prompt_v1(
         + "\n<<<END_INVALID_RAW>>>\n\n"
         "Return ONLY valid JSON that satisfies the same contract as the original task below.\n\n"
         "--- ORIGINAL TASK (same packet and thesis requirements) ---\n"
-        + original_prompt
+        + body
     )
 
 
@@ -428,11 +456,13 @@ def emit_student_output_via_ollama_v1(
         llm_io_capture_v1["student_llm_ollama_options_v1"] = dict(ollama_opts or _OLLAMA_OPTIONS_DEFAULT_V1)
         llm_io_capture_v1["gt036_student_test_json_contract_v1"] = bool(student_contract)
 
+    sys1 = _GT036_SYSTEM_PROMPT_V1 if student_contract else None
     text1, err1 = _ollama_chat_once_v1(
         base_url=ollama_base_url,
         model=llm_model,
         user_prompt=user,
         options=ollama_opts,
+        system_prompt=sys1,
     )
     if isinstance(llm_io_capture_v1, dict):
         llm_io_capture_v1["raw_assistant_text_attempt_1_v1"] = text1 if isinstance(text1, str) else None
@@ -468,6 +498,7 @@ def emit_student_output_via_ollama_v1(
         model=llm_model,
         user_prompt=repair_user,
         options=ollama_opts,
+        system_prompt=sys1,
     )
     if isinstance(llm_io_capture_v1, dict):
         llm_io_capture_v1["json_contract_retry_used_v1"] = True
