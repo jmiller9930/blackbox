@@ -30,6 +30,7 @@ GT041_STYLE_EXAM_IDS_V1: frozenset[str] = frozenset(
     {
         "d6-memory-ev-proof-001",
         "d6-memory-ev-proof-002",
+        "d6-memory-ev-proof-003",
     }
 )
 

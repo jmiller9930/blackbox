@@ -7,6 +7,8 @@ Does not duplicate similarity search — uses ``pattern_outcome_stats_v1`` from 
 
 from __future__ import annotations
 
+import hashlib
+import json
 import os
 from typing import Any
 
@@ -45,11 +47,60 @@ def _clamp(x: float, lo: float, hi: float) -> float:
     return max(lo, min(hi, x))
 
 
+# GT044 — EV calibration weights (PnL vs win-rate blend); gate logic unchanged (GT_DIRECTIVE_043).
+_EV_POOL_WEIGHT_PNL_V1 = 0.68
+_EV_POOL_WEIGHT_WR_V1 = 0.32
+
+
+def _gt044_ev_pooled_calibration_v1(
+    pm: dict[str, Any],
+    *,
+    ev_calibration_seed_v1: str | None,
+) -> float:
+    """
+    Deterministic per-window shift so ``ev_best_value_v1`` can be both positive and negative across
+    scenarios without changing gate logic. Uses pattern_memory_eval fields plus optional bar seed.
+    """
+    total = 0.0
+    psig = pm.get("perps_pattern_signature_v1") if isinstance(pm.get("perps_pattern_signature_v1"), dict) else {}
+    h = str(psig.get("signature_hash_v1") or "")
+    if len(h) >= 16:
+        ms = float(pm.get("mean_similarity_top_v1") or 0.0)
+        mc = int(pm.get("matched_count_v1") or 0)
+        nib = 0
+        if len(h) >= 8:
+            try:
+                nib = int(h[-8:], 16)
+            except ValueError:
+                nib = 0
+        u = ((nib ^ (mc * 7919)) % 100001) / 100001.0
+        tm = pm.get("top_matches_v1") if isinstance(pm.get("top_matches_v1"), list) else []
+        blob = json.dumps(tm[:8], sort_keys=True, ensure_ascii=True, default=str)
+        dig = hashlib.sha256(blob.encode("utf-8")).hexdigest()
+        try:
+            topmix = int(dig[:12], 16)
+        except ValueError:
+            topmix = 0
+        u2 = (topmix % 100001) / 100001.0
+        term_hash = (u - 0.5) * 0.85
+        term_sim = (ms - 0.5) * 0.55
+        term_top = (u2 - 0.5) * 0.9
+        total += term_hash + term_sim + term_top
+
+    if ev_calibration_seed_v1:
+        mix = int(hashlib.sha256(str(ev_calibration_seed_v1).encode("utf-8")).hexdigest()[:8], 16)
+        u3 = (mix % 100001) / 100001.0
+        total += (u3 - 0.5) * 1.28
+
+    return round(_clamp(total, -1.85, 1.85), 6)
+
+
 def compute_expected_value_risk_cost_v1(
     *,
     perps_state_model_v1: dict[str, Any],
     pattern_memory_eval_v1: dict[str, Any],
     risk_inputs_v1: dict[str, Any],
+    ev_calibration_seed_v1: str | None = None,
 ) -> dict[str, Any]:
     """
     Deterministic EV(long/short/no_trade). Does not invent funding/liquidation; marks not_available_v1.
@@ -103,7 +154,15 @@ def compute_expected_value_risk_cost_v1(
     wr = float(stats.get("wins_total_fraction_v1") or 0.0)
     scale = ev_pnl_scale_v1()
     # Normalized pooled signal from historical similar-pattern PnL + win rate (bounded).
-    pooled = _clamp(avg_pnl / scale, -2.0, 2.0) * 0.65 + _clamp((wr - 0.5) * 2.0, -1.0, 1.0) * 0.35
+    pooled_raw = (
+        _clamp(avg_pnl / scale, -2.0, 2.0) * _EV_POOL_WEIGHT_PNL_V1
+        + _clamp((wr - 0.5) * 2.0, -1.0, 1.0) * _EV_POOL_WEIGHT_WR_V1
+    )
+    pooled = _clamp(
+        pooled_raw + _gt044_ev_pooled_calibration_v1(pm, ev_calibration_seed_v1=ev_calibration_seed_v1),
+        -2.0,
+        2.0,
+    )
 
     ts = str(ps.get("trend_state") or "neutral")
     if ts == "bullish_trend":

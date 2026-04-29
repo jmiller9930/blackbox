@@ -13,6 +13,7 @@ GT_DIRECTIVE_041 / GT_DIRECTIVE_043 (seeded pattern memory + EV proof; same harn
 
     python3 renaissance_v4/game_theory/exam/student_reasoning_exam_v1.py --exam-id d6-memory-ev-proof-001
     python3 renaissance_v4/game_theory/exam/student_reasoning_exam_v1.py --exam-id d6-memory-ev-proof-002
+    python3 renaissance_v4/game_theory/exam/student_reasoning_exam_v1.py --exam-id d6-memory-ev-proof-003
 
 Optional::
 

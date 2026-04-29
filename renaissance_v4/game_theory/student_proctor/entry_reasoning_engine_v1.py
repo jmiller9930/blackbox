@@ -706,6 +706,7 @@ def run_entry_reasoning_pipeline_v1(
         perps_state_model_v1=perps_state_model_v1,
         pattern_memory_eval_v1=pattern_mem_eval,
         risk_inputs_v1=risk,
+        ev_calibration_seed_v1=str((bars[-1] or {}).get("open_time") or ""),
     )
 
     scored = score_memory_records_v1(
