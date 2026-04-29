@@ -1,0 +1,12 @@
+FinQuant source smoke — placeholder corpus for extraction and concept segmentation.
+
+Perpetual contracts reference mark prices and funding intervals published by the venue.
+Maintenance margin depends on position size, leverage tier, and cross versus isolated mode.
+Liquidation occurs when account equity falls below required maintenance; docs describe order types and partial fills under stress.
+
+Risk policy excerpts state that operator narratives do not substitute for exchange rulebooks,
+fee schedules, or independent reconciliation of balances and positions at UTC timestamps.
+Operators must cite instrument identifiers, venue-specific collateral rules, and funding index methodology before drawing conclusions.
+
+Repeat block for chunking: venue documentation outlines funding payments between long and short holders,
+index composition for mark prices, and circuit breaker behaviors that may widen spreads or throttle orders during volatility.

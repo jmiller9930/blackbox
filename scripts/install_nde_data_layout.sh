@@ -23,7 +23,10 @@ if [[ -d "${TOOLS}" ]]; then
   mkdir -p "${DEST}/tools"
   cp -f "${TOOLS}/nde_source_processor.py" "${DEST}/tools/"
   [[ -f "${TOOLS}/requirements.txt" ]] && cp -f "${TOOLS}/requirements.txt" "${DEST}/tools/"
-  echo "Installed tools: ${DEST}/tools/nde_source_processor.py"
+  for _helper in setup_env.sh run_processor.sh; do
+    [[ -f "${TOOLS}/${_helper}" ]] && cp -f "${TOOLS}/${_helper}" "${DEST}/tools/" && chmod +x "${DEST}/tools/${_helper}"
+  done
+  echo "Installed tools: ${DEST}/tools/nde_source_processor.py, setup_env.sh, run_processor.sh"
 fi
 
 echo "Done. Top-level README: ${DEST}/README.md"

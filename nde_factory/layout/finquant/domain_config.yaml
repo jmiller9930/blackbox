@@ -1,0 +1,67 @@
+# FinQuant NDE — domain config for nde_source_processor.py
+# Deploy: /data/NDE/finquant/domain_config.yaml
+
+domain: finquant
+version: "0.3"
+
+source_categories:
+  - markets
+  - risk
+  - policy
+
+allowed_source_types:
+  - pdf
+  - html
+  - txt
+  - md
+  - json
+  - csv
+
+concept_schema_extensions:
+  instrument_hints:
+    - perp
+    - spot
+    - funding
+
+chunk_chars: 1200
+chunk_overlap: 200
+
+target_row_count: 150
+adversarial_ratio: 0.7
+
+default_risk_notes: >-
+  Trading and risk conclusions require position context, venue rules, timestamps, and independent verification—not narrative excerpts alone.
+
+verifier:
+  instruction_template: >-
+    You are a FinQuant verifier for exchange rulebooks and risk disclosures. Answer using exactly four labeled sections in this order:
+    Claim reviewed:, Math verdict:, DATA evidence required:, Final verifier status:. Be concise.
+
+data_evidence_template:
+  - "Instrument spec: contract ID, tick/lot, margin mode, fee schedule references"
+  - "Market data: UTC timestamps, venue, OHLC or mid used for the claim"
+  - "Position state: side, size, leverage, liquidation thresholds where relevant"
+  - "Funding / index sources cited by venue documentation"
+  - "Risk disclosures: limitation clauses, maintenance margin formula pointers"
+
+adversarial_claim_templates:
+  - "Funding rate alone predicts next-hour spot direction with high certainty."
+  - "Because liquidation did not occur, maximum leverage was safe for all accounts."
+  - "Public docs imply guaranteed fills at mid price during volatility spikes."
+  - "Cross-margin removes liquidation risk entirely when collateral is diversified."
+  - "Historical backtests on one venue transfer without adjustment to another venue."
+
+paths:
+  raw: sources/raw
+  extracted: sources/extracted
+  concepts: sources/concepts
+  reports: reports
+
+output:
+  concepts_filename: concepts_v0.3.jsonl
+  staging_filename: finquant_v0.3_from_sources.jsonl
+  report_filename: source_processor_report_v0.3.md
+
+quality_gates:
+  require_source_ids: true
+  min_rows: 1
