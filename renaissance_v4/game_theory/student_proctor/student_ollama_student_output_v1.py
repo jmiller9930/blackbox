@@ -346,6 +346,26 @@ def _extract_parsed_json_dict_from_text_v1(text: str) -> dict[str, Any] | None:
     return obj if isinstance(obj, dict) else None
 
 
+def _gt037_validation_length_hints_v1(doc: dict[str, Any]) -> str:
+    """Concrete length diagnostics so the model can fix short thesis strings in one pass."""
+    lines: list[str] = []
+    ci = doc.get("context_interpretation_v1")
+    if isinstance(ci, str):
+        lines.append(
+            f"- context_interpretation_v1: current length is {len(ci)} characters; MUST be >= 16. "
+            "Expand using packet-only summary words — do not leave this field short."
+        )
+    ht = doc.get("hypothesis_text_v1")
+    if isinstance(ht, str):
+        lines.append(
+            f"- hypothesis_text_v1: current length is {len(ht)} characters; must be a substantive sentence."
+        )
+    inv = doc.get("invalidation_text")
+    if isinstance(inv, str) and len(inv.strip()) < 8:
+        lines.append("- invalidation_text: expand to concrete packet-grounded invalidation.")
+    return "\n".join(lines) if lines else ""
+
+
 def _gt037_validation_repair_prompt_v1(
     *,
     failed_parsed_json: dict[str, Any],
@@ -360,6 +380,7 @@ def _gt037_validation_repair_prompt_v1(
     if len(blob) > 28000:
         blob = blob[:28000] + "\n...[truncated]..."
     errs = [str(x) for x in validation_errors][:40]
+    length_hints = _gt037_validation_length_hints_v1(failed_parsed_json)
     return (
         "GT_DIRECTIVE_037 — VALIDATION REPAIR (exactly one attempt).\n"
         "Your JSON parsed but FAILED validation/thesis rules below.\n"
@@ -368,6 +389,8 @@ def _gt037_validation_repair_prompt_v1(
         "contradict each other or the packet — fix invalid fields only.\n\n"
         "VALIDATION ERRORS (fix every item):\n"
         + ("\n".join(f"- {e}" for e in errs) or "- (unspecified)")
+        + "\n\nLENGTH / SHAPE FIXES (mandatory when applicable):\n"
+        + (length_hints if length_hints else "- (see constraints below)")
         + "\n\nFIELD CONSTRAINTS (must all be satisfied):\n"
         + thesis_constraint_reminder
         + "\n\nFAILED PARSED JSON (emit a corrected single object):\n"
@@ -656,7 +679,8 @@ def emit_student_output_via_ollama_v1(
     if isinstance(llm_io_capture_v1, dict):
         llm_io_capture_v1["raw_assistant_text_v1"] = text_after_json_phase
         llm_io_capture_v1["json_repair_attempted_v1"] = json_repair_attempted_v1
-    return None, list(errs_after_json_phase) + list(errs_v)
+    merged_errs = [str(x) for x in errs_after_json_phase] + [str(x) for x in errs_v]
+    return None, list(dict.fromkeys(merged_errs))
 
 
 def verify_ollama_model_tag_available_v1(
