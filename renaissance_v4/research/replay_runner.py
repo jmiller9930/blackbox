@@ -462,6 +462,11 @@ def run_manifest_replay(
     ledger = LearningLedger()
     processed = 0
 
+    # GT058 — rolling triple-barrier label memory per coarse signature (replay entry gate only).
+    _gt058_label_memory: dict[str, list[int]] = {}
+    _gt058_entry_sig_by_entry_time: dict[int, str] = {}
+    _gt058_blocked_entries = 0
+
     catalog = load_catalog(default_catalog_path())
     recall_fusion_ok = bool(
         decision_context_recall_enabled and fusion_engine_supports_decision_recall(manifest, catalog)
@@ -819,6 +824,21 @@ def run_manifest_replay(
                     regime=regime,
                 )
                 closes_recorded += 1
+                # GT058 — fold barrier label into signature memory after close (test activation).
+                try:
+                    from renaissance_v4.game_theory.gt058_label_gate_v1 import (
+                        gt058_label_gate_activation_enabled_v1,
+                    )
+                    from renaissance_v4.game_theory.triple_barrier_labels_v1 import triple_barrier_label_v1
+
+                    if gt058_label_gate_activation_enabled_v1():
+                        et_i = int(closed.entry_time)
+                        sk58 = _gt058_entry_sig_by_entry_time.pop(et_i, None)
+                        if sk58 is not None:
+                            lab_i = int(triple_barrier_label_v1(reason))
+                            _gt058_label_memory.setdefault(sk58, []).append(lab_i)
+                except Exception:
+                    pass
                 if verbose:
                     print(
                         f"[execution] bar_pnl={bar_pnl:.6f} cumulative_pnl={exec_manager.cumulative_pnl:.6f}"
@@ -846,6 +866,32 @@ def run_manifest_replay(
         )
         if should_open and entry_path_v1 == "full_control_024d_fusion_veto":
             student_full_control_024d_fusion_veto_entries += 1
+
+        gt058_sk_for_open: str | None = None
+        try:
+            from renaissance_v4.game_theory.gt058_label_gate_v1 import (
+                gt058_label_gate_activation_enabled_v1,
+                gt058_should_block_entry_from_prior_labels_v1,
+                gt058_signature_key_v1,
+            )
+
+            if (
+                should_open
+                and entry_direction in {"long", "short"}
+                and gt058_label_gate_activation_enabled_v1()
+            ):
+                gt058_sk_for_open = gt058_signature_key_v1(
+                    regime, str(fusion_result.direction or ""), active_signal_names
+                )
+                priors = _gt058_label_memory.get(gt058_sk_for_open) or []
+                if gt058_should_block_entry_from_prior_labels_v1(priors):
+                    should_open = False
+                    entry_direction = "flat"
+                    _gt058_blocked_entries += 1
+                    gt058_sk_for_open = None
+        except Exception:
+            gt058_sk_for_open = None
+
         if should_open and entry_direction in {"long", "short"}:
             exec_manager.open_trade(
                 symbol=state.symbol,
@@ -863,6 +909,15 @@ def run_manifest_replay(
             )
             opened_this_bar = True
             entries_attempted += 1
+            try:
+                from renaissance_v4.game_theory.gt058_label_gate_v1 import (
+                    gt058_label_gate_activation_enabled_v1,
+                )
+
+                if gt058_label_gate_activation_enabled_v1() and gt058_sk_for_open is not None:
+                    _gt058_entry_sig_by_entry_time[int(state.timestamp)] = gt058_sk_for_open
+            except Exception:
+                pass
             if len(trade_entry_signal_proof_samples) < SIGNAL_TRACE_MAX:
                 trade_entry_signal_proof_samples.append(
                     {
@@ -1268,6 +1323,17 @@ def run_manifest_replay(
         out["decision_context_recall_stats"] = dcr_stats
         out["decision_context_recall_samples"] = dcr_samples
     out["replay_data_audit"] = replay_data_audit
+    try:
+        from renaissance_v4.game_theory.gt058_label_gate_v1 import gt058_label_gate_activation_enabled_v1
+
+        if gt058_label_gate_activation_enabled_v1():
+            out["gt058_label_gate_audit_v1"] = {
+                "schema": "gt058_label_gate_audit_v1",
+                "blocked_entries_total": int(_gt058_blocked_entries),
+                "prior_label_signature_buckets": len(_gt058_label_memory),
+            }
+    except Exception:
+        pass
     return out
 
 

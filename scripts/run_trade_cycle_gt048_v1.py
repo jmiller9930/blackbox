@@ -185,6 +185,14 @@ def main() -> int:
             "resolved tape N times with shifted timestamps (short fixture DBs)."
         ),
     )
+    ap.add_argument(
+        "--gt058-label-gate",
+        action="store_true",
+        dest="gt058_label_gate",
+        help=(
+            "GT058 (test mode): label-based replay entry gate + student_output overlay from GT055 labels."
+        ),
+    )
     args = ap.parse_args()
 
     jid = str(args.job_id).strip()
@@ -197,6 +205,9 @@ def main() -> int:
 
     if args.gt057_tape_repeat is not None:
         os.environ["GT057_REPLAY_TAPE_REPEAT_V1"] = str(max(1, int(args.gt057_tape_repeat)))
+
+    if args.gt058_label_gate:
+        os.environ["GT058_LABEL_GATE_ACTIVATION_V1"] = "1"
 
     if args.enable_labels or args.gt055_report:
         os.environ["GT055_TRIPLE_BARRIER_LABELS_V1"] = "1"

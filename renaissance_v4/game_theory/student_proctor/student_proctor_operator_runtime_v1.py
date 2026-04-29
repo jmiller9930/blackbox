@@ -1344,6 +1344,14 @@ def student_loop_seam_after_parallel_batch_v1(
                     )
                     if isinstance(_pps, dict) and str(_pps.get("schema") or "") == "perps_pattern_signature_v1":
                         lr["perps_pattern_signature_v1"] = _pps
+                    try:
+                        from renaissance_v4.game_theory.gt058_label_gate_v1 import (
+                            apply_gt058_student_output_override_v1,
+                        )
+
+                        apply_gt058_student_output_override_v1(lr)
+                    except Exception:
+                        pass
                     l3 = build_student_panel_l3_payload_v1(
                         str(run_id).strip(),
                         str(o.trade_id),
