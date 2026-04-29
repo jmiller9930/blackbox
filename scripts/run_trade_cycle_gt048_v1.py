@@ -38,6 +38,45 @@ if str(_REPO) not in sys.path:
 os.environ.setdefault("PATTERN_GAME_GROUNDHOG_BUNDLE", "0")
 
 
+def _parse_timeframe_to_minutes(tf: str | None) -> int:
+    """Replay rollup granularity; must be >=5 and a multiple of 5 (5m base bars)."""
+    if tf is None or not str(tf).strip():
+        return 5
+    s = str(tf).strip().lower()
+    if s.endswith("m"):
+        n = int(s[:-1])
+    elif s.endswith("h"):
+        n = int(s[:-1]) * 60
+    else:
+        n = int(float(s))
+    if n < 5:
+        n = 5
+    if n % 5 != 0:
+        raise ValueError(f"timeframe minutes must be a multiple of 5, got {n}")
+    return n
+
+
+def _write_effective_manifest(
+    *,
+    repo: Path,
+    base_manifest: Path,
+    symbol: str | None,
+    timeframe_label: str | None,
+    job_root: Path,
+) -> Path:
+    """Copy SR1-style manifest with optional symbol/timeframe overrides (audit + replay hints)."""
+    data = json.loads(base_manifest.read_text(encoding="utf-8"))
+    if symbol:
+        data["symbol"] = str(symbol).strip().upper()
+    if timeframe_label:
+        data["timeframe"] = str(timeframe_label).strip().lower()
+    sid = str(data.get("strategy_id") or "manifest")
+    data["strategy_id"] = f"{sid}_gt048_overlay_v1"
+    out = job_root / "effective_manifest_gt048.json"
+    out.write_text(json.dumps(data, indent=2, ensure_ascii=False) + "\n", encoding="utf-8")
+    return out
+
+
 def _bootstrap_env(job_id: str) -> Path:
     root = (_REPO / "runtime" / "gt048_cycle" / job_id).resolve()
     root.mkdir(parents=True, exist_ok=True)
@@ -55,6 +94,30 @@ def main() -> int:
     ap.add_argument("--bars", type=int, default=100, help="Replay tail bars (rm_preflight_replay_tail_bars_v1).")
     ap.add_argument("--job-id", type=str, required=True, dest="job_id")
     ap.add_argument("--manifest", type=str, default=str(_DEFAULT_MANIFEST()))
+    ap.add_argument(
+        "--symbol",
+        type=str,
+        default=None,
+        help="Override manifest symbol (e.g. SOLUSDT).",
+    )
+    ap.add_argument(
+        "--timeframe",
+        type=str,
+        default=None,
+        help='Replay candle timeframe label / rollup (e.g. "15m" → 15-minute bars from 5m DB).',
+    )
+    ap.add_argument(
+        "--min-closed-trades",
+        type=int,
+        default=5,
+        dest="min_closed_trades",
+        help="Minimum closed trades required before seam (GT050 often uses 100+).",
+    )
+    ap.add_argument(
+        "--enforce-gt050",
+        action="store_true",
+        help="Exit 5 if GT050 loss_avoided_count < 1 (large-cycle loss-avoidance proof).",
+    )
     args = ap.parse_args()
 
     jid = str(args.job_id).strip()
@@ -62,7 +125,13 @@ def main() -> int:
         print("ERROR: --job-id required", file=sys.stderr)
         return 4
 
-    _bootstrap_env(jid)
+    root = _bootstrap_env(jid)
+
+    try:
+        tf_min = _parse_timeframe_to_minutes(args.timeframe)
+    except ValueError as e:
+        print(f"ERROR: {e}", file=sys.stderr)
+        return 4
 
     # Imports after env so memory paths resolve under gt048_cycle/<job_id>.
     from renaissance_v4.core.outcome_record import (
@@ -92,15 +161,27 @@ def main() -> int:
         print(f"ERROR: manifest not found: {args.manifest}", file=sys.stderr)
         return 4
 
-    mp_resolved = str(resolve_scenario_manifest_path(manifest_path))
+    base_resolved = resolve_scenario_manifest_path(manifest_path)
+    if args.symbol or args.timeframe:
+        eff = _write_effective_manifest(
+            repo=_REPO,
+            base_manifest=base_resolved,
+            symbol=args.symbol,
+            timeframe_label=args.timeframe,
+            job_root=root,
+        )
+        mp_resolved = str(eff.resolve())
+    else:
+        mp_resolved = str(base_resolved)
+
     scenario_sid = "".join(c if c.isalnum() or c in "-_" else "_" for c in jid)[:120]
     scenario = {
         "scenario_id": scenario_sid or "gt048_scenario",
         "manifest_path": mp_resolved,
         "rm_preflight_replay_tail_bars_v1": int(args.bars),
+        "evaluation_window": {"candle_timeframe_minutes": int(tf_min)},
     }
 
-    tf_min = 5
     ob_audit = {"candle_timeframe_minutes": tf_min}
     scorecard_extras = {"skip_cold_baseline": True}
 
@@ -159,11 +240,12 @@ def main() -> int:
                 emit_baseline_artifacts=False,
                 verbose=False,
                 replay_max_bars_v1=int(args.bars),
+                candle_timeframe_minutes=int(tf_min),
             )
             outcomes = list(prep.get("outcomes") or [])
 
     n_closed = len(outcomes)
-    min_tr = 5
+    min_tr = max(1, int(args.min_closed_trades))
     if n_closed < min_tr:
         print(
             f"ERROR: need >={min_tr} closed trades for stable proof, got {n_closed}",
@@ -346,6 +428,7 @@ def main() -> int:
         rx = pkt_rx.get(FIELD_RETRIEVED_STUDENT_EXPERIENCE_V1)
         rx_n = len(rx) if isinstance(rx, list) else 0
 
+    gt050 = _gt050_analysis(store_p, jid)
     proof = {
         "directive": "GT048",
         "job_id": jid,
@@ -354,8 +437,13 @@ def main() -> int:
         "session_log_batch_dir_pass1": str(batch_dir.resolve()),
         "closed_trades": n_closed,
         "memory_rows_promoted": promoted,
+        "retrieval_matches": int(seam2.get("student_retrieval_matches") or 0),
         "retrieval_matches_later": max(retrieval_later, rx_n),
         "decisions_changed_due_to_memory_or_ev": changed,
+        "repeated_losing_patterns": gt050.get("repeated_losing_patterns", 0),
+        "memory_blocked_trades": gt050.get("memory_blocked_trades", 0),
+        "loss_avoided_count": gt050.get("loss_avoided_count", 0),
+        "gt050": gt050,
         "seam_pass1": {
             "student_learning_rows_appended": seam1.get("student_learning_rows_appended"),
             "student_retrieval_matches": seam1.get("student_retrieval_matches"),
@@ -377,11 +465,201 @@ def main() -> int:
 
     if not proof["acceptance"]["met"]:
         return 3
+    if args.enforce_gt050 and int(gt050.get("loss_avoided_count") or 0) < 1:
+        return 5
     return 0
 
 
 def _DEFAULT_MANIFEST() -> Path:
     return _REPO / "renaissance_v4" / "configs" / "manifests" / "sr1_deterministic_trade_proof_v1.json"
+
+
+def _sig_hash_v1(rec: dict[str, Any]) -> str | None:
+    pps = rec.get("perps_pattern_signature_v1")
+    if isinstance(pps, dict):
+        h = pps.get("signature_hash_v1")
+        return str(h).strip() if h else None
+    return None
+
+
+def _referee_pnl(rec: dict[str, Any]) -> float | None:
+    ref = rec.get("referee_outcome_subset")
+    if not isinstance(ref, dict):
+        return None
+    try:
+        return float(ref.get("pnl"))
+    except (TypeError, ValueError):
+        return None
+
+
+def _student_action_v1(rec: dict[str, Any]) -> str:
+    so = rec.get("student_output")
+    if not isinstance(so, dict):
+        return ""
+    return str(so.get("student_action_v1") or "").strip().lower()
+
+
+def _pattern_memory_eval(rec: dict[str, Any]) -> dict[str, Any]:
+    so = rec.get("student_output")
+    if not isinstance(so, dict):
+        return {}
+    ere = so.get("entry_reasoning_eval_v1")
+    if not isinstance(ere, dict):
+        return {}
+    pme = ere.get("pattern_memory_eval_v1")
+    return pme if isinstance(pme, dict) else {}
+
+
+def _indicator_bias_from_ere(ere: dict[str, Any] | None) -> str:
+    if not isinstance(ere, dict):
+        return ""
+    ice = ere.get("indicator_context_eval_v1")
+    if not isinstance(ice, dict):
+        return ""
+    sf = ice.get("support_flags_v1")
+    if not isinstance(sf, dict):
+        return ""
+    if sf.get("long"):
+        return "long_bias"
+    if sf.get("short"):
+        return "short_bias"
+    return "neutral"
+
+
+def _gt050_analysis(store_path: Path, job_id: str) -> dict[str, Any]:
+    """GT050 counters + one proof pair from merged pass1/pass2 JSONL (same store file)."""
+    records: list[dict[str, Any]] = []
+    p = Path(store_path)
+    if not p.is_file():
+        return {
+            "repeated_losing_patterns": 0,
+            "memory_blocked_trades": 0,
+            "loss_avoided_count": 0,
+            "proof_pair": None,
+            "note": "store_missing",
+        }
+    with p.open(encoding="utf-8") as fh:
+        for line in fh:
+            line = line.strip()
+            if not line:
+                continue
+            try:
+                records.append(json.loads(line))
+            except json.JSONDecodeError:
+                continue
+
+    from collections import defaultdict
+
+    losses_per_sig: defaultdict[str, int] = defaultdict(int)
+    for r in records:
+        sh = _sig_hash_v1(r)
+        if not sh:
+            continue
+        pnl = _referee_pnl(r)
+        if pnl is not None and pnl < 0:
+            losses_per_sig[sh] += 1
+
+    repeated_losing_patterns = sum(1 for n in losses_per_sig.values() if n >= 2)
+
+    blocked: list[dict[str, Any]] = []
+    pass2 = f"{job_id}-pass2"
+    for r in records:
+        if str(r.get("run_id") or "") != pass2:
+            continue
+        pme = _pattern_memory_eval(r)
+        stats = pme.get("pattern_outcome_stats_v1") if isinstance(pme.get("pattern_outcome_stats_v1"), dict) else {}
+        try:
+            avg_pnl = float(stats.get("avg_pnl") or 0.0)
+        except (TypeError, ValueError):
+            avg_pnl = 0.0
+        try:
+            wins_frac = float(stats.get("wins_total_fraction_v1") or 1.0)
+        except (TypeError, ValueError):
+            wins_frac = 1.0
+        try:
+            cnt_st = int(stats.get("count") or 0)
+        except (TypeError, ValueError):
+            cnt_st = 0
+        losing_history = avg_pnl < 0 or (cnt_st >= 3 and wins_frac < 0.5)
+        mc = 0
+        try:
+            mc = int(pme.get("matched_count_v1") or 0)
+        except (TypeError, ValueError):
+            mc = 0
+        if _student_action_v1(r) == "no_trade" and mc >= 1 and losing_history:
+            blocked.append(r)
+
+    memory_blocked_trades = len(blocked)
+    loss_avoided_count = memory_blocked_trades
+
+    proof_pair: dict[str, Any] | None = None
+    if blocked:
+        b = blocked[0]
+        sh_b = _sig_hash_v1(b)
+        if sh_b:
+            a_loss = next(
+                (
+                    x
+                    for x in records
+                    if str(x.get("run_id") or "") == job_id
+                    and _sig_hash_v1(x) == sh_b
+                    and (_referee_pnl(x) or 0.0) < 0
+                ),
+                None,
+            )
+            if a_loss is None:
+                a_loss = next(
+                    (
+                        x
+                        for x in records
+                        if str(x.get("run_id") or "") == job_id
+                        and _sig_hash_v1(x) == sh_b
+                    ),
+                    None,
+                )
+            refb = b.get("referee_outcome_subset") if isinstance(b.get("referee_outcome_subset"), dict) else {}
+            proof_pair = {
+                "trade_a_loss": None,
+                "trade_b_later": None,
+            }
+            if a_loss is not None:
+                refa = a_loss.get("referee_outcome_subset") if isinstance(a_loss.get("referee_outcome_subset"), dict) else {}
+                ere_a = (
+                    (a_loss.get("student_output") or {}).get("entry_reasoning_eval_v1")
+                    if isinstance(a_loss.get("student_output"), dict)
+                    else None
+                )
+                pre_a = _indicator_bias_from_ere(ere_a) if isinstance(ere_a, dict) else ""
+                proof_pair["trade_a_loss"] = {
+                    "trade_id": str(a_loss.get("graded_unit_id") or ""),
+                    "signature_hash": _sig_hash_v1(a_loss),
+                    "action": _student_action_v1(a_loss) or None,
+                    "pnl": _referee_pnl(a_loss),
+                    "exit_reason": refa.get("exit_reason"),
+                    "pre_indicator_bias": pre_a or None,
+                }
+            ere_b = (
+                (b.get("student_output") or {}).get("entry_reasoning_eval_v1")
+                if isinstance(b.get("student_output"), dict)
+                else None
+            )
+            pre_b = _indicator_bias_from_ere(ere_b) if isinstance(ere_b, dict) else ""
+            proof_pair["trade_b_later"] = {
+                "trade_id": str(b.get("graded_unit_id") or ""),
+                "signature_hash": sh_b,
+                "retrieved": True,
+                "pre_memory_action": pre_b or None,
+                "final_action": _student_action_v1(b) or None,
+                "pnl": _referee_pnl(b),
+                "loss_avoided": "YES" if loss_avoided_count >= 1 else "NO",
+            }
+
+    return {
+        "repeated_losing_patterns": repeated_losing_patterns,
+        "memory_blocked_trades": memory_blocked_trades,
+        "loss_avoided_count": loss_avoided_count,
+        "proof_pair": proof_pair,
+    }
 
 
 if __name__ == "__main__":
