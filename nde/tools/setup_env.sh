@@ -11,7 +11,17 @@ if [[ ! -f "${REQ}" ]]; then
   exit 1
 fi
 
-python3 -m venv "${VENV}"
+rm -rf "${VENV}"
+if ! python3 -m venv "${VENV}"; then
+  echo "warn: standard venv failed (often missing python3-venv/ensurepip); retrying --without-pip + get-pip" >&2
+  rm -rf "${VENV}"
+  python3 -m venv --without-pip "${VENV}"
+  GET_PIP="$(mktemp /tmp/get-pip-nde.XXXXXX.py)"
+  curl -fsSL https://bootstrap.pypa.io/get-pip.py -o "${GET_PIP}"
+  "${VENV}/bin/python" "${GET_PIP}"
+  rm -f "${GET_PIP}"
+fi
+
 "${VENV}/bin/pip" install --upgrade pip
 "${VENV}/bin/pip" install -r "${REQ}"
 echo "VENV_READY=${VENV}"
