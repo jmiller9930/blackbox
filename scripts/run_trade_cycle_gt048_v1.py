@@ -21,6 +21,11 @@ Usage::
     --job-id d9-generalization-proof-001 \\
     --promotion-e-min -0.05 --gt051-report
 
+  PYTHONPATH=. python3 scripts/run_trade_cycle_gt048_v1.py \\
+    --bars 6000 --symbol SOLUSDT --timeframe 15m \\
+    --job-id d11-triple-barrier-proof-001 \\
+    --promotion-e-min -0.05 --enable-labels --walk-forward --gt055-report
+
 Exit: 0 pass, 2 insufficient trades, 3 acceptance fail, 4 error, 5 enforce-gt050 fail, 6 enforce-gt051 fail.
 """
 
@@ -137,6 +142,24 @@ def main() -> int:
         help="Exit 6 if GT051 acceptance fails (requires --gt051-report).",
     )
     ap.add_argument(
+        "--enable-labels",
+        action="store_true",
+        dest="enable_labels",
+        help="GT055: attach triple-barrier labels (TP/SL/time) and timing fields to referee_outcome_subset.",
+    )
+    ap.add_argument(
+        "--walk-forward",
+        action="store_true",
+        dest="walk_forward",
+        help="GT055: record walk-forward intent (use with --gt055-report).",
+    )
+    ap.add_argument(
+        "--gt055-report",
+        action="store_true",
+        dest="gt055_report",
+        help="Append GT055 walk-forward label-learning proof to gt048_proof.json.",
+    )
+    ap.add_argument(
         "--promotion-e-min",
         type=float,
         default=None,
@@ -157,6 +180,11 @@ def main() -> int:
 
     if args.promotion_e_min is not None:
         os.environ["PATTERN_GAME_STUDENT_PROMOTION_E_MIN"] = str(float(args.promotion_e_min))
+
+    if args.enable_labels or args.gt055_report:
+        os.environ["GT055_TRIPLE_BARRIER_LABELS_V1"] = "1"
+    if args.walk_forward:
+        os.environ["GT055_WALK_FORWARD_V1"] = "1"
 
     root = _bootstrap_env(jid)
 
@@ -503,6 +531,15 @@ def main() -> int:
             mod = importlib.util.module_from_spec(spec)
             spec.loader.exec_module(mod)
             proof["gt051"] = mod.analyze_gt051_generalization_v1(store_path=store_p, job_id=jid)
+
+    if args.gt055_report:
+        from renaissance_v4.game_theory.analyze_gt055_walk_forward_v1 import analyze_gt055_walk_forward_v1
+
+        proof["gt055"] = analyze_gt055_walk_forward_v1(
+            store_path=store_p,
+            job_id=jid,
+            closed_trades=int(n_closed),
+        )
 
     out_path = Path(os.environ["PATTERN_GAME_MEMORY_ROOT"]) / "gt048_proof.json"
     out_path.write_text(json.dumps(proof, indent=2), encoding="utf-8")

@@ -296,6 +296,18 @@ def build_student_learning_record_v1_from_reveal(
         "exit_reason": rt.get("exit_reason"),
     }
 
+    from renaissance_v4.game_theory.triple_barrier_labels_v1 import (
+        enrich_referee_subset_triple_barrier_v1,
+        triple_barrier_labels_enabled_v1,
+    )
+
+    if triple_barrier_labels_enabled_v1():
+        referee_subset = enrich_referee_subset_triple_barrier_v1(
+            referee_subset,
+            referee_truth_v1=rt,
+            candle_timeframe_minutes=int(candle_timeframe_minutes),
+        )
+
     direction_match = comp.get("direction_match") if isinstance(comp, dict) else None
     pnl_pos = comp.get("referee_pnl_positive") if isinstance(comp, dict) else None
     alignment_flags_v1: dict[str, Any] = {

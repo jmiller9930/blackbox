@@ -31,7 +31,8 @@ def outcome_record_to_referee_truth_v1(outcome: OutcomeRecord) -> dict[str, Any]
 
     Keys are a superset of validator-required ``trade_id``, ``symbol``, ``pnl``.
     """
-    return {
+    md = outcome.metadata if isinstance(outcome.metadata, dict) else {}
+    rt = {
         "trade_id": outcome.trade_id,
         "symbol": outcome.symbol,
         "direction": outcome.direction,
@@ -44,6 +45,17 @@ def outcome_record_to_referee_truth_v1(outcome: OutcomeRecord) -> dict[str, Any]
         "entry_price": float(outcome.entry_price),
         "exit_price": float(outcome.exit_price),
     }
+    if "stop_loss" in md:
+        try:
+            rt["stop_loss"] = float(md["stop_loss"])
+        except (TypeError, ValueError):
+            pass
+    if "take_profit" in md:
+        try:
+            rt["take_profit"] = float(md["take_profit"])
+        except (TypeError, ValueError):
+            pass
+    return rt
 
 
 def build_comparison_v1(
