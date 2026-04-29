@@ -29,10 +29,6 @@ from renaissance_v4.game_theory.student_proctor.contracts_v1 import (
     validate_student_output_v1,
 )
 from renaissance_v4.game_theory.student_test_mode_v1 import student_test_mode_isolation_active_v1
-from renaissance_v4.game_theory.token_burn_guards_v1 import (
-    clamp_ollama_options_v1,
-    resolve_max_packet_json_chars_v1,
-)
 
 
 def _student_llm_max_trades_v1() -> int | None:
@@ -101,7 +97,6 @@ def _ollama_chat_once_v1(
     opts = dict(_OLLAMA_OPTIONS_DEFAULT_V1)
     if isinstance(options, dict) and options:
         opts.update(options)
-    opts = clamp_ollama_options_v1(opts)
     messages: list[dict[str, str]] = []
     if isinstance(system_prompt, str) and system_prompt.strip():
         messages.append({"role": "system", "content": system_prompt.strip()})
@@ -450,8 +445,11 @@ def emit_student_output_via_ollama_v1(
     ``raw_assistant_text_v1`` for ``student_test_mode_v1`` trace proof (no behavior change).
     """
     # Bars + student_context_annex_v1 can exceed legacy 12k; keep a generous cap for exam prompts.
-    # Optional: BLACKBOX_TOKEN_BURN_GUARD=1 lowers effective max via resolve_max_packet_json_chars_v1.
-    _MAX_PACKET_JSON_CHARS = resolve_max_packet_json_chars_v1()
+    _raw_max = (os.environ.get("PATTERN_GAME_STUDENT_PROMPT_PACKET_JSON_MAX") or "56000").strip()
+    try:
+        _MAX_PACKET_JSON_CHARS = int(_raw_max or "56000")
+    except ValueError:
+        _MAX_PACKET_JSON_CHARS = 56000
     pkt_json = json.dumps(packet, ensure_ascii=False, default=str)[:_MAX_PACKET_JSON_CHARS]
     thesis_lines = (
         "MANDATORY Student decision protocol (all keys below MUST appear in the JSON; no skipping steps; "
