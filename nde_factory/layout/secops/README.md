@@ -6,9 +6,11 @@
 
 ## Source strategy
 
+**Mandatory pipeline:** `/data/NDE/reports/source_to_training_policy_v0.1.md` — SecOps training JSONL must be driven by **source → raw → extracted → concepts → staging → proof → training** (no training promotion from hand-written-only rows).
+
 - **Primary hub:** CMMC Resources & Documentation (DoD CIO), declared in `sources/manifests/source_manifest_v0.1.json`.
 - **Planned augmentations:** authoritative APIs and frameworks (NVD CVE API, CISA KEV, MITRE ATT&CK, NIST CSF, NIST SP 800-171/172, FedRAMP, CIS Benchmarks where licensing permits).
-- Raw downloads under `sources/raw/`; normalized extracts under `sources/extracted/`; structured concepts under `sources/concepts/`.
+- Raw downloads under `sources/raw/`; normalized extracts under `sources/extracted/`; structured concepts under `sources/concepts/`. Every staging row **must** include **`source_ids`** tied to extracted segments or concept IDs.
 
 ## Dataset strategy
 

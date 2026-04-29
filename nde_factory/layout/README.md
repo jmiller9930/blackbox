@@ -2,6 +2,28 @@
 
 **NDE** = **Narrow Domain Expert**: a narrow-domain model/adapter trained for a bounded mission (verification, guided reasoning), not a general assistant.
 
+## Mandatory training-data path (policy)
+
+**Default rule (all NDE domains — FinQuant, SecOps, future):** training datasets **must not** be produced from hand-written examples alone. Every promoted staging JSONL must originate from:
+
+```text
+source → raw → extracted → concepts → staging JSONL → proof → training
+```
+
+**Cross-domain policy document:** [`reports/source_to_training_policy_v0.1.md`](reports/source_to_training_policy_v0.1.md) (on host: `/data/NDE/reports/source_to_training_policy_v0.1.md`).
+
+**Per-domain folders (required):**
+
+```bash
+/data/NDE/<domain>/sources/raw/
+/data/NDE/<domain>/sources/extracted/
+/data/NDE/<domain>/sources/concepts/
+/data/NDE/<domain>/datasets/staging/
+/data/NDE/<domain>/reports/
+```
+
+Every training row **must** include **`source_ids`**. Synthetic/adversarial rows are allowed **only** when linked to **source-derived concepts** (see policy §7–8).
+
 ## Layout rules
 
 - Each domain lives in **isolation** under `/data/NDE/<domain>/`.

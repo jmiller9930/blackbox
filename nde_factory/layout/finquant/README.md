@@ -6,7 +6,9 @@
 
 ## Source strategy
 
-Sources and acquisition rules follow FinQuant-1 dataset planning (`finquant/reports/dataset_plan_v0.1.md` and related). Staging JSONL and manifests will use `sources/` and `datasets/` here once migration from the legacy root is executed.
+**Mandatory pipeline:** See `/data/NDE/reports/source_to_training_policy_v0.1.md` (repo: `nde_factory/layout/reports/source_to_training_policy_v0.1.md`). FinQuant training data must flow **source → raw → extracted → concepts → staging JSONL → proof → training** — not hand-written-only datasets.
+
+Legacy sources and acquisition rules still align with FinQuant-1 dataset planning (`finquant/reports/dataset_plan_v0.1.md` and related). Staging JSONL and manifests must use `sources/raw|extracted|concepts/` and `datasets/staging/` here once migration from the legacy `/data/finquant-1/` root is executed; new drops must satisfy **`source_ids`** on every row.
 
 ## Dataset strategy
 
