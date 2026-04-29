@@ -460,7 +460,15 @@ def main() -> None:
                 "",
             ]
         )
-        outp = Path(report_name) if Path(report_name).is_absolute() else base / "reports" / report_name
+        rp = Path(report_name)
+        if rp.is_absolute():
+            outp = rp
+        else:
+            # Accept either `foo.md` or `reports/foo.md` without doubling base/reports/
+            parts = rp.parts
+            if len(parts) > 1 and parts[0] == "reports":
+                rp = Path(*parts[1:])
+            outp = base / "reports" / rp
         outp.parent.mkdir(parents=True, exist_ok=True)
         outp.write_text("\n".join(lines), encoding="utf-8")
         print(f"wrote {outp}")
