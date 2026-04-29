@@ -1,0 +1,25 @@
+---
+description: NDE Factory — LangGraph orchestration (not ad-hoc shell pipelines)
+globs: nde/**/*,nde_factory/layout/**/*,scripts/install_nde_data_layout.sh
+alwaysApply: false
+---
+
+# NDE Factory orchestration
+
+## Mandatory integration surface
+
+Multi-step **NDE Factory** workflows (sources → process → dataset gates → train/eval loops → certification-style gates) **must** use **LangGraph** via:
+
+- **`nde/tools/nde_graph_runner.py`** (deploy: **`/data/NDE/tools/nde_graph_runner.py`**)
+- **`nde/tools/run_graph.sh`** (deploy: **`/data/NDE/tools/run_graph.sh`**)
+
+Per-run artifacts live under **`/data/NDE/<domain>/runs/<run_id>/`** (`state.json`, `checkpoints.sqlite`, `nodes/<node>/node_status.json`). See **`nde/tools/README.md`**.
+
+## Do not
+
+- Replace that lifecycle with **parallel one-off bash chains** or duplicate orchestration scripts **without an explicit architect exception** recorded in the PR/commit message.
+- Confuse **LangGraph** (workflow/graph + checkpoints) with **LangChain** (tools/models/docs wrappers). LangChain is optional **around** specific steps—not a substitute for the graph runner.
+
+## Deploy / deps
+
+Layout install: **`scripts/install_nde_data_layout.sh`**. Graph deps: **`nde/tools/requirements.txt`** (installed into **`/data/NDE/.venv`** via **`nde/tools/setup_env.sh`**).
