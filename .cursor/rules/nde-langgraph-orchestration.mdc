@@ -1,10 +1,11 @@
 ---
-description: NDE Factory — LangGraph orchestration (not ad-hoc shell pipelines)
-globs: nde/**/*,nde_factory/layout/**/*,scripts/install_nde_data_layout.sh
-alwaysApply: false
+description: NDE Factory — LangGraph orchestration (global; always apply)
+alwaysApply: true
 ---
 
 # NDE Factory orchestration
+
+**Always apply.** Any work that adds or changes **multi-step NDE Factory** lifecycle behavior must align with this rule (including when the touched paths are outside `nde/`).
 
 ## Mandatory integration surface
 
