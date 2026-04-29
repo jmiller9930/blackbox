@@ -30,7 +30,7 @@ else
     [[ -f "${TOOLS}/${_py}" ]] && cp -f "${TOOLS}/${_py}" "${DEST}/tools/"
   done
   [[ -f "${TOOLS}/requirements.txt" ]] && cp -f "${TOOLS}/requirements.txt" "${DEST}/tools/"
-  for _helper in setup_env.sh run_processor.sh run_graph.sh; do
+  for _helper in setup_env.sh setup_train_env.sh run_processor.sh run_graph.sh; do
     [[ -f "${TOOLS}/${_helper}" ]] && cp -f "${TOOLS}/${_helper}" "${DEST}/tools/" && chmod +x "${DEST}/tools/${_helper}"
   done
   [[ -f "${TOOLS}/langgraph_enforcement_allowlist.json" ]] && cp -f "${TOOLS}/langgraph_enforcement_allowlist.json" "${DEST}/tools/"

@@ -198,6 +198,26 @@ def _repo_root() -> Path:
     return Path(os.path.expanduser("~/blackbox")).resolve()
 
 
+def _train_python_exe(nde: Path) -> Path:
+    """Python for ``train_qlora.py``: dedicated training venv (``.venv-train``), not the LangGraph ``.venv``.
+
+    Order: ``TRAIN_PYTHON`` env if set and exists → ``{NDE_ROOT}/.venv-train/bin/python`` →
+    ``{NDE_ROOT}/.venv/bin/python`` → ``sys.executable``.
+    """
+    raw = os.environ.get("TRAIN_PYTHON", "").strip()
+    if raw:
+        p = Path(raw).expanduser().resolve()
+        if p.is_file():
+            return p
+    train_venv = nde / ".venv-train" / "bin" / "python"
+    if train_venv.is_file():
+        return train_venv
+    graph_venv = nde / ".venv" / "bin" / "python"
+    if graph_venv.is_file():
+        return graph_venv
+    return Path(sys.executable)
+
+
 def _approval_file(run_root: Path) -> Path:
     return run_root / "APPROVED"
 
@@ -471,8 +491,8 @@ def smoke_train(state: NDEState) -> dict[str, Any]:
         cfg = cfg_finquant_repo
 
     train_mode = "full" if mode == "full" else "smoke"
-    venv_py = nde / ".venv" / "bin" / "python"
-    exe = str(venv_py) if venv_py.is_file() else sys.executable
+    train_py_exe = _train_python_exe(nde)
+    exe = str(train_py_exe)
 
     if not train_py.is_file():
         alt = Path(os.environ.get("FINQUANT_TRAIN_SCRIPT", ""))
@@ -527,6 +547,7 @@ def smoke_train(state: NDEState) -> dict[str, Any]:
             "training_config": str(cfg),
             "repo_root": str(repo_root),
             "training_script": str(train_py),
+            "train_python": exe,
         },
     )
     return {"train_ok": ok, "last_error": "" if ok else "training subprocess failed"}
