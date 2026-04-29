@@ -157,7 +157,7 @@ def run_exam_v1(
         if perr or pkt is None:
             raise RuntimeError(f"{sid}: packet: {perr}")
 
-        ere, ere_errs, _trace, pfm = run_entry_reasoning_pipeline_v1(
+        ere, ere_errs, _trace, _pfm = run_entry_reasoning_pipeline_v1(
             student_decision_packet=pkt,
             retrieved_student_experience=rse,
             run_candle_timeframe_minutes=tf,
