@@ -34,6 +34,30 @@ Direct Python (same interpreter after venv exists):
 
 Configs: `nde_factory/layout/secops/domain_config.yaml`, `nde_factory/layout/finquant/domain_config.yaml`.
 
+## LangGraph orchestration (`nde_graph_runner.py`)
+
+**LangGraph** drives durable checkpoints (SQLite per run), explicit routing, and resume after interruption — **not** “Lang chart.” **LangChain** is optional for tools/models elsewhere; this runner stays dependency-light.
+
+Deploy: `nde_graph_runner.py` + `run_graph.sh` (installed under `/data/NDE/tools/` with `install_nde_data_layout.sh`). Install graph deps: `pip install -r nde/tools/requirements.txt` into `/data/NDE/.venv`.
+
+```bash
+/data/NDE/tools/run_graph.sh --domain secops --mode smoke
+/data/NDE/tools/run_graph.sh --domain finquant --mode smoke
+/data/NDE/tools/run_graph.sh --domain secops --mode full --require-approval
+```
+
+- **`--mode smoke`:** smoke train path only (no full training unless you override training subprocess separately).
+- **`--mode full --require-approval`:** requires `runs/<run_id>/APPROVED` on disk before the train step runs full QLoRA (via existing `finquant/training/train_qlora.py`).
+- **`--dry-run` / `--skip-train`:** graph proof without subprocess processor/train.
+
+Run artifacts: `/data/NDE/<domain>/runs/<run_id>/state.json`, `checkpoints.sqlite`, per-node `runs/.../nodes/<node>/node_status.json` + logs.
+
+Resume (after an interrupted run with the same `run_id`):
+
+```bash
+/data/NDE/tools/run_graph.sh --domain secops --mode smoke --run-id <same> --resume
+```
+
 ### SecOps CMMC build (v0.3, authoritative PDF drops)
 
 Official **CMMC Model / Assessment Guide** PDFs and **CIS Controls v8 / v8.1** PDF often **cannot** be fetched unattended (`curl`/`wget` may get **403** on DoD Akamai; CIS download pages may return **HTML** instead of the PDF). Use a **browser download**, then copy onto the host:

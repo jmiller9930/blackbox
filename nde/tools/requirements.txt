@@ -1,3 +1,8 @@
 # NDE source processor (nde_source_processor.py)
 PyYAML>=6.0
 pypdf>=4.0
+
+# NDE LangGraph runner (nde_graph_runner.py)
+langgraph>=0.2.55
+langchain-core>=0.3.0
+langgraph-checkpoint-sqlite>=2.0.10

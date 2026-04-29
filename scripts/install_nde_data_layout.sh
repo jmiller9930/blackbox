@@ -22,11 +22,12 @@ TOOLS="${REPO_ROOT}/nde/tools"
 if [[ -d "${TOOLS}" ]]; then
   mkdir -p "${DEST}/tools"
   cp -f "${TOOLS}/nde_source_processor.py" "${DEST}/tools/"
+  [[ -f "${TOOLS}/nde_graph_runner.py" ]] && cp -f "${TOOLS}/nde_graph_runner.py" "${DEST}/tools/"
   [[ -f "${TOOLS}/requirements.txt" ]] && cp -f "${TOOLS}/requirements.txt" "${DEST}/tools/"
-  for _helper in setup_env.sh run_processor.sh; do
+  for _helper in setup_env.sh run_processor.sh run_graph.sh; do
     [[ -f "${TOOLS}/${_helper}" ]] && cp -f "${TOOLS}/${_helper}" "${DEST}/tools/" && chmod +x "${DEST}/tools/${_helper}"
   done
-  echo "Installed tools: ${DEST}/tools/nde_source_processor.py, setup_env.sh, run_processor.sh"
+  echo "Installed tools: ${DEST}/tools/nde_source_processor.py, nde_graph_runner.py, shell helpers"
 fi
 
 echo "Done. Top-level README: ${DEST}/README.md"
