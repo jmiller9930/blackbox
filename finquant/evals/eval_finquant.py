@@ -51,6 +51,40 @@ VERIFIER_HEADINGS = (
     "Final verifier status:",
 )
 
+# Eval default: strict 4-section schema (prompt-aligned; matches harness structural check).
+STRICT_PROMPT_HEADINGS = (
+    "Claim reviewed:",
+    "Math verdict:",
+    "DATA evidence required:",
+    "Final verifier status:",
+)
+
+STRICT_VERIFIER_PROMPT_PREFIX = """You are a verifier. Output MUST follow this exact structure and nothing else.
+
+Claim reviewed:
+<one sentence>
+
+Math verdict:
+<correct/incorrect + brief reason>
+
+DATA evidence required:
+<concrete fields, sources, or calculations needed to verify>
+
+Final verifier status:
+<PASS or FAIL>
+
+Rules:
+- No explanations outside sections
+- No chain-of-thought
+- No extra text
+- Each section must be non-empty
+
+---
+
+User verification task:
+
+"""
+
 
 GENERIC_PATTERNS = (
     re.compile(r"(?i)^\s*as an ai\b"),
@@ -113,14 +147,23 @@ EVAL_SUITE: list[EvalCase] = [
 ]
 
 
-def heuristic_reasoning_score(text: str) -> float:
+def heuristic_reasoning_score(text: str, headings: tuple[str, ...]) -> float:
     """Rough 0–1 score: headings + length + non-generic."""
-    if not text or len(text.strip()) < 120:
-        return 0.1
-    score = 0.0
-    for h in VERIFIER_HEADINGS:
+    t = text.strip()
+    if not t:
+        return 0.0
+    # Structured verifier replies can be shorter than narrative CoT.
+    if len(t) < 80:
+        base = 0.12
+    elif len(t) < 120:
+        base = 0.18
+    else:
+        base = 0.22
+    score = base
+    step = 0.125 if len(headings) <= 4 else 0.07
+    for h in headings:
         if h in text:
-            score += 0.07
+            score += step
     low = text.lower()
     if any(p.search(text) for p in GENERIC_PATTERNS):
         score *= 0.4
@@ -137,8 +180,24 @@ def data_validation_present(text: str) -> bool:
     return len(tail.strip()) >= 25
 
 
-def structural_pass(text: str) -> bool:
-    return all(h in text for h in VERIFIER_HEADINGS)
+def structural_pass(text: str, headings: tuple[str, ...]) -> bool:
+    return all(h in text for h in headings)
+
+
+def failure_reasons(
+    struct_ok: bool,
+    data_ok: bool,
+    rq: float,
+    reasoning_floor: float,
+) -> list[str]:
+    out: list[str] = []
+    if not struct_ok:
+        out.append("structural")
+    if not data_ok:
+        out.append("insufficient_DATA")
+    if rq < reasoning_floor:
+        out.append("reasoning_score")
+    return out
 
 
 def detect_issue_signals(text: str) -> bool:
@@ -212,6 +271,11 @@ def main() -> None:
         help="Report filename relative to FINQUANT_BASE/reports/ (default: smoke_eval_report.md or v0.1_eval_report.md with --adapter full)",
     )
     ap.add_argument("--seed", type=int, default=42)
+    ap.add_argument(
+        "--legacy-headings",
+        action="store_true",
+        help="Use full 10-line verifier headings + no strict prompt prefix (old behavior)",
+    )
     args = ap.parse_args()
 
     base = (args.base or finquant_base()).resolve()
@@ -253,17 +317,31 @@ def main() -> None:
 
     torch.manual_seed(args.seed)
 
+    headings: tuple[str, ...] = VERIFIER_HEADINGS if args.legacy_headings else STRICT_PROMPT_HEADINGS
+    reasoning_floor = 0.45
+
     results: list[dict[str, Any]] = []
     for case in EVAL_SUITE:
-        text = run_generation(model, tokenizer, case.user_content, max_new_tokens=args.max_new_tokens)
-        struct_ok = structural_pass(text)
+        user_in = case.user_content.strip()
+        if not args.legacy_headings:
+            user_in = STRICT_VERIFIER_PROMPT_PREFIX + user_in
+        text = run_generation(model, tokenizer, user_in, max_new_tokens=args.max_new_tokens)
+        struct_ok = structural_pass(text, headings)
         data_ok = data_validation_present(text)
-        rq = heuristic_reasoning_score(text)
+        rq = heuristic_reasoning_score(text, headings)
         generic = any(p.search(text) for p in GENERIC_PATTERNS)
         issue_hint = detect_issue_signals(text)
-        passed = struct_ok and data_ok and rq >= 0.45 and not generic
+        passed = struct_ok and data_ok and rq >= reasoning_floor and not generic
         if case.expect_detect_issue:
             passed = passed and issue_hint
+        if passed:
+            fr: list[str] = []
+        else:
+            fr = failure_reasons(struct_ok, data_ok, rq, reasoning_floor)
+            if generic:
+                fr = list(dict.fromkeys(fr + ["generic_smell"]))
+            if case.expect_detect_issue and not issue_hint:
+                fr = list(dict.fromkeys(fr + ["issue_detection"]))
         results.append(
             {
                 "case_id": case.case_id,
@@ -274,7 +352,9 @@ def main() -> None:
                 "generic_smell": generic,
                 "issue_signals": issue_hint,
                 "pass": passed,
-                "output_preview": text[:1200],
+                "failure_reasons": fr,
+                "strict_prompt": not args.legacy_headings,
+                "output_preview": text[:2400],
             }
         )
 
@@ -283,6 +363,8 @@ def main() -> None:
         "base_model": args.model,
         "cases_total": len(results),
         "cases_pass": sum(1 for r in results if r["pass"]),
+        "strict_four_heading_prompt": not args.legacy_headings,
+        "structural_headings": "legacy_10" if args.legacy_headings else "strict_4",
     }
     print(json.dumps({"summary": summary, "results": results}, indent=2))
 
@@ -307,9 +389,10 @@ def main() -> None:
             "",
             "## Criteria",
             "",
-            "- **Structural pass:** all mandatory verifier headings present.",
-            "- **DATA validation:** substantive `DATA evidence required:` block.",
-            "- **Reasoning quality:** heuristic score (headings, length, non-generic).",
+            "- **Structural pass:** all mandatory headings present "
+            "(default: four-section strict prompt; use `--legacy-headings` for 10-heading mode).",
+            "- **DATA validation:** substantive `DATA evidence required:` block (≥25 chars before Final status).",
+            "- **Reasoning quality:** heuristic score (headings, length, non-generic); floor 0.45.",
             "- **Issue detection:** verdict text hints at fail/incorrect/mismatch/leakage where applicable.",
             "",
             "## Per-case results",
@@ -323,6 +406,9 @@ def main() -> None:
             lines.append(f"- **data_validation_present:** {r['data_validation_present']}")
             lines.append(f"- **reasoning_score:** {r['reasoning_score']}")
             lines.append(f"- **generic_smell:** {r['generic_smell']}")
+            fr = r.get("failure_reasons") or []
+            if fr:
+                lines.append(f"- **failure_reasons:** {', '.join(fr)}")
             lines.append("")
             lines.append("```")
             lines.append(r["output_preview"])
