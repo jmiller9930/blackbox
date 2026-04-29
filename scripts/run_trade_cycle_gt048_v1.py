@@ -86,6 +86,9 @@ def _bootstrap_env(job_id: str) -> Path:
     os.environ["PATTERN_GAME_STUDENT_LEARNING_STORE"] = str(store)
     if store.is_file():
         store.unlink()
+    # Parallel scorecard uses total_processed=scenario rows (often 1). Do not let a host env of
+    # PATTERN_GAME_STUDENT_PROMOTION_MIN_SCENARIOS>1 force hold_insufficient_sample_v1 on every trade.
+    os.environ["PATTERN_GAME_STUDENT_PROMOTION_MIN_SCENARIOS"] = "1"
     return root
 
 
@@ -118,12 +121,27 @@ def main() -> int:
         action="store_true",
         help="Exit 5 if GT050 loss_avoided_count < 1 (large-cycle loss-avoidance proof).",
     )
+    ap.add_argument(
+        "--promotion-e-min",
+        type=float,
+        default=None,
+        dest="promotion_e_min",
+        metavar="E",
+        help=(
+            "Set PATTERN_GAME_STUDENT_PROMOTION_E_MIN for this process (governance). "
+            "Large replays often have slightly negative batch expectancy; use e.g. -0.05 so clean-L3 "
+            "trades can still PROMOTE (GT048/GT050 harness)."
+        ),
+    )
     args = ap.parse_args()
 
     jid = str(args.job_id).strip()
     if not jid:
         print("ERROR: --job-id required", file=sys.stderr)
         return 4
+
+    if args.promotion_e_min is not None:
+        os.environ["PATTERN_GAME_STUDENT_PROMOTION_E_MIN"] = str(float(args.promotion_e_min))
 
     root = _bootstrap_env(jid)
 
