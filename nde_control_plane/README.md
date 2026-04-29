@@ -2,20 +2,25 @@
 
 React + Express placeholders under `nde_control_plane/`. Ops label: **finquantv1**.
 
-## Host policy — hard rule
+## trx40 — always the route
 
-**NDE Studio must reside on trx40 only** — not clawbot, not other lab servers, unless governance explicitly changes this.
+**The web UI always runs on trx40.** Treat trx40 as the only canonical host for this surface.
 
-- Run Docker/build (`./run-docker.sh`) on **trx40** for the canonical lab deployment.
-- Keep the trx40 repo **synced** with **`git pull origin main`** (or the integration branch in use) before claiming deployment.
+## Stay in sync with dev
 
-See **`.cursor/rules/nde-studio-host-trx40.mdc`** for agent enforcement.
+After changes land in git:
 
-## Quick run
+1. **Push** from dev (`origin/main` or integration branch).
+2. On **trx40**: `git pull` in the blackbox checkout.
+3. **Rebuild/restart** the UI (`./run-docker.sh`) so what you see on trx40 matches the repo.
+
+Rule detail: **`.cursor/rules/nde-studio-host-trx40.mdc`**.
+
+## Quick run (on trx40)
 
 ```bash
 cd nde_control_plane
 ./run-docker.sh
 ```
 
-URL: `http://127.0.0.1:3999` (bind ports as needed on trx40).
+URL: `http://127.0.0.1:3999` on trx40 (adjust bind/host firewall as needed).

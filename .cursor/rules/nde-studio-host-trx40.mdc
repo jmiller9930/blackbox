@@ -1,24 +1,32 @@
 ---
-description: NDE Studio (finquantv1 UI) — trx40-only deployment hard rule
+description: NDE Studio (finquantv1 UI) — trx40-only; always synced with dev
 globs: nde_control_plane/**/*
 alwaysApply: false
 ---
 
-# NDE Studio — host policy (hard rule)
+# NDE Studio — trx40 is the route (hard rule)
 
-## Canonical runtime host
+## Where the UI runs
 
-**NDE Studio** (`nde_control_plane/`: Docker/React control plane, **finquantv1** in ops naming) **must run only on trx40**.
+**The NDE Studio web UI always runs on trx40.** That host is the operator route for this surface — not clawbot, not other lab boxes, unless governance explicitly changes this.
 
-- **Approved:** Build/run the UI stack on **trx40** (lab GPU / trx40-class host where FinQuant training is anchored).
-- **Not approved:** Treating clawbot, generic jump hosts, or other servers as the **canonical** NDE Studio deployment unless the architect explicitly redefines this policy.
+**NDE Studio** = `nde_control_plane/` (Docker/React control plane; ops label **finquantv1**).
 
-Orchestration code (`nde/tools/*`, `/data/NDE`) may exist on other hosts for CI or experiments; **the NDE Studio container/UI subproject is pinned to trx40** as its production lab surface.
+## Sync with dev work (non-negotiable)
 
-## Sync expectation
+Whenever **`nde_control_plane/`** (or anything that affects the trx40 UI deployment) changes in development:
 
-The trx40 checkout used for NDE Studio (**e.g. `~/blackbox`**) **must stay in git sync** with **`origin/main`** (or the named integration branch) **before** claiming “deployed” or “operator-visible on trx40.” Unsynced local-only trees are not compliant proof.
+1. **Commit + push** to **`origin/main`** (or the agreed integration branch).
+2. On **trx40**, **`git pull`** so the checkout matches what dev shipped.
+3. **Rebuild/restart** the container (`./run-docker.sh` or equivalent) so the running UI matches the commit.
+
+Unpushed work or a trx40 tree behind **`origin/main`** is **not** “the UI is current.” Operators assume trx40 tracks dev unless told otherwise.
 
 ## Agent behavior
 
-When editing **`nde_control_plane/`**, assume Docker/run instructions target **trx40**. Do not redirect deployment docs to other hosts by default. If SSH/access is wrong host, **stop** and align with this rule.
+- Assume Docker/run docs target **trx40**.
+- Before closing tasks that touch **`nde_control_plane/`**, treat **push + trx40 pull + restart** as part of delivery when remote UI parity matters (same bar as other lab deploy rules unless user said local-only).
+
+## Orchestration vs UI
+
+LangGraph / `/data/NDE` tooling may be exercised elsewhere for CI; **the NDE Studio UI subproject stays pinned to trx40** as its canonical runtime.
