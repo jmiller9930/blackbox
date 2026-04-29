@@ -88,17 +88,49 @@ def _seam_errors_for_trade(seam_audit: dict[str, Any] | None, trade_id: str) -> 
     return [str(e) for e in errs if needle in str(e)]
 
 
+def _exam_result_summary_append_v1(exam_results_json: Path) -> list[str]:
+    """GT038 — optional appendix sourced from ``student_reasoning_exam_results_v1.json``."""
+    lines: list[str] = []
+    try:
+        raw = exam_results_json.read_text(encoding="utf-8")
+        doc = json.loads(raw)
+    except (OSError, json.JSONDecodeError):
+        lines.append("\n## Exam Result Summary (GT038)\n")
+        lines.append(f"_Could not read exam results JSON at `{exam_results_json}`._\n")
+        return lines
+    lines.append("\n## Exam Result Summary (GT038 — Student Reasoning Quality)\n")
+    lines.append(f"- **exam_id:** `{doc.get('exam_id')}`")
+    acc = doc.get("acceptance_v1") if isinstance(doc.get("acceptance_v1"), dict) else {}
+    for k, v in sorted(acc.items()):
+        lines.append(f"- **{k}:** `{v}`")
+    lines.append("")
+    for row in doc.get("scenarios_v1") or []:
+        sid = row.get("scenario_id")
+        g = row.get("grading_v1") if isinstance(row.get("grading_v1"), dict) else {}
+        lines.append(f"### `{sid}`")
+        lines.append(
+            f"- **final_sealed_action_v1:** `{row.get('final_sealed_action_v1')}` · "
+            f"**action_correct:** `{g.get('action_correct')}` · **hallucination:** `{g.get('hallucination')}`"
+        )
+        lines.append("")
+    return lines
+
+
 def write_student_test_decision_fingerprint_report_md_v1(
     job_id: str,
     *,
     seam_audit: dict[str, Any] | None = None,
     trace_path: Path | str | None = None,
+    exam_results_json_path: Path | str | None = None,
 ) -> Path:
     """
     Build ``decision_fingerprint_report.md`` under ``runtime/student_test/<job_id>/``.
 
     Requires trace events produced during the seam (including ``student_test_llm_turn_v1`` and
     ``student_test_sealed_output_snapshot_v1`` when isolation is active).
+
+    When ``exam_results_json_path`` is set to ``student_reasoning_exam_results_v1.json`` from
+    GT038, an **Exam Result Summary (GT038)** section is appended from that file.
     """
     jid = str(job_id or "").strip()
     root = student_test_job_runtime_root_v1(jid)
@@ -403,6 +435,9 @@ def write_student_test_decision_fingerprint_report_md_v1(
             for t in terr[:48]:
                 lines.append(f"  - `{t}`")
         lines.append("")
+
+    if exam_results_json_path:
+        lines.extend(_exam_result_summary_append_v1(Path(exam_results_json_path).expanduser().resolve()))
 
     out_path = root / REPORT_FILENAME_V1
     out_path.write_text("\n".join(lines), encoding="utf-8")
