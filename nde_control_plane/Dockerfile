@@ -18,7 +18,7 @@ ENV NDE_DATA_ROOT=/data/NDE
 ENV REPO_MOUNT=/repo
 
 COPY package.json ./
-RUN npm install --omit=dev --no-audit --no-fund express@^4.21.0
+RUN npm install --omit=dev --no-audit --no-fund express@^4.21.0 multer@^1.4.5-lts.2
 
 COPY --from=build /app/dist ./dist
 COPY server.mjs ./
