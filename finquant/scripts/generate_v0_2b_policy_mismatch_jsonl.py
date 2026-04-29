@@ -35,7 +35,7 @@ INSTR = (
 
 TARGET_N = 120
 ADV_FRAC = 0.80
-SEED = 42004
+SEED = 42008
 FLAG = "policy_mismatch_v0.2b"
 
 
@@ -327,7 +327,7 @@ def main() -> None:
     for j in range(n_clean):
         tpl = clean_templates[j % len(clean_templates)]
         inp, mv, data_items, st = tpl
-        inp_v = inp + f" Teaching sample {j + 1}."
+        inp_v = inp + f" Case ref {j + 1}."
         out = four_section_output(
             claim_summary=inp_v,
             verdict_line=mv,

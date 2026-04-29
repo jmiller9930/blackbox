@@ -26,7 +26,7 @@ INSTR = (
 TARGET_N = 400
 ADV_FRAC = 0.725  # >= 70% adversarial
 # Bump seed when DATA-evidence templates materially change (reproducible shuffle).
-SEED = 42003
+SEED = 42007
 
 DATA_SCHEMA_NOTE = "data_evidence_tightened_v0.2b"
 
@@ -306,7 +306,8 @@ def main() -> None:
     for j in range(n_clean):
         tpl = clean_templates[j % len(clean_templates)]
         inp, mv, data_items, st = tpl
-        inp_v = inp + f" Teaching sample {j+1}."
+        # Avoid repetitive "Teaching sample N" — reduces degenerate echo under eval.
+        inp_v = inp + f" Case ref {j+1}."
         out = four_section_output(
             claim_summary=inp_v,
             verdict_line=mv,

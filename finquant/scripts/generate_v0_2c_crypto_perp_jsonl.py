@@ -36,7 +36,7 @@ INSTR = (
 
 TARGET_N = 100
 ADV_FRAC = 0.85
-SEED = 42005
+SEED = 42006
 FLAG = "crypto_perp_v0.2c"
 
 
@@ -302,7 +302,8 @@ def main() -> None:
     for j in range(n_clean):
         tpl = clean_templates[j % len(clean_templates)]
         inp, mv, data_items, st = tpl
-        inp_v = inp + f" Teaching sample {j + 1}."
+        # Avoid "Teaching sample N" phrasing — combined training caused degenerate echo on eval.
+        inp_v = inp + f" Case ref {j + 1}."
         out = four_section_output(
             claim_summary=inp_v,
             verdict_line=mv,
