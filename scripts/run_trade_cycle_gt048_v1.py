@@ -16,7 +16,12 @@ Usage::
     --bars 100 \\
     --job-id gt048-prod-001
 
-Exit: 0 pass, 2 insufficient trades, 3 acceptance fail, 4 error.
+  PYTHONPATH=. python3 scripts/run_trade_cycle_gt048_v1.py \\
+    --bars 2000 --symbol SOLUSDT --timeframe 15m \\
+    --job-id d9-generalization-proof-001 \\
+    --promotion-e-min -0.05 --gt051-report
+
+Exit: 0 pass, 2 insufficient trades, 3 acceptance fail, 4 error, 5 enforce-gt050 fail, 6 enforce-gt051 fail.
 """
 
 from __future__ import annotations
@@ -120,6 +125,16 @@ def main() -> int:
         "--enforce-gt050",
         action="store_true",
         help="Exit 5 if GT050 loss_avoided_count < 1 (large-cycle loss-avoidance proof).",
+    )
+    ap.add_argument(
+        "--gt051-report",
+        action="store_true",
+        help="Append GT051 generalization probes (near-match, regime, EV bins, OOS split) to gt048_proof.json.",
+    )
+    ap.add_argument(
+        "--enforce-gt051",
+        action="store_true",
+        help="Exit 6 if GT051 acceptance fails (requires --gt051-report).",
     )
     ap.add_argument(
         "--promotion-e-min",
@@ -477,6 +492,18 @@ def main() -> int:
         },
     }
 
+    if args.gt051_report:
+        import importlib.util
+
+        mod_path = _REPO / "scripts" / "analyze_gt051_generalization_v1.py"
+        spec = importlib.util.spec_from_file_location("analyze_gt051_generalization_v1", mod_path)
+        if spec is None or spec.loader is None:
+            proof["gt051"] = {"error": "analyze_gt051_generalization_v1_load_failed"}
+        else:
+            mod = importlib.util.module_from_spec(spec)
+            spec.loader.exec_module(mod)
+            proof["gt051"] = mod.analyze_gt051_generalization_v1(store_path=store_p, job_id=jid)
+
     out_path = Path(os.environ["PATTERN_GAME_MEMORY_ROOT"]) / "gt048_proof.json"
     out_path.write_text(json.dumps(proof, indent=2), encoding="utf-8")
     print(json.dumps(proof, indent=2))
@@ -485,6 +512,11 @@ def main() -> int:
         return 3
     if args.enforce_gt050 and int(gt050.get("loss_avoided_count") or 0) < 1:
         return 5
+    if args.enforce_gt051:
+        g51 = proof.get("gt051") if isinstance(proof.get("gt051"), dict) else {}
+        acc = g51.get("acceptance") if isinstance(g51.get("acceptance"), dict) else {}
+        if not acc.get("met"):
+            return 6
     return 0
 
 
