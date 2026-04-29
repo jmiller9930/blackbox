@@ -15,5 +15,6 @@ fi
 
 echo "Installing NDE layout from ${LAYOUT} -> ${DEST}"
 mkdir -p "${DEST}"
-rsync -a "${LAYOUT}/" "${DEST}/"
+# Portable copy (no rsync dependency on minimal hosts).
+cp -a "${LAYOUT}/." "${DEST}/"
 echo "Done. Top-level README: ${DEST}/README.md"
