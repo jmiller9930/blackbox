@@ -1,0 +1,4 @@
+{
+  "_comment": "Repo-relative fnmatch patterns or exact paths. Files matching skip orchestration enforcement (grandfathered exceptions only — prefer extending nde_graph_runner).",
+  "patterns": []
+}

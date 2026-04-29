@@ -34,6 +34,16 @@ Direct Python (same interpreter after venv exists):
 
 Configs: `nde_factory/layout/secops/domain_config.yaml`, `nde_factory/layout/finquant/domain_config.yaml`.
 
+## CI — LangGraph orchestration guard
+
+From repo root:
+
+```bash
+python3 nde/tools/check_langgraph_enforcement.py
+```
+
+Fails if `.py` / `.sh` under `nde/`, `nde_factory/layout/`, or `scripts/install_nde_data_layout.sh` combines multi-step pipeline signals (process + train + eval) without **`nde_graph_runner.py`** / **`run_graph.sh`** / **`langgraph`** imports. Exceptions: **`nde/tools/langgraph_enforcement_allowlist.json`** (architect-approved patterns only).
+
 ## LangGraph orchestration (`nde_graph_runner.py`)
 
 **LangGraph** drives durable checkpoints (SQLite per run), explicit routing, and resume after interruption — **not** “Lang chart.” **LangChain** is optional for tools/models elsewhere; this runner stays dependency-light.

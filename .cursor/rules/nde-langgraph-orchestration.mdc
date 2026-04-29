@@ -25,3 +25,7 @@ Per-run artifacts live under **`/data/NDE/<domain>/runs/<run_id>/`** (`state.jso
 ## Deploy / deps
 
 Layout install: **`scripts/install_nde_data_layout.sh`**. Graph deps: **`nde/tools/requirements.txt`** (installed into **`/data/NDE/.venv`** via **`nde/tools/setup_env.sh`**).
+
+## CI enforcement
+
+Run **`python3 nde/tools/check_langgraph_enforcement.py`** (see **`nde/tools/langgraph_enforcement_allowlist.json`**). GitHub Actions: **`.github/workflows/nde-langgraph-enforcement.yml`**.
