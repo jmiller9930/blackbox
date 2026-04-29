@@ -234,11 +234,20 @@ def _student_action_from_so(so: dict[str, Any] | None) -> Any:
     return _dg()
 
 
-def build_student_decision_record_v1(job_id: str, trade_id: str) -> dict[str, Any] | None:
+def build_student_decision_record_v1(
+    job_id: str,
+    trade_id: str,
+    *,
+    provisional_student_learning_record_v1: dict[str, Any] | None = None,
+) -> dict[str, Any] | None:
     """
     Single authoritative D14-shaped ``student_decision_record_v1`` (flat keys per architecture spec).
 
     Missing lineage exports are the string ``data_gap`` — never substituted across domains.
+
+    When the operator seam is about to append a row for this trade, pass
+    ``provisional_student_learning_record_v1`` so L3/governance see the in-memory record
+    (the on-disk store does not have it yet).
     """
     jid = job_id.strip()
     tid = trade_id.strip()
@@ -290,8 +299,11 @@ def build_student_decision_record_v1(job_id: str, trade_id: str) -> dict[str, An
     rr = rr if isinstance(rr, dict) else {}
 
     store_p = default_student_learning_store_path_v1()
-    sl_list = list_student_learning_records_by_graded_unit_id(store_p, tid)
-    sl = sl_list[-1] if sl_list else None
+    if isinstance(provisional_student_learning_record_v1, dict) and provisional_student_learning_record_v1:
+        sl = provisional_student_learning_record_v1
+    else:
+        sl_list = list_student_learning_records_by_graded_unit_id(store_p, tid)
+        sl = sl_list[-1] if sl_list else None
     so = (sl.get("student_output") if isinstance(sl, dict) else None) or {}
     if not isinstance(so, dict):
         so = {}
@@ -314,7 +326,11 @@ def build_student_decision_record_v1(job_id: str, trade_id: str) -> dict[str, An
     elif ohlc is not None:
         po = ph = pl = pc = ohlc
     else:
-        gaps.append("decision_time_ohlc_not_in_outcome_metadata")
+        ep_fallback = _float(target_oj.get("entry_price"))
+        if ep_fallback is not None:
+            po = ph = pl = pc = ep_fallback
+        else:
+            gaps.append("decision_time_ohlc_not_in_outcome_metadata")
 
     et = _int(target_oj.get("entry_time"), 0)
     ts = _ms_to_utc_iso(et) if et else _dg()

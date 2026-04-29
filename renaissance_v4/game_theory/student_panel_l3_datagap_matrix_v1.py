@@ -472,11 +472,19 @@ def build_l1_linkage_v1(job_id: str, entry: dict[str, Any] | None) -> dict[str, 
     }
 
 
-def build_student_panel_l3_payload_v1(job_id: str, trade_id: str) -> dict[str, Any]:
+def build_student_panel_l3_payload_v1(
+    job_id: str,
+    trade_id: str,
+    *,
+    provisional_student_learning_record_v1: dict[str, Any] | None = None,
+) -> dict[str, Any]:
     """
     Build L3 envelope: decision record, replay subset, scorecard subset, L1 linkage, structured ``data_gaps[]``.
 
     **Truth:** ``data_gaps`` is always a list (possibly empty). No silent omission.
+
+    ``provisional_student_learning_record_v1`` is used by the operator seam when classifying governance
+    before the learning row exists on disk (same-thread append).
     """
     jid = job_id.strip()
     tid = trade_id.strip()
@@ -504,7 +512,11 @@ def build_student_panel_l3_payload_v1(job_id: str, trade_id: str) -> dict[str, A
         }
 
     entry = find_scorecard_entry_by_job_id(jid)
-    rec = build_student_decision_record_v1(jid, tid)
+    rec = build_student_decision_record_v1(
+        jid,
+        tid,
+        provisional_student_learning_record_v1=provisional_student_learning_record_v1,
+    )
     replay_oj, _replay_err = _load_replay_outcome_json_v1(jid, tid)
 
     if rec is None:

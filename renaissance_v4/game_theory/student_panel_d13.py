@@ -422,11 +422,11 @@ def build_d13_selected_run_payload_v1(job_id: str) -> dict[str, Any]:
     }
 
 
-def build_student_decision_record_v1(job_id: str, trade_id: str) -> dict[str, Any] | None:
+def build_student_decision_record_v1(job_id: str, trade_id: str, **kwargs: Any) -> dict[str, Any] | None:
     """Delegates to :mod:`student_panel_d14` (canonical D14 flat contract)."""
     from renaissance_v4.game_theory import student_panel_d14 as _d14  # noqa: PLC0415
 
-    return _d14.build_student_decision_record_v1(job_id, trade_id)
+    return _d14.build_student_decision_record_v1(job_id, trade_id, **kwargs)
 
 
 __all__ = [
