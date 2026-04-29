@@ -179,6 +179,39 @@ def load_replay_manifest(explicit: Path | str | None = None) -> tuple[dict[str, 
     return manifest, path.resolve()
 
 
+def _gt057_replay_tape_repeat_factor_v1() -> int:
+    """GT057 — harness-only tape repetition factor (trade density unlock)."""
+    raw = (os.environ.get("GT057_REPLAY_TAPE_REPEAT_V1") or "").strip().lower()
+    if raw in ("", "0", "1", "false", "no"):
+        return 1
+    try:
+        n = int(raw)
+    except (TypeError, ValueError):
+        return 1
+    # Safety cap: avoid accidental huge allocations in operator shells.
+    return max(1, min(n, 256))
+
+
+def _gt057_repeat_bar_rows_v1(rows: list[dict[str, Any]], repeat: int) -> list[dict[str, Any]]:
+    """
+    Concatenate the same resolved bar window ``repeat`` times with strictly increasing ``open_time``.
+
+    Does not alter OHLCV values — intended for short fixture DBs where the operator needs more
+    closed trades without changing metrics or labeling modules.
+    """
+    if repeat <= 1 or not rows:
+        return rows
+    first_t = int(rows[0]["open_time"])
+    last_t = int(rows[-1]["open_time"])
+    stride_ms = max(300_000, last_t - first_t + 300_000)
+    out: list[dict[str, Any]] = []
+    for k in range(repeat):
+        delta = k * stride_ms
+        for r in rows:
+            out.append({**r, "open_time": int(r["open_time"]) + delta})
+    return out
+
+
 def load_replay_pre_loop_bars_v1(
     connection: Any,
     *,
@@ -203,6 +236,10 @@ def load_replay_pre_loop_bars_v1(
     When ``replay_max_bars_v1`` is a positive int, keep only the **last** N bars (after calendar slice
     and rollup). N is raised to at least ``MIN_ROWS_REQUIRED`` so replay invariants still hold.
     Intended for **RM preflight** fail-fast wiring checks, not full operator batches.
+
+    **GT057:** When ``GT057_REPLAY_TAPE_REPEAT_V1`` is set to an integer ``N`` > 1, the resolved
+    row list (after calendar slice, rollup, and tail trim) is repeated ``N`` times with monotonic
+    ``open_time`` offsets — trade-density unlock for short fixture DBs only.
     """
     from renaissance_v4.game_theory.candle_timeframe_runtime import (
         _row_dict,
@@ -288,6 +325,30 @@ def load_replay_pre_loop_bars_v1(
                     f"[replay] replay_max_bars_v1 tail cap: dropped {dropped} leading bars → "
                     f"{len(out_rows)} bars for decision loop"
                 )
+
+    rep = _gt057_replay_tape_repeat_factor_v1()
+    if rep > 1:
+        before_rep = len(out_rows)
+        out_rows = _gt057_repeat_bar_rows_v1(out_rows, rep)
+        replay_data_audit = {
+            **replay_data_audit,
+            "gt057_replay_tape_repeat_v1": {
+                "schema": "gt057_replay_tape_repeat_v1",
+                "repeat_factor": rep,
+                "bars_before_repeat": before_rep,
+                "bars_after_repeat": len(out_rows),
+                "note": (
+                    "Harness-only (GT057): repeats the resolved tape with shifted open_time — "
+                    "does not change labeling or opportunity-selection metric code paths."
+                ),
+            },
+        }
+        if verbose:
+            print(
+                f"[replay] GT057 tape repeat x{rep}: {before_rep} → {len(out_rows)} bars "
+                f"(GT057_REPLAY_TAPE_REPEAT_V1)"
+            )
+
     return out_rows, replay_data_audit, ctf
 
 

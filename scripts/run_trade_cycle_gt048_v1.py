@@ -27,6 +27,7 @@ Usage::
     --promotion-e-min -0.05 --enable-labels --walk-forward --gt055-report
 
 Each successful run writes ``gt056`` (opportunity selection metrics from Referee truth × pass2 learning rows) into ``gt048_proof.json``.
+Use ``--gt057-tape-repeat N`` when the SQLite fixture is short (GT057 density unlock).
 
 Exit: 0 pass, 2 insufficient trades, 3 acceptance fail, 4 error, 5 enforce-gt050 fail, 6 enforce-gt051 fail.
 """
@@ -173,6 +174,17 @@ def main() -> int:
             "trades can still PROMOTE (GT048/GT050 harness)."
         ),
     )
+    ap.add_argument(
+        "--gt057-tape-repeat",
+        type=int,
+        default=None,
+        dest="gt057_tape_repeat",
+        metavar="N",
+        help=(
+            "GT057 trade-density unlock: set GT057_REPLAY_TAPE_REPEAT_V1 so replay repeats the "
+            "resolved tape N times with shifted timestamps (short fixture DBs)."
+        ),
+    )
     args = ap.parse_args()
 
     jid = str(args.job_id).strip()
@@ -182,6 +194,9 @@ def main() -> int:
 
     if args.promotion_e_min is not None:
         os.environ["PATTERN_GAME_STUDENT_PROMOTION_E_MIN"] = str(float(args.promotion_e_min))
+
+    if args.gt057_tape_repeat is not None:
+        os.environ["GT057_REPLAY_TAPE_REPEAT_V1"] = str(max(1, int(args.gt057_tape_repeat)))
 
     if args.enable_labels or args.gt055_report:
         os.environ["GT055_TRIPLE_BARRIER_LABELS_V1"] = "1"
