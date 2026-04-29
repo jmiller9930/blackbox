@@ -28,6 +28,7 @@ from renaissance_v4.game_theory.student_proctor.contracts_v1 import (
     validate_student_output_directional_thesis_required_for_llm_profile_v1,
     validate_student_output_v1,
 )
+from renaissance_v4.game_theory.student_test_mode_v1 import student_test_mode_isolation_active_v1
 
 
 def _student_llm_max_trades_v1() -> int | None:
@@ -63,22 +64,36 @@ def _ensure_conflicting_indicators_llm_contract_v1(out: dict[str, Any]) -> None:
         out["conflicting_indicators"] = [CONFLICTING_INDICATORS_NO_CONFLICT_PACKET_LABEL_V1]
 
 
+_OLLAMA_OPTIONS_DEFAULT_V1: dict[str, Any] = {"temperature": 0.15, "num_predict": 1024}
+# GT_DIRECTIVE_036 — deterministic Student replies in student_test_mode_v1 (isolation env).
+_OLLAMA_OPTIONS_STUDENT_TEST_CONTRACT_V1: dict[str, Any] = {
+    "temperature": 0,
+    "top_p": 1,
+    "repeat_penalty": 1.0,
+    "num_predict": 2048,
+}
+
+
 def _ollama_chat_once_v1(
     *,
     base_url: str,
     model: str,
     user_prompt: str,
     timeout_s: float = 180.0,
+    options: dict[str, Any] | None = None,
 ) -> tuple[str | None, str | None]:
     """Returns ``(assistant_text, error)``."""
     base = base_url.rstrip("/")
     url = f"{base}/api/chat"
+    opts = dict(_OLLAMA_OPTIONS_DEFAULT_V1)
+    if isinstance(options, dict) and options:
+        opts.update(options)
     payload = json.dumps(
         {
             "model": model,
             "messages": [{"role": "user", "content": user_prompt}],
             "stream": False,
-            "options": {"temperature": 0.15, "num_predict": 1024},
+            "options": opts,
         }
     ).encode("utf-8")
     req = urllib.request.Request(
@@ -200,6 +215,118 @@ def _extract_json_object_v1(text: str) -> dict[str, Any] | None:
     return obj if isinstance(obj, dict) else None
 
 
+def _strip_markdown_code_fence_v1(text: str) -> str:
+    """Remove leading/trailing ``` fences if the model wrapped JSON (salvage before strict rejection)."""
+    t = text.strip()
+    if not t.startswith("```"):
+        return t
+    lines = t.split("\n")
+    if lines and lines[0].startswith("```"):
+        lines = lines[1:]
+    while lines:
+        last = lines[-1].strip()
+        if last == "```" or last.startswith("```"):
+            lines = lines[:-1]
+        else:
+            break
+    return "\n".join(lines).strip()
+
+
+def _minimal_valid_student_json_example_v1() -> str:
+    """Single-line example for prompts (GT_DIRECTIVE_036). Not fake output — structure only."""
+    ex = {
+        "act": False,
+        "direction": "flat",
+        "confidence_01": 0.5,
+        "pattern_recipe_ids": ["pattern_recipe_placeholder"],
+        "reasoning_text": "Short honest rationale grounded in the packet.",
+        "context_interpretation_v1": "Sixteen-plus chars describing only what the packet shows.",
+        "hypothesis_kind_v1": "no_clear_edge",
+        "hypothesis_text_v1": "One sentence trade idea or explicit lack of edge.",
+        "supporting_indicators": ["packet_signal_label"],
+        "conflicting_indicators": [CONFLICTING_INDICATORS_NO_CONFLICT_PACKET_LABEL_V1],
+        "confidence_band": "low",
+        "context_fit": "range",
+        "invalidation_text": "Concrete invalidation from packet context only.",
+        "student_action_v1": "no_trade",
+    }
+    return json.dumps(ex, ensure_ascii=False)
+
+
+def _finalize_student_output_from_assistant_text_v1(
+    raw_text: str,
+    *,
+    graded_unit_id: str,
+    decision_at_ms: int,
+    llm_model: str,
+    require_directional_thesis_v1: bool,
+) -> tuple[dict[str, Any] | None, list[str]]:
+    """Parse assistant text → ``student_output_v1`` dict or validation errors."""
+    stripped = _strip_markdown_code_fence_v1(raw_text)
+    parsed = _extract_json_object_v1(stripped)
+    if parsed is None:
+        return None, [f"ollama_response_not_json_object: {raw_text[:400]}"]
+
+    t = int(decision_at_ms)
+    out: dict[str, Any] = {
+        "schema": SCHEMA_STUDENT_OUTPUT_V1,
+        "contract_version": CONTRACT_VERSION_STUDENT_PROCTOR_V1,
+        "graded_unit_type": GRADED_UNIT_TYPE_V1,
+        "graded_unit_id": str(graded_unit_id),
+        "decision_at_ms": t,
+        "act": bool(parsed.get("act")),
+        "direction": str(parsed.get("direction") or "flat").strip().lower(),
+        "pattern_recipe_ids": parsed.get("pattern_recipe_ids")
+        if isinstance(parsed.get("pattern_recipe_ids"), list)
+        else [],
+        "confidence_01": float(parsed.get("confidence_01") or 0.0),
+        "reasoning_text": str(parsed.get("reasoning_text") or "")[:4000],
+        "student_decision_ref": str(parsed.get("student_decision_ref") or "")[:128],
+    }
+    if not out["student_decision_ref"] or len(out["student_decision_ref"]) < 36:
+        out["student_decision_ref"] = str(
+            uuid.uuid5(_NS_OLLAMA_REF, f"ollama_student_v1:{llm_model}:{graded_unit_id}:{t}")
+        )
+    pr = out["pattern_recipe_ids"]
+    if not pr or not all(isinstance(x, str) for x in pr):
+        out["pattern_recipe_ids"] = [f"ollama_{llm_model.replace(':', '_')}_v1"]
+    _merge_optional_thesis_from_parsed_v1(parsed, out)
+    _apply_canonical_student_action_v1(out)
+    if require_directional_thesis_v1:
+        _ensure_conflicting_indicators_llm_contract_v1(out)
+    ve = validate_student_output_v1(out)
+    if ve:
+        return None, [f"student_output_invalid: {'; '.join(ve)}"]
+    if require_directional_thesis_v1:
+        te = validate_student_output_directional_thesis_required_for_llm_profile_v1(out)
+        if te:
+            return None, [f"student_output_thesis_incomplete_for_llm_profile: {'; '.join(te)}"]
+    return out, []
+
+
+def _gt036_json_repair_prompt_v1(
+    *,
+    failed_raw_assistant: str,
+    failure_reasons: list[str],
+    original_prompt: str,
+) -> str:
+    reasons = [str(x) for x in failure_reasons if str(x).strip()][:40]
+    raw_snip = (failed_raw_assistant or "")[:12000]
+    return (
+        "GT_DIRECTIVE_036 — JSON REPAIR (exactly one retry).\n"
+        "Your previous response was rejected. Output ONLY one corrected JSON object.\n"
+        "Rules: no markdown, no ``` fences, no prose before or after the JSON object.\n\n"
+        "FAILURE REASONS:\n"
+        + ("\n".join(f"- {r}" for r in reasons) or "- (unspecified)")
+        + "\n\nINVALID MODEL OUTPUT (fix this; do not repeat prose-only answers):\n<<<INVALID_RAW>>>\n"
+        + raw_snip
+        + "\n<<<END_INVALID_RAW>>>\n\n"
+        "Return ONLY valid JSON that satisfies the same contract as the original task below.\n\n"
+        "--- ORIGINAL TASK (same packet and thesis requirements) ---\n"
+        + original_prompt
+    )
+
+
 def emit_student_output_via_ollama_v1(
     packet: dict[str, Any],
     *,
@@ -266,10 +393,26 @@ def emit_student_output_via_ollama_v1(
         "`student_context_annex_v1` is present, it duplicates structured indicator/risk/synthesis/"
         "memory/prior signals the engine computed from the same bars — use them; do not invent OHLCV.\n\n"
     )
-    user = (
+    student_contract = student_test_mode_isolation_active_v1()
+    gt036_banner = ""
+    if student_contract:
+        gt036_banner = (
+            "GT_DIRECTIVE_036 — STUDENT_TEST JSON CONTRACT (mandatory):\n"
+            "- Return ONLY valid JSON — one single JSON object. NO markdown. NO code fences (no ```). "
+            "NO explanation outside the JSON. NO Chinese/English prose before or after the braces.\n"
+            "- Every character of your reply must be parseable as JSON.\n"
+            "MINIMAL VALID STRUCTURE EXAMPLE (replace values using the packet only; keys must appear):\n"
+            + _minimal_valid_student_json_example_v1()
+            + "\n\n"
+        )
+    intro = (
         "You are the Student (exam). You MUST output a single JSON object only — no markdown, no prose outside JSON.\n"
         "Keys required: act (boolean), direction (string: long | short | flat), confidence_01 (number 0..1), "
         "pattern_recipe_ids (array of strings, non-empty), reasoning_text (short string; may echo protocol).\n"
+    )
+    user = (
+        gt036_banner
+        + intro
         + thesis_block
         + pre_reveal_notice
         + f"prompt_version_echo: {prompt_version}\n"
@@ -278,51 +421,84 @@ def emit_student_output_via_ollama_v1(
         + "Full student_decision_packet_v1 (JSON; OHLCV bars and optional student_context_annex_v1):\n"
         + f"{pkt_json}\n"
     )
+    ollama_opts: dict[str, Any] | None = _OLLAMA_OPTIONS_STUDENT_TEST_CONTRACT_V1 if student_contract else None
+
     if isinstance(llm_io_capture_v1, dict):
         llm_io_capture_v1["user_prompt_v1"] = user
-    text, err = _ollama_chat_once_v1(base_url=ollama_base_url, model=llm_model, user_prompt=user)
+        llm_io_capture_v1["student_llm_ollama_options_v1"] = dict(ollama_opts or _OLLAMA_OPTIONS_DEFAULT_V1)
+        llm_io_capture_v1["gt036_student_test_json_contract_v1"] = bool(student_contract)
+
+    text1, err1 = _ollama_chat_once_v1(
+        base_url=ollama_base_url,
+        model=llm_model,
+        user_prompt=user,
+        options=ollama_opts,
+    )
     if isinstance(llm_io_capture_v1, dict):
-        llm_io_capture_v1["raw_assistant_text_v1"] = text if isinstance(text, str) else None
-    if err or text is None:
-        return None, [err or "ollama_empty"]
+        llm_io_capture_v1["raw_assistant_text_attempt_1_v1"] = text1 if isinstance(text1, str) else None
 
-    parsed = _extract_json_object_v1(text)
-    if parsed is None:
-        return None, [f"ollama_response_not_json_object: {text[:400]}"]
+    if err1 or not isinstance(text1, str) or not text1.strip():
+        return None, [err1 or "ollama_empty"]
 
-    t = int(decision_at_ms)
-    out: dict[str, Any] = {
-        "schema": SCHEMA_STUDENT_OUTPUT_V1,
-        "contract_version": CONTRACT_VERSION_STUDENT_PROCTOR_V1,
-        "graded_unit_type": GRADED_UNIT_TYPE_V1,
-        "graded_unit_id": str(graded_unit_id),
-        "decision_at_ms": t,
-        "act": bool(parsed.get("act")),
-        "direction": str(parsed.get("direction") or "flat").strip().lower(),
-        "pattern_recipe_ids": parsed.get("pattern_recipe_ids") if isinstance(parsed.get("pattern_recipe_ids"), list) else [],
-        "confidence_01": float(parsed.get("confidence_01") or 0.0),
-        "reasoning_text": str(parsed.get("reasoning_text") or "")[:4000],
-        "student_decision_ref": str(parsed.get("student_decision_ref") or "")[:128],
-    }
-    if not out["student_decision_ref"] or len(out["student_decision_ref"]) < 36:
-        out["student_decision_ref"] = str(
-            uuid.uuid5(_NS_OLLAMA_REF, f"ollama_student_v1:{llm_model}:{graded_unit_id}:{t}")
-        )
-    pr = out["pattern_recipe_ids"]
-    if not pr or not all(isinstance(x, str) for x in pr):
-        out["pattern_recipe_ids"] = [f"ollama_{llm_model.replace(':', '_')}_v1"]
-    _merge_optional_thesis_from_parsed_v1(parsed, out)
-    _apply_canonical_student_action_v1(out)
-    if require_directional_thesis_v1:
-        _ensure_conflicting_indicators_llm_contract_v1(out)
-    ve = validate_student_output_v1(out)
-    if ve:
-        return None, [f"student_output_invalid: {'; '.join(ve)}"]
-    if require_directional_thesis_v1:
-        te = validate_student_output_directional_thesis_required_for_llm_profile_v1(out)
-        if te:
-            return None, [f"student_output_thesis_incomplete_for_llm_profile: {'; '.join(te)}"]
-    return out, []
+    out1, errs1 = _finalize_student_output_from_assistant_text_v1(
+        text1,
+        graded_unit_id=graded_unit_id,
+        decision_at_ms=decision_at_ms,
+        llm_model=llm_model,
+        require_directional_thesis_v1=require_directional_thesis_v1,
+    )
+    if out1 is not None:
+        if isinstance(llm_io_capture_v1, dict):
+            llm_io_capture_v1["raw_assistant_text_v1"] = text1
+            llm_io_capture_v1["json_contract_retry_used_v1"] = False
+        return out1, []
+
+    if not student_contract:
+        if isinstance(llm_io_capture_v1, dict):
+            llm_io_capture_v1["raw_assistant_text_v1"] = text1
+        return None, errs1
+
+    repair_user = _gt036_json_repair_prompt_v1(
+        failed_raw_assistant=text1,
+        failure_reasons=errs1,
+        original_prompt=user,
+    )
+    text2, err2 = _ollama_chat_once_v1(
+        base_url=ollama_base_url,
+        model=llm_model,
+        user_prompt=repair_user,
+        options=ollama_opts,
+    )
+    if isinstance(llm_io_capture_v1, dict):
+        llm_io_capture_v1["json_contract_retry_used_v1"] = True
+        llm_io_capture_v1["repair_user_prompt_v1"] = repair_user
+        llm_io_capture_v1["raw_assistant_text_attempt_2_v1"] = text2 if isinstance(text2, str) else None
+
+    if err2 or not isinstance(text2, str) or not text2.strip():
+        if isinstance(llm_io_capture_v1, dict):
+            llm_io_capture_v1["raw_assistant_text_v1"] = text1
+        merged = list(errs1)
+        if err2:
+            merged.append(err2)
+        elif not isinstance(text2, str) or not str(text2).strip():
+            merged.append("ollama_empty_on_json_repair_retry_v1")
+        return None, merged
+
+    out2, errs2 = _finalize_student_output_from_assistant_text_v1(
+        text2,
+        graded_unit_id=graded_unit_id,
+        decision_at_ms=decision_at_ms,
+        llm_model=llm_model,
+        require_directional_thesis_v1=require_directional_thesis_v1,
+    )
+    if out2 is not None:
+        if isinstance(llm_io_capture_v1, dict):
+            llm_io_capture_v1["raw_assistant_text_v1"] = text2
+        return out2, []
+
+    if isinstance(llm_io_capture_v1, dict):
+        llm_io_capture_v1["raw_assistant_text_v1"] = text1
+    return None, errs1 + errs2
 
 
 def verify_ollama_model_tag_available_v1(
