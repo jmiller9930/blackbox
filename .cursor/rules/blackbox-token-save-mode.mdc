@@ -1,0 +1,34 @@
+---
+description: Temporary token-save mode — minimal always-on context until Cursor usage resets
+alwaysApply: true
+---
+
+# BLACK BOX — token save mode (temporary)
+
+Use until your Cursor billing cycle resets (~2 days). **Governance is not deleted** — it stops auto-loading every message.
+
+## Assistant defaults
+
+- **Short answers.** No walls of text, no huge code dumps unless the user asks or it is required to ship.
+- **Fewer tool passes.** Batch reads; prefer `grep`/narrow reads over whole files.
+
+## When to pull full governance
+
+- Do **not** assume full-project hydration every turn.
+- If the task needs governance, architecture proof, or deployment bars: the user should **@**mention the relevant rule file under `.cursor/rules/` (e.g. `blackbox-session-always`, `claw-server-execution`, `git-complete-push-origin`, `clawbot-ui-deployment-complete`) **or** point to `docs/architect/hydration_context_governance.md`.
+
+## Restore normal mode
+
+1. Set **`alwaysApply: false`** on **this** file (`blackbox-token-save-mode.mdc`), or delete it.
+2. Set **`alwaysApply: true`** again on these eight rules (line 3 of each):
+
+   - `blackbox-session-always.mdc`
+   - `claw-server-execution.mdc`
+   - `clawbot-ui-deployment-complete.mdc`
+   - `git-complete-push-origin.mdc`
+   - `remote-ssh-only-server-work.mdc`
+   - `triad-engagement.mdc`
+   - `openclaw-documentation.mdc`
+   - `architect-proof-response.mdc`
+
+   Or revert the git commit that introduced token-save mode if you committed nothing else in the same commit.

@@ -1,6 +1,6 @@
 ---
 description: Lab host clawbot; follow local_remote_development_workflow + execution_context
-alwaysApply: true
+alwaysApply: false
 ---
 
 # Claw server execution

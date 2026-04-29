@@ -1,6 +1,6 @@
 ---
 description: Directive met + proof as benchmark; method of testing is secondary
-alwaysApply: true
+alwaysApply: false
 ---
 
 # Architect proof & status responses (non-negotiable format)

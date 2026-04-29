@@ -1,6 +1,6 @@
 ---
 description: Align BLACK BOX / Cody work with OpenClaw documentation; map plans to docs; ask when unclear
-alwaysApply: true
+alwaysApply: false
 ---
 
 # OpenClaw documentation alignment

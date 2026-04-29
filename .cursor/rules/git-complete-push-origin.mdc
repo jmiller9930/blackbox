@@ -1,6 +1,6 @@
 ---
 description: Commit and push substantive work to origin — remote is not updated until push succeeds
-alwaysApply: true
+alwaysApply: false
 ---
 
 # Git: complete work on the remote

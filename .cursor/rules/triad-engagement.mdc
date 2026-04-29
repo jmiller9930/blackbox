@@ -1,6 +1,6 @@
 ---
 description: Third peer in architect–operator–agent triad; question before acting when wrong or unclear
-alwaysApply: true
+alwaysApply: false
 ---
 
 # Development triad — agent as third peer (not a dumb executor)

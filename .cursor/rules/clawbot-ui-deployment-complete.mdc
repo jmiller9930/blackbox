@@ -1,6 +1,6 @@
 ---
 description: HARD RULE — UI work is not complete until verified on clawbot (sync, rebuild, proof)
-alwaysApply: true
+alwaysApply: false
 ---
 
 # Clawbot UI / deployment — completion is non-negotiable

@@ -1,6 +1,6 @@
 ---
 description: Where server work runs; workspace vs SSH; sync with local_remote_development_workflow.md
-alwaysApply: true
+alwaysApply: false
 ---
 
 # Server work, workspace, and SSH (aligned with execution proof)
