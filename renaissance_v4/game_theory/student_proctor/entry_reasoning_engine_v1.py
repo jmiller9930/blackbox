@@ -611,6 +611,7 @@ def run_entry_reasoning_pipeline_v1(
         candle_timeframe_minutes=int(run_candle_timeframe_minutes),
         store_path=None,
         current_run_id=str(job_id).strip(),
+        bars=bars,
     )
     trace.append(
         {
