@@ -59,10 +59,16 @@ STRICT_PROMPT_HEADINGS = (
     "Final verifier status:",
 )
 
-STRICT_VERIFIER_PROMPT_PREFIX = """You are a verifier. Output MUST follow this exact structure and nothing else.
+STRICT_VERIFIER_PROMPT_PREFIX = """You are a verifier. Your assistant reply must be ONLY the four labeled sections below—no preamble, no chain-of-thought, no markdown fences.
+
+The visible answer MUST contain these exact labels (including the colons), in this order:
+Claim reviewed:
+Math verdict:
+DATA evidence required:
+Final verifier status:
 
 Claim reviewed:
-<one sentence>
+<one sentence restating what is being verified>
 
 Math verdict:
 <correct/incorrect + brief reason>
@@ -73,17 +79,48 @@ DATA evidence required:
 Final verifier status:
 <PASS or FAIL>
 
-Rules:
-- No explanations outside sections
-- No chain-of-thought
-- No extra text
-- Each section must be non-empty
+Hard rules:
+- Do not write analysis before "Claim reviewed:"—start the substantive answer at Claim reviewed:
+- No text after Final verifier status line except optional blank line
+- Each section body must be non-empty
+
+Illustrative miniature example (structure only):
+Claim reviewed:
+The sender asserts Sharpe 3.1 from nine samples without rf.
+
+Math verdict:
+Incorrect — unstable Sharpe on short windows.
+
+DATA evidence required:
+Daily excess returns; rf series used; variance estimation window.
+
+Final verifier status:
+FAIL
 
 ---
 
 User verification task:
 
 """
+
+
+def strip_reasoning_noise(text: str) -> str:
+    """Remove common thinking wrappers so structural checks apply to the verifier body."""
+    t = text
+    for pat in (
+        r"<think>[\s\S]*?</think>",
+        r"<think>[\s\S]*?</think>",
+    ):
+        t = re.sub(pat, "", t, flags=re.IGNORECASE)
+    # Drop narrative before earliest verifier label
+    earliest: int | None = None
+    for marker in STRICT_PROMPT_HEADINGS:
+        i = t.find(marker)
+        if i >= 0 and (earliest is None or i < earliest):
+            earliest = i
+    if earliest is not None and earliest > 0:
+        t = t[earliest:]
+    return t.strip()
 
 
 GENERIC_PATTERNS = (
@@ -326,11 +363,12 @@ def main() -> None:
         if not args.legacy_headings:
             user_in = STRICT_VERIFIER_PROMPT_PREFIX + user_in
         text = run_generation(model, tokenizer, user_in, max_new_tokens=args.max_new_tokens)
-        struct_ok = structural_pass(text, headings)
-        data_ok = data_validation_present(text)
-        rq = heuristic_reasoning_score(text, headings)
-        generic = any(p.search(text) for p in GENERIC_PATTERNS)
-        issue_hint = detect_issue_signals(text)
+        scored_text = strip_reasoning_noise(text) if not args.legacy_headings else text
+        struct_ok = structural_pass(scored_text, headings)
+        data_ok = data_validation_present(scored_text)
+        rq = heuristic_reasoning_score(scored_text, headings)
+        generic = any(p.search(scored_text) for p in GENERIC_PATTERNS)
+        issue_hint = detect_issue_signals(scored_text)
         passed = struct_ok and data_ok and rq >= reasoning_floor and not generic
         if case.expect_detect_issue:
             passed = passed and issue_hint
@@ -354,7 +392,7 @@ def main() -> None:
                 "pass": passed,
                 "failure_reasons": fr,
                 "strict_prompt": not args.legacy_headings,
-                "output_preview": text[:2400],
+                "output_preview": scored_text[:2400],
             }
         )
 
