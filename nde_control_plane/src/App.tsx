@@ -86,7 +86,7 @@ export default function App() {
     <div className="app">
       <header className="banner-wrap">
         <img
-          src="/static/assets/finquant1/nde_studio_pattern.jpg"
+          src="/finquant1/nde_studio_pattern.jpg"
           alt=""
           width={1600}
           height={200}
