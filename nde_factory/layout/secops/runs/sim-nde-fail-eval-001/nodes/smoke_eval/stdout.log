@@ -1,0 +1,3 @@
+simulate: smoke_eval short-circuit (no harness inference)
+simulate_result=fail_eval
+eval_passed=False

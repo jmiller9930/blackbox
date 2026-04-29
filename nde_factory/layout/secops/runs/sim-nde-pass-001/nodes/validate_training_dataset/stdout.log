@@ -1,0 +1,12 @@
+{
+  "dataset_ok": true,
+  "detail": {
+    "staging_path": "/Users/bigmac/Documents/code_projects/blackbox/nde_factory/layout/secops/datasets/staging/secops_nist_v0.3_from_sources.jsonl",
+    "row_count": 150,
+    "missing_source_ids": 0,
+    "rows_missing_required_fields": 0,
+    "rows_missing_verifier_headings": 0,
+    "adversarial_count": 105,
+    "adversarial_ratio_observed": 0.7
+  }
+}

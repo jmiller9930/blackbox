@@ -1,0 +1,10 @@
+{
+  "contract_ok": true,
+  "detail": {
+    "domain_config": "/Users/bigmac/Documents/code_projects/blackbox/nde_factory/layout/secops/domain_config.yaml",
+    "training_config": "/Users/bigmac/Documents/code_projects/blackbox/nde_factory/layout/secops/training/config.yaml",
+    "eval_harness": "/Users/bigmac/Documents/code_projects/blackbox/nde_factory/layout/secops/eval/eval_v1.json",
+    "final_exam": "/Users/bigmac/Documents/code_projects/blackbox/nde_factory/layout/secops/eval/final_exam_v1.json",
+    "staging_dir": "/Users/bigmac/Documents/code_projects/blackbox/nde_factory/layout/secops/datasets/staging"
+  }
+}

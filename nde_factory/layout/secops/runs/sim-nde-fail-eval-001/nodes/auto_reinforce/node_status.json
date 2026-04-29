@@ -1,0 +1,21 @@
+{
+  "node": "auto_reinforce",
+  "status": "PASS",
+  "inputs": [
+    {
+      "gate_passed": false
+    }
+  ],
+  "outputs": [
+    {
+      "policy": "nde reinforcement stub"
+    }
+  ],
+  "errors": [],
+  "next_node": "retry_or_escalate",
+  "updated_at": "2026-04-29T20:54:05Z",
+  "artifacts": {
+    "policy": "nde reinforcement stub"
+  },
+  "failure_reason": null
+}

@@ -1,0 +1,21 @@
+{
+  "node": "evaluate_gate",
+  "status": "FAIL",
+  "inputs": [
+    {
+      "eval_passed": false
+    }
+  ],
+  "outputs": [
+    {
+      "gate_passed": false
+    }
+  ],
+  "errors": [
+    "eval_passed is false"
+  ],
+  "next_node": "auto_reinforce",
+  "updated_at": "2026-04-29T20:54:05Z",
+  "artifacts": {},
+  "failure_reason": "gate: eval_passed is false"
+}

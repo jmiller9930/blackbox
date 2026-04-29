@@ -1,0 +1,26 @@
+{
+  "node": "smoke_train",
+  "status": "PASS",
+  "inputs": [
+    {
+      "mode": "simulate"
+    }
+  ],
+  "outputs": [
+    {
+      "simulated": true,
+      "manifest": "/Users/bigmac/Documents/code_projects/blackbox/nde_factory/layout/secops/adapters/secops-simulated-adapter/simulated_adapter.json"
+    }
+  ],
+  "errors": [],
+  "next_node": "smoke_eval",
+  "updated_at": "2026-04-29T20:54:05Z",
+  "artifacts": {
+    "train_mode": "simulate",
+    "simulated_train": true,
+    "training_subprocess_invoked": false,
+    "simulated_adapter_manifest": "/Users/bigmac/Documents/code_projects/blackbox/nde_factory/layout/secops/adapters/secops-simulated-adapter/simulated_adapter.json",
+    "training_config": "/Users/bigmac/Documents/code_projects/blackbox/nde_factory/layout/secops/training/config.yaml"
+  },
+  "failure_reason": null
+}

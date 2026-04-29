@@ -1,0 +1,32 @@
+{
+  "node": "validate_domain_contract",
+  "status": "PASS",
+  "inputs": [
+    {
+      "nde_root": "/Users/bigmac/Documents/code_projects/blackbox/nde_factory/layout",
+      "domain": "secops"
+    }
+  ],
+  "outputs": [
+    {
+      "domain_config": "/Users/bigmac/Documents/code_projects/blackbox/nde_factory/layout/secops/domain_config.yaml",
+      "training_config": "/Users/bigmac/Documents/code_projects/blackbox/nde_factory/layout/secops/training/config.yaml",
+      "eval_harness": "/Users/bigmac/Documents/code_projects/blackbox/nde_factory/layout/secops/eval/eval_v1.json",
+      "final_exam": "/Users/bigmac/Documents/code_projects/blackbox/nde_factory/layout/secops/eval/final_exam_v1.json",
+      "staging_dir": "/Users/bigmac/Documents/code_projects/blackbox/nde_factory/layout/secops/datasets/staging"
+    }
+  ],
+  "errors": [],
+  "next_node": "validate_training_dataset",
+  "updated_at": "2026-04-29T20:54:05Z",
+  "artifacts": {
+    "detail": {
+      "domain_config": "/Users/bigmac/Documents/code_projects/blackbox/nde_factory/layout/secops/domain_config.yaml",
+      "training_config": "/Users/bigmac/Documents/code_projects/blackbox/nde_factory/layout/secops/training/config.yaml",
+      "eval_harness": "/Users/bigmac/Documents/code_projects/blackbox/nde_factory/layout/secops/eval/eval_v1.json",
+      "final_exam": "/Users/bigmac/Documents/code_projects/blackbox/nde_factory/layout/secops/eval/final_exam_v1.json",
+      "staging_dir": "/Users/bigmac/Documents/code_projects/blackbox/nde_factory/layout/secops/datasets/staging"
+    }
+  },
+  "failure_reason": null
+}

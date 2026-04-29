@@ -1,0 +1,28 @@
+{
+  "node": "smoke_eval",
+  "status": "PASS",
+  "inputs": [
+    {
+      "domain": "secops"
+    },
+    {
+      "simulate_result": "fail_final"
+    }
+  ],
+  "outputs": [
+    {
+      "eval_score": 1.0,
+      "simulated_eval": true
+    }
+  ],
+  "errors": [],
+  "next_node": "evaluate_gate",
+  "updated_at": "2026-04-29T20:54:05Z",
+  "artifacts": {
+    "simulated_eval": true,
+    "eval_inference_invoked": false,
+    "simulate_result": "fail_final",
+    "eval_score": 1.0
+  },
+  "failure_reason": null
+}

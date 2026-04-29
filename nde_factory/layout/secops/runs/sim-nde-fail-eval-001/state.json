@@ -1,0 +1,33 @@
+{
+  "domain": "secops",
+  "mode": "simulate",
+  "nde_root": "/Users/bigmac/Documents/code_projects/blackbox/nde_factory/layout",
+  "run_id": "sim-nde-fail-eval-001",
+  "max_retries": 0,
+  "retry_count": 1,
+  "require_approval": false,
+  "dry_run": false,
+  "skip_train": false,
+  "simulate_result": "fail_eval",
+  "contract_ok": true,
+  "dataset_ok": true,
+  "train_ok": true,
+  "eval_passed": false,
+  "gate_passed": false,
+  "reinforcement_done": true,
+  "escalated": true,
+  "last_error": "simulated fail_eval",
+  "escalate_reason": "max_retries",
+  "artifacts": {
+    "staging_path": "/Users/bigmac/Documents/code_projects/blackbox/nde_factory/layout/secops/datasets/staging/secops_nist_v0.3_from_sources.jsonl",
+    "row_count": 150,
+    "missing_source_ids": 0,
+    "rows_missing_required_fields": 0,
+    "rows_missing_verifier_headings": 0,
+    "adversarial_count": 105,
+    "adversarial_ratio_observed": 0.7
+  },
+  "staging_path": "/Users/bigmac/Documents/code_projects/blackbox/nde_factory/layout/secops/datasets/staging/secops_nist_v0.3_from_sources.jsonl",
+  "dataset_sha256": "9d16cd69eda981095b133e048d33ac87da82158c8d42f53a5451b96c41a2abdd",
+  "eval_score": 0.0
+}

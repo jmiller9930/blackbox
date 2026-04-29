@@ -1,0 +1,29 @@
+{
+  "node": "validate_training_dataset",
+  "status": "PASS",
+  "inputs": [
+    {
+      "domain": "secops",
+      "nde_root": "/Users/bigmac/Documents/code_projects/blackbox/nde_factory/layout"
+    }
+  ],
+  "outputs": [
+    {
+      "staging_path": "/Users/bigmac/Documents/code_projects/blackbox/nde_factory/layout/secops/datasets/staging/secops_nist_v0.3_from_sources.jsonl",
+      "row_count": 150,
+      "missing_source_ids": 0,
+      "rows_missing_required_fields": 0,
+      "rows_missing_verifier_headings": 0,
+      "adversarial_count": 105,
+      "adversarial_ratio_observed": 0.7
+    }
+  ],
+  "errors": [],
+  "next_node": "smoke_train",
+  "updated_at": "2026-04-29T20:54:05Z",
+  "artifacts": {
+    "staging_path": "/Users/bigmac/Documents/code_projects/blackbox/nde_factory/layout/secops/datasets/staging/secops_nist_v0.3_from_sources.jsonl",
+    "dataset_sha256": "9d16cd69eda981095b133e048d33ac87da82158c8d42f53a5451b96c41a2abdd"
+  },
+  "failure_reason": null
+}

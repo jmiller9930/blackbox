@@ -1,0 +1,24 @@
+{
+  "node": "retry_or_escalate",
+  "status": "ESCALATED",
+  "inputs": [
+    {
+      "retry_before": 0
+    }
+  ],
+  "outputs": [
+    {
+      "retry_count": 1,
+      "max_retries": 0,
+      "escalate": true
+    }
+  ],
+  "errors": [],
+  "next_node": "END",
+  "updated_at": "2026-04-29T20:54:05Z",
+  "artifacts": {
+    "retry_count": 1,
+    "max_retries": 0
+  },
+  "failure_reason": "max_retries exceeded"
+}

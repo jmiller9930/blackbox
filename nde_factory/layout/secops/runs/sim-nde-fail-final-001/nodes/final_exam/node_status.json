@@ -1,0 +1,33 @@
+{
+  "node": "final_exam",
+  "status": "FAIL",
+  "inputs": [
+    {
+      "simulate_result": "fail_final"
+    }
+  ],
+  "outputs": [
+    {
+      "simulated_final_exam": true,
+      "simulate_result": "fail_final",
+      "gate_passed": true,
+      "train_ok": true,
+      "dataset_ok": true,
+      "final_exam_passed": false,
+      "final_exam_score": 0.0,
+      "final_exam_inference_invoked": false
+    }
+  ],
+  "errors": [
+    "simulated fail_final"
+  ],
+  "next_node": "END",
+  "updated_at": "2026-04-29T20:54:05Z",
+  "artifacts": {
+    "eval_json": "/Users/bigmac/Documents/code_projects/blackbox/nde_factory/layout/secops/eval/eval_v1.json",
+    "final_exam_json": "/Users/bigmac/Documents/code_projects/blackbox/nde_factory/layout/secops/eval/final_exam_v1.json",
+    "simulated_final_exam": true,
+    "final_exam_score": 0.0
+  },
+  "failure_reason": "simulated fail_final"
+}

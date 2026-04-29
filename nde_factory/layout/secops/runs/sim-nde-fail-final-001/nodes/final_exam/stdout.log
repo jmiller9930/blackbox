@@ -1,0 +1,10 @@
+{
+  "simulated_final_exam": true,
+  "simulate_result": "fail_final",
+  "gate_passed": true,
+  "train_ok": true,
+  "dataset_ok": true,
+  "final_exam_passed": false,
+  "final_exam_score": 0.0,
+  "final_exam_inference_invoked": false
+}
