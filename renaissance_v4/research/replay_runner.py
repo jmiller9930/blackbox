@@ -874,6 +874,9 @@ def run_manifest_replay(
                 gt058_should_block_entry_from_prior_labels_v1,
                 gt058_signature_key_v1,
             )
+            from renaissance_v4.game_theory.gt059_precision_gate_v1 import (
+                gt059_ev_best_proxy_from_signal_results_v1,
+            )
 
             if (
                 should_open
@@ -884,7 +887,12 @@ def run_manifest_replay(
                     regime, str(fusion_result.direction or ""), active_signal_names
                 )
                 priors = _gt058_label_memory.get(gt058_sk_for_open) or []
-                if gt058_should_block_entry_from_prior_labels_v1(priors):
+                ev_proxy = gt059_ev_best_proxy_from_signal_results_v1(
+                    signal_results, entry_direction=str(entry_direction)
+                )
+                if gt058_should_block_entry_from_prior_labels_v1(
+                    priors, ev_best_value_v1=float(ev_proxy)
+                ):
                     should_open = False
                     entry_direction = "flat"
                     _gt058_blocked_entries += 1
