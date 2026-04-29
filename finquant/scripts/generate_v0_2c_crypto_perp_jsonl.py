@@ -2,18 +2,19 @@
 """
 Deterministic generator for finquant_v0.2c_crypto_perp_reinforcement.jsonl.
 
-Directive template:
-  instruction: Verify the claim and output in the required four-section format.
-  input: one-sentence claim
-  output: Claim reviewed / Math verdict / DATA evidence required / Final verifier status
+Focus: false causality / overconfident market claims on perps (OI, funding, liquidation, basis).
 
-Run: python3 finquant/scripts/generate_v0_2c_crypto_perp_jsonl.py
+Run from repo root:
+  python3 finquant/scripts/generate_v0_2c_crypto_perp_jsonl.py
 
-Output: finquant/patches/v0.2c/finquant_v0.2c_crypto_perp_reinforcement.jsonl
-Staging:  /data/finquant-1/datasets/staging/finquant_v0.2c_crypto_perp_reinforcement.jsonl
+Output:
+  finquant/patches/v0.2c/finquant_v0.2c_crypto_perp_reinforcement.jsonl
 
-Wrong causal claims → Math verdict begins with Incorrect — … ; Final verifier status FAIL.
-Issue cues (eval harness): incorrect | mismatch | invalid | unsupported appear in verdict/DATA.
+Deploy staging copy:
+  /data/finquant-1/datasets/staging/finquant_v0.2c_crypto_perp_reinforcement.jsonl
+
+Adversarial rows use Math verdict starting with **Incorrect** and include at least one harness cue word:
+incorrect | mismatch | invalid | unsupported (see eval_finquant.detect_issue_signals).
 """
 from __future__ import annotations
 
@@ -25,108 +26,182 @@ from pathlib import Path
 PATCH_DIR = Path(__file__).resolve().parents[1] / "patches" / "v0.2c"
 OUT_JSONL = PATCH_DIR / "finquant_v0.2c_crypto_perp_reinforcement.jsonl"
 
-# Exact instruction per directive
-INSTR = "Verify the claim and output in the required four-section format."
+INSTR = (
+    "You are a quant verifier. Answer using exactly four labeled sections in this order: "
+    "Claim reviewed:, Math verdict:, DATA evidence required:, Final verifier status:. "
+    "Be concise. For causal claims about perps (funding, OI, liquidation, basis), reject leaps "
+    "that equate correlation with causation unless independently evidenced. "
+    "Use FAIL when the claim is overstated or unsupported."
+)
 
 TARGET_N = 100
 ADV_FRAC = 0.85
-SEED = 42100
-FLAG = "crypto_perp_v0.2c_concise"
+SEED = 42006
+FLAG = "crypto_perp_v0.2c"
 
-# Concrete DATA block (directive template); not prompt-echo.
-DATA_STANDARD_LINES = [
-    "Funding rate (UTC timestamp, venue identifier)",
-    "Mark price vs index price (aligned series)",
-    "Position side, leverage, margin mode",
-    "Open interest delta over the claim interval",
-    "Basis (mark − index) at decision times T",
-]
+
+def _snip(s: str, max_words: int = 30) -> str:
+    w = s.replace("\n", " ").strip().split()
+    if len(w) <= max_words:
+        return " ".join(w)
+    return " ".join(w[:max_words]) + "…"
 
 
 def format_data_evidence_block(items: list[str]) -> str:
     lines = [f"- {x.strip()}" for x in items if x and x.strip()]
-    return "\n".join(lines)
+    return "\n".join(lines) if lines else "- Mark price and index price time series (UTC)"
 
 
 def four_section_output(
     *,
-    claim_reviewed: str,
+    claim_summary: str,
     verdict_line: str,
     data_items: list[str],
     final_status: str,
 ) -> str:
     body = format_data_evidence_block(data_items)
     return (
-        f"Claim reviewed:\n{claim_reviewed.strip()}\n\n"
+        f"Claim reviewed:\n{_snip(claim_summary)}\n\n"
         f"Math verdict:\n{verdict_line.strip()}\n\n"
         f"DATA evidence required:\n{body}\n\n"
         f"Final verifier status:\n{final_status.strip()}"
     )
 
 
-# (input one-liner, claim_reviewed paraphrase, Incorrect — reason with cue word)
-# Covers: funding→direction, OI→direction, liqs→continuation, flip→reversal, mark=last,
-# vol→direction, basis→move, leverage removes risk, + eval-style OI/neutral card.
-ADV_SPEC: list[tuple[str, str, str]] = [
+# Verdict lines must stay aligned with eval harness issue_detection (substring cues in lower text).
+ADV_POOL: list[tuple[str, str, list[str], str]] = [
     (
-        "Positive funding proves spot will rally next session.",
-        "The claim ties funding sign to a directional spot outcome.",
-        "Incorrect — funding reflects premium/carry, not a validated price forecast; causal link unsupported.",
+        "[VERIFY] Claim: Positive funding causes spot price to rise over the next hour.",
+        "Incorrect — funding is a carry/premium mechanism; direction needs separate invalidation with price DATA.",
+        [
+            "Funding rate timestamps (UTC) and venue",
+            "Spot and perp mark price paths over the same windows",
+            "Open interest delta vs realized volatility",
+        ],
+        "FAIL",
     ),
     (
-        "Rising perp OI means buyers are in control and price must go up.",
-        "The claim maps higher OI to bullish direction.",
-        "Incorrect — OI aggregates long and short gross exposure; directional inference invalid without skew DATA.",
+        "[VERIFY] Claim: A liquidation cascade guarantees trend continuation in the same direction.",
+        "Incorrect — cascades can exhaust positioning; causal link unsupported without order-book replay.",
+        [
+            "Liquidation trade prints with timestamps",
+            "Mark price and index during cascade window",
+            "OI delta and depth snapshots post-cascade",
+        ],
+        "FAIL",
     ),
     (
-        "A liquidation sweep guarantees the trend will continue for hours.",
-        "The claim asserts forced exits guarantee continuation.",
-        "Incorrect — liquidations can absorb one-sided risk; continuation is not guaranteed (unsupported inevitability).",
+        "[VERIFY] Claim: Rising open interest on a perp is always bullish.",
+        "Incorrect — OI rises with both long and short interest; directional claim is invalid without skew DATA.",
+        [
+            "OI breakdown long vs short where available",
+            "Mark minus index (basis) path",
+            "Cumulative delta or aggressor side statistics",
+        ],
+        "FAIL",
     ),
     (
-        "When funding flips from positive to negative, the macro trend must reverse.",
-        "The claim ties a funding sign change to a mandatory regime reversal.",
-        "Incorrect — funding flips track premium shifts; mismatch versus mandatory macro reversal.",
+        "[VERIFY] Claim: Falling funding rate proves traders are turning bearish.",
+        "Incorrect — funding moves with premium/discount; mismatch risk vs sentiment labels.",
+        [
+            "Signed funding series with venue convention doc",
+            "Index premium vs mark over hold interval",
+            "Position imbalance proxies if published",
+        ],
+        "FAIL",
     ),
     (
-        "Perp mark price is always identical to the last traded price.",
-        "The claim equates mark with last trade.",
-        "Incorrect — venue marks are typically index-derived; identity invalid under exchange rules.",
+        "[VERIFY] Claim: High leverage is safe if the technical signal is strong.",
+        "Incorrect — leverage tightens liquidation distance; signal strength does not remove gap risk (unsupported safety claim).",
+        [
+            "Leverage and margin mode",
+            "Liquidation price vs mark series",
+            "Realized volatility of the underlying window",
+        ],
+        "FAIL",
     ),
     (
-        "A volatility spike confirms the breakout direction is correct.",
-        "The claim uses volatility as directional confirmation.",
-        "Incorrect — volatility scales uncertainty; mismatch if treated as directional proof alone.",
+        "[VERIFY] Claim: Perp mark price always equals the last traded price.",
+        "Incorrect — mark is typically index-derived; identity claim invalid for most venues.",
+        [
+            "Venue mark methodology reference",
+            "Last trade tape vs mark snapshots",
+            "Replay bar timestamps for both series",
+        ],
+        "FAIL",
     ),
     (
-        "Basis tightening toward zero guarantees a large imminent spot jump.",
-        "The claim promises a guaranteed move from basis convergence.",
-        "Incorrect — basis mean-reverts without guaranteed magnitude; prediction unsupported.",
+        "[VERIFY] Claim: A wave of liquidations is a bullish signal for the next session.",
+        "Incorrect — liquidation direction vs subsequent drift is empirically mixed; claim unsupported.",
+        [
+            "Liquidation side (long vs short) aggregation",
+            "Post-event mark path and session returns",
+            "Funding and OI reset after liquidations",
+        ],
+        "FAIL",
     ),
     (
-        "With a strong signal, 20× leverage is safe because edge dominates gap risk.",
-        "The claim says leverage removes liquidation risk when signals look good.",
-        "Incorrect — leverage raises liquidation proximity; safety claim unsupported by mechanics.",
+        "[VERIFY] Claim: Rising volatility confirms the directional breakout thesis.",
+        "Incorrect — volatility scales uncertainty; mismatch if treated as directional confirmation alone.",
+        [
+            "Realized vs implied volatility series",
+            "Directional return sign separate from vol spike",
+            "Stop distance vs ATR at signal time",
+        ],
+        "FAIL",
     ),
     (
-        "BTC perp OI spikes while funding is neutral, so liquidations must follow soon.",
-        "The claim links OI spike plus neutral funding to imminent liquidations.",
-        "Incorrect — liquidations depend on mark paths and margin stress; OI alone cannot prove timing (invalid causal leap).",
+        "[VERIFY] Claim: When funding flips sign, the macro trend must reverse.",
+        "Incorrect — funding flips often reflect premium decay; causal reversal claim unsupported.",
+        [
+            "Funding flip timestamps vs subsequent trend metrics",
+            "Basis and OI around flips",
+            "External regime indicators if asserted",
+        ],
+        "FAIL",
     ),
     (
-        "Negative funding means price has to dump because shorts are winning.",
-        "The claim forces a directional price move from funding sign alone.",
-        "Incorrect — sign conventions and premium dynamics mismatch simple price mandates; unsupported.",
+        "[VERIFY] Claim: Basis tightening toward zero guarantees an imminent large spot move.",
+        "Incorrect — basis mean-reverts often without guaranteed magnitude; prediction unsupported.",
+        [
+            "Spot reference index ID",
+            "Mark and index sampled at identical timestamps",
+            "Historical basis distribution not cherry-picked window",
+        ],
+        "FAIL",
     ),
     (
-        "Heavy long liquidations are a buy signal for the next candle.",
-        "The claim treats liquidation prints as directional alpha.",
-        "Incorrect — post-liquidation drift is regime-dependent; bullish inference unsupported.",
+        "[VERIFY] Market card: BTC perp open interest spikes while funding neutral; claim 'liquidations must follow soon.' Challenge causal certainty.",
+        "Incorrect — liquidations depend on mark paths and margin; OI spike alone is insufficient (unsupported inevitability).",
+        [
+            "Mark price and liquidation proximity metrics",
+            "OI delta per interval vs price volatility",
+            "Funding rate timestamps even if neutral band",
+        ],
+        "FAIL",
     ),
     (
-        "If funding is flat, OI changes cannot matter for risk.",
-        "The claim dismisses OI when funding is neutral.",
-        "Incorrect — OI and margin still interact with mark; invalid to ignore exposure stacks.",
+        "[VERIFY] Claim: Negative funding means shorts are definitely paying longs so price must fall.",
+        "Incorrect — sign conventions vary; price direction remains unsupported by funding alone.",
+        [
+            "Venue funding payment direction table",
+            "Mark vs index path after funding prints",
+            "Position skew estimates",
+        ],
+        "FAIL",
+    ),
+]
+
+EVAL_STYLE_EXTRA = [
+    (
+        "[VERIFY] Market card: ETH perp OI jumps with flat funding; headline says 'forced covering soon.' Assess causal certainty.",
+        "Incorrect — mismatch between narrative and mechanics; covering is not guaranteed from OI alone.",
+        [
+            "OI change decomposition if available",
+            "Liquidation engine thresholds vs mark",
+            "Order flow imbalance proxies",
+        ],
+        "FAIL",
     ),
 ]
 
@@ -138,18 +213,21 @@ def main() -> None:
 
     rows: list[dict] = []
 
-    adv_pool = list(ADV_SPEC)
-    adv_pool.extend([ADV_SPEC[8]] * 14)
-    rng.shuffle(adv_pool)
+    adv_source = list(ADV_POOL) + EVAL_STYLE_EXTRA
+    adv_source.extend(
+        [ADV_POOL[-1]] * 18
+    )  # weight harness-shaped OI + neutral funding prompt
+    rng.shuffle(adv_source)
 
     for i in range(n_adv):
-        inp_line, reviewed, verdict = adv_pool[i % len(adv_pool)]
-        inp_v = f"{inp_line} Variant {i + 1}."
+        tpl = adv_source[i % len(adv_source)]
+        inp_base, mv, data_items, st = tpl
+        inp_v = inp_base + f" Variant {i + 1}."
         out = four_section_output(
-            claim_reviewed=reviewed,
-            verdict_line=verdict,
-            data_items=list(DATA_STANDARD_LINES),
-            final_status="FAIL",
+            claim_summary=inp_v,
+            verdict_line=mv,
+            data_items=data_items,
+            final_status=st,
         )
         rows.append(
             {
@@ -168,36 +246,69 @@ def main() -> None:
             }
         )
 
-    # Non-adversarial: hedged, mostly PASS; still use concrete DATA
-    clean_specs: list[tuple[str, str, str, str]] = [
+    clean_templates: list[tuple[str, str, list[str], str]] = [
         (
-            "We cannot infer liquidation timing from OI alone without margin stress DATA.",
-            "The statement refuses a causal leap from OI to liquidation timing.",
-            "Correct — timing claim unsupported without margin and mark evidence; verification needs listed DATA.",
-            "PASS",
-        ),
-        (
-            "Basis moves alone do not guarantee tradeable magnitude after fees.",
-            "The statement rejects guaranteed edge from basis tightening alone.",
-            "Correct — profitability claim unsupported until costs and distribution are evidenced.",
-            "PASS",
-        ),
-        (
-            "Funding sign by itself is an invalid proof of next-bar spot direction.",
-            "The claim rejects funding-only directional proof.",
-            "Incorrect as stated — directional mandates from funding alone remain unsupported (use DATA below).",
+            "[VERIFY] Does neutral funding alone justify a directional forecast?",
+            "Incorrect as stated — funding neutrality is insufficient; directional forecasts remain unsupported without price/OI/DATA.",
+            [
+                "Funding neutrality band definition",
+                "Concurrent mark and spot returns",
+                "OI delta vs realized vol",
+            ],
             "FAIL",
+        ),
+        (
+            "[VERIFY] Is it valid to infer causality from a single OI print?",
+            "Incorrect — single-point OI is not a causal identifier; invalid without time series context.",
+            [
+                "OI time series with timestamps",
+                "Aligned price series",
+                "Event timestamps for confounding news",
+            ],
+            "FAIL",
+        ),
+        (
+            "[VERIFY] Teaching check: correlation between funding and next-bar return is always stable.",
+            "Incorrect — unstable across regimes; unsupported universality.",
+            [
+                "Rolling correlation estimates with confidence intervals",
+                "Regime labels or volatility buckets",
+                "Multiple venues for robustness",
+            ],
+            "FAIL",
+        ),
+        (
+            "[VERIFY] Properly hedged statement: we cannot conclude liquidations will follow from OI spike alone.",
+            "Correct — causal certainty unsupported without margin stress DATA; treat claim as needing verification.",
+            [
+                "Margin utilization vs maintenance curve",
+                "Mark distance to liquidation for aggregate cohort if estimable",
+                "OI change vs leverage distribution",
+            ],
+            "PASS",
+        ),
+        (
+            "[VERIFY] Properly hedged statement: basis tightening alone does not guarantee a trade.",
+            "Correct — basis move lacks magnitude guarantees; PASS only as skepticism of certainty.",
+            [
+                "Basis distribution historically",
+                "Transaction costs and fees",
+                "Holding interval definition",
+            ],
+            "PASS",
         ),
     ]
 
     for j in range(n_clean):
-        inp_line, reviewed, verdict, fin = clean_specs[j % len(clean_specs)]
-        inp_v = f"{inp_line} Case ref {j + 1}."
+        tpl = clean_templates[j % len(clean_templates)]
+        inp, mv, data_items, st = tpl
+        # Avoid "Teaching sample N" phrasing — combined training caused degenerate echo on eval.
+        inp_v = inp + f" Case ref {j + 1}."
         out = four_section_output(
-            claim_reviewed=reviewed,
-            verdict_line=verdict,
-            data_items=list(DATA_STANDARD_LINES),
-            final_status=fin,
+            claim_summary=inp_v,
+            verdict_line=mv,
+            data_items=data_items,
+            final_status=st,
         )
         rows.append(
             {

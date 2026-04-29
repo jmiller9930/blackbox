@@ -5,7 +5,7 @@
 model_name_or_path: Qwen/Qwen2.5-1.5B-Instruct
 
 data:
-  staging_jsonl: datasets/staging/secops_nist_v0.3_from_sources.jsonl
+  staging_jsonl: datasets/staging/secops_v0.1.jsonl
   max_seq_length: 4096
 
 quantization:

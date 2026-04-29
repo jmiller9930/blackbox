@@ -1,0 +1,24 @@
+{
+  "directive": "GT048",
+  "job_id": "gt048-prod-001",
+  "memory_root": "/Users/bigmac/Documents/code_projects/blackbox/runtime/gt048_cycle/gt048-prod-001",
+  "student_learning_store": "/Users/bigmac/Documents/code_projects/blackbox/runtime/gt048_cycle/gt048-prod-001/student_learning_records_v1.jsonl",
+  "session_log_batch_dir_pass1": "/Users/bigmac/Documents/code_projects/blackbox/runtime/gt048_cycle/gt048-prod-001/logs/batch_20260429T175051Z_4836f320",
+  "closed_trades": 12,
+  "memory_rows_promoted": 12,
+  "retrieval_matches_later": 0,
+  "decisions_changed_due_to_memory_or_ev": false,
+  "seam_pass1": {
+    "student_learning_rows_appended": 12,
+    "student_retrieval_matches": 0
+  },
+  "seam_pass2": {
+    "student_learning_rows_appended": 12,
+    "student_retrieval_matches": 0
+  },
+  "acceptance": {
+    "memory_rows_promoted_gt_0": true,
+    "retrieval_matches_later_gt_0": false,
+    "met": false
+  }
+}

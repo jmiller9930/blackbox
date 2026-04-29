@@ -1,0 +1,1246 @@
+{
+  "schema": "renaissance_v4_run_memory_v1",
+  "run_id": "e73dfeb2-988c-477a-94d4-40b80ca07c66",
+  "utc": "2026-04-29T18:30:00.981197+00:00",
+  "source": "parallel_scenarios",
+  "manifest_path": "/Users/bigmac/Documents/code_projects/blackbox/renaissance_v4/configs/manifests/sr1_deterministic_trade_proof_v1.json",
+  "manifest_sha256": "339543b8c9e3a4c17850b66c4c841e4c1c076c6393a15ec3fea4f5fa91910e8f",
+  "hypothesis": null,
+  "indicator_context": null,
+  "context_silo": "renaissance_v4_pattern_game_v1",
+  "indicator_context_quality": {
+    "level": "missing",
+    "silo": "renaissance_v4_pattern_game_v1",
+    "matched_signal_keys": [],
+    "warn": "**Tide check:** Six feet of water does not tell you if the tide is **coming in or going out**. An indicator **value** without **context** (regime, direction, transition, velocity) is **noise** — not memory worth promoting. This silo stores **context around indicators**, not the universe."
+  },
+  "prior_run_id": null,
+  "atr_stop_mult": null,
+  "atr_target_mult": null,
+  "referee": {
+    "outcome_rule_version": "outcome_rule_v1_pnl_strict",
+    "wins": 7,
+    "losses": 0,
+    "trades": 7,
+    "win_rate": 1.0,
+    "validation_checksum": "8924a79fb16b9b5feea3ea98a5a95fa3ddd47f901c0b75fe87a5c888b74cedd4",
+    "cumulative_pnl": 0.9848999999999878,
+    "dataset_bars": 80,
+    "manifest_path": "/Users/bigmac/Documents/code_projects/blackbox/renaissance_v4/configs/manifests/sr1_deterministic_trade_proof_v1.json",
+    "summary": {
+      "total_trades": 7,
+      "wins": 7,
+      "losses": 0,
+      "win_rate": 1.0,
+      "gross_pnl": 0.9848999999999878,
+      "net_pnl": 0.9848999999999878,
+      "average_pnl": 0.14069999999999824,
+      "expectancy": 0.14069999999999824,
+      "max_drawdown": 0.0,
+      "avg_mae": 0.2600000000000193,
+      "avg_mfe": 1.4699999999999949
+    },
+    "pattern_game_meta": {
+      "starting_equity_usd_spec": 1000.0,
+      "risk_fraction_per_trade_spec": 0.02,
+      "note": "Equity/risk are spec targets; risk governor still uses tiered notional_fraction.",
+      "memory_bundle_audit": null,
+      "memory_bundle_proof": {
+        "memory_bundle_path": null,
+        "memory_bundle_hash": null,
+        "memory_bundle_loaded": false,
+        "memory_bundle_applied": false,
+        "memory_keys_applied": [],
+        "memory_bundle_apply_audit": null,
+        "execution_keys_applied": [],
+        "signal_keys_applied": [],
+        "fusion_keys_applied": [],
+        "policy_keys_applied": [],
+        "manifest_atr_on_disk": {
+          "atr_stop_mult": null,
+          "atr_target_mult": null
+        },
+        "manifest_atr_after_bundle_merge": {
+          "atr_stop_mult": null,
+          "atr_target_mult": null
+        },
+        "manifest_atr_effective": {
+          "atr_stop_mult": null,
+          "atr_target_mult": null
+        },
+        "replay_manifest_source": "disk_manifest_file",
+        "run_manifest_replay_module": "renaissance_v4.research.replay_runner",
+        "run_manifest_replay_function": "run_manifest_replay",
+        "execution_pipeline_note": "Signals/regime/fusion/risk/execution managers are built from the effective manifest dict inside run_manifest_replay via renaissance_v4.manifest.runtime (build_signals_from_manifest, build_execution_manager_from_manifest, etc.)."
+      }
+    },
+    "replay_data_audit": {
+      "schema": "pattern_game_bar_window_v1",
+      "dataset_bars_before_window": 240,
+      "dataset_bars_after_window": 240,
+      "bar_window_calendar_months_requested": null,
+      "slicing_applied": false,
+      "bar_window_open_time_start": 1700000000,
+      "bar_window_open_time_end": 1700071700,
+      "note": "Full dataset — no calendar-month window slice.",
+      "replay_tail_bars_trim_v1": {
+        "schema": "replay_tail_bars_trim_v1",
+        "dropped_leading_bars_v1": 160,
+        "replay_max_bars_effective_v1": 80,
+        "dataset_bars_after_tail_trim_v1": 80
+      }
+    },
+    "expectancy": 0.1407,
+    "average_pnl": 0.1407,
+    "max_drawdown": 0.0,
+    "note": "win_rate is the binary Referee scorecard; expectancy/average_pnl/max_drawdown are portfolio metrics from the same run — do not judge economics from win_rate alone.",
+    "learning_run_audit_v1": {
+      "schema": "learning_run_audit_v1",
+      "run_classification_v1": "execution_only",
+      "learning_engaged_v1": false,
+      "learning_mechanisms_observed_v1": [],
+      "bars_processed": 31,
+      "decision_windows_total": 31,
+      "trade_entries_total": 8,
+      "trade_exits_total": 7,
+      "trade_win_rate": 1.0,
+      "expectancy_per_trade": 0.1407,
+      "exit_efficiency": 0.095714,
+      "win_loss_size_ratio": null,
+      "trades_count": 7,
+      "memory_used_v1": false,
+      "memory_bundle_loaded": false,
+      "memory_bundle_applied": false,
+      "memory_bundle_path_resolved": null,
+      "memory_keys_applied": [],
+      "memory_operator_note_v1": "No memory bundle path resolved for this replay — execution-only with respect to promoted memory.",
+      "groundhog_operator_note_v1": "Promoted bundle: auto-merge explicitly disabled for this process.",
+      "memory_records_loaded_count": 0,
+      "groundhog_operator_lane_v1": "inactive",
+      "groundhog_auto_merge_env_enabled": false,
+      "recall_attempts_total": 0,
+      "recall_match_windows_total": 0,
+      "recall_match_records_total": 0,
+      "recall_bias_applied_total": 0,
+      "recall_signal_bias_applied_total": 0,
+      "suppressed_modules_count": 0,
+      "decision_context_recall_enabled": false,
+      "context_candidate_search_block_v1": {
+        "context_candidate_search_ran": false,
+        "candidate_count": 0,
+        "control_vs_candidate_comparison": "not_applicable",
+        "selected_candidate_id": null,
+        "none_beat_control": null,
+        "reason_codes_sample": [],
+        "winner_vs_control": null,
+        "winner_vs_control_delta_summary": null
+      },
+      "policy_framework_audit": null,
+      "operator_learning_status_line_v1": "classification=execution_only; decision_windows=31; candidate_search=not_run (parallel replay path — no multi-replay search in this worker); recall_matches=0; bias_applied_fusion=0 signal=0; memory_merged=no; verdict=execution_only — replayed policy on tape; no memory merge, recall match, bias application, or candidate search in this run."
+    },
+    "operator_learning_status_line_v1": "classification=execution_only; decision_windows=31; candidate_search=not_run (parallel replay path — no multi-replay search in this worker); recall_matches=0; bias_applied_fusion=0 signal=0; memory_merged=no; verdict=execution_only — replayed policy on tape; no memory merge, recall match, bias application, or candidate search in this run.",
+    "signal_behavior_proof_v1": {
+      "schema": "signal_behavior_proof_v1",
+      "manifest_signal_modules_declared": [
+        "trend_continuation",
+        "pullback_continuation",
+        "breakout_expansion",
+        "mean_reversion_fade"
+      ],
+      "manifest_disabled_signal_modules": [],
+      "per_signal_evaluated_bars_total": {
+        "trend_continuation": 31,
+        "pullback_continuation": 31,
+        "breakout_expansion": 31,
+        "mean_reversion_fade": 31
+      },
+      "per_signal_active_bars_total": {
+        "trend_continuation": 31
+      },
+      "per_signal_directional_active_bars_total": {
+        "trend_continuation": 31
+      },
+      "per_signal_closed_trade_attribution_count": {
+        "trend_continuation": 7
+      },
+      "ledger_scorecard_total_trades_by_signal": {
+        "trend_continuation": 7
+      },
+      "dominant_closed_trade_attributing_signal": "trend_continuation",
+      "attribution_semantics": "per_signal_closed_trade_attribution_count counts each OutcomeRecord.contributing_signals entry (replay_runner copies all signal_names with active=True on the **entry bar** into the trade; it is NOT the fusion-only short list). Fusion picks direction; see fusion_contributing_signals inside trade_entry_raw_samples.",
+      "fusion_bars": {
+        "fusion_no_trade_bars": 0,
+        "fusion_directional_output_bars": 31,
+        "bars_with_directional_signal_but_fusion_no_trade": 0,
+        "risk_blocked_bars": 0,
+        "trade_entries_attempted": 8,
+        "trade_exits_recorded": 7
+      },
+      "fusion_signal_level_rollup_v1": {
+        "bars_processed_after_warmup": 31,
+        "directional_signal_instances_total_across_bars": 31,
+        "inactive_with_suppression_reason_events_total": 93,
+        "fusion_emitted_long_short_bars": 31,
+        "fusion_emitted_no_trade_bars": 0,
+        "bars_fusion_no_trade_while_any_signal_directional": 0,
+        "trade_open_events_total": 8,
+        "closed_trades_recorded_total": 7
+      },
+      "directive_per_signal_evaluated_vs_trades_v1": {
+        "trend_continuation": {
+          "evaluated_bars_signal_module_ran": 31,
+          "active_any_direction_bars": 31,
+          "directional_active_bars": 31,
+          "closed_trade_attribution_count": 7
+        },
+        "pullback_continuation": {
+          "evaluated_bars_signal_module_ran": 31,
+          "active_any_direction_bars": 0,
+          "directional_active_bars": 0,
+          "closed_trade_attribution_count": 0
+        },
+        "breakout_continuation": {
+          "evaluated_bars_signal_module_ran": 31,
+          "active_any_direction_bars": 0,
+          "directional_active_bars": 0,
+          "closed_trade_attribution_count": 0
+        },
+        "mean_reversion_fade": {
+          "evaluated_bars_signal_module_ran": 31,
+          "active_any_direction_bars": 0,
+          "directional_active_bars": 0,
+          "closed_trade_attribution_count": 0
+        }
+      },
+      "suppression_reason_histograms_top": {
+        "breakout_expansion": {
+          "regime_mismatch:trend_up": 31
+        },
+        "mean_reversion_fade": {
+          "regime_mismatch:trend_up": 31
+        },
+        "pullback_continuation": {
+          "pullback_conditions_not_met": 31
+        }
+      },
+      "dead_signals_zero_closed_trade_attribution": [
+        {
+          "signal": "pullback_continuation",
+          "closed_trade_attribution_count": 0,
+          "directional_active_bars": 0,
+          "active_any_bar": 0,
+          "analysis": "never_active_any_bar_in_replay_window"
+        },
+        {
+          "signal": "breakout_expansion",
+          "closed_trade_attribution_count": 0,
+          "directional_active_bars": 0,
+          "active_any_bar": 0,
+          "analysis": "never_active_any_bar_in_replay_window"
+        },
+        {
+          "signal": "mean_reversion_fade",
+          "closed_trade_attribution_count": 0,
+          "directional_active_bars": 0,
+          "active_any_bar": 0,
+          "analysis": "never_active_any_bar_in_replay_window"
+        }
+      ],
+      "trade_entry_raw_samples": [
+        {
+          "bar_index_1based": 50,
+          "timestamp": 1700062700000,
+          "student_lane_entry_path_v1": "baseline_024c",
+          "entry_close": 153.2800000000003,
+          "fusion_direction": "long",
+          "fusion_threshold_passed": true,
+          "fusion_scores": {
+            "long_score": 0.32594270406138254,
+            "short_score": 0.0,
+            "gross_score": 0.32594270406138254,
+            "fusion_score": 0.32594270406138254,
+            "conflict_score": 0.0,
+            "overlap_penalty": 0.0
+          },
+          "fusion_contributing_signals": [
+            "trend_continuation:long:0.3259"
+          ],
+          "fusion_suppressed_signals": [
+            "pullback_continuation:pullback_conditions_not_met",
+            "breakout_expansion:regime_mismatch:trend_up",
+            "mean_reversion_fade:regime_mismatch:trend_up"
+          ],
+          "active_signal_names_copied_to_trade": [
+            "trend_continuation"
+          ],
+          "risk": {
+            "allowed": true,
+            "veto_reasons": []
+          },
+          "atr_proxy_14_at_entry": 0.4199999999999936,
+          "signal_rows": [
+            {
+              "signal_name": "trend_continuation",
+              "active": true,
+              "direction": "long",
+              "confidence": 1.0,
+              "expected_edge": 0.011286649974210576,
+              "regime_fit": 1.0,
+              "stability_score": 1.0,
+              "suppression_reason": "",
+              "evidence_trace": {
+                "regime": "trend_up",
+                "ema_distance": 1.7300177080470007,
+                "ema_slope": 0.35000000000002274,
+                "one_bar_return": 0.0022886287844111263,
+                "directional_persistence_10": 1.0
+              }
+            },
+            {
+              "signal_name": "pullback_continuation",
+              "active": false,
+              "direction": "neutral",
+              "confidence": 0.0,
+              "expected_edge": 0.0,
+              "regime_fit": 0.9,
+              "stability_score": 1.0,
+              "suppression_reason": "pullback_conditions_not_met",
+              "evidence_trace": {
+                "regime": "trend_up",
+                "ema_distance": 1.7300177080470007,
+                "one_bar_return": 0.0022886287844111263,
+                "candle_body": 0.20000000000001705,
+                "candle_range": 0.3300000000000125,
+                "volatility_20": 2.9918850367431545e-05
+              }
+            },
+            {
+              "signal_name": "breakout_expansion",
+              "active": false,
+              "direction": "neutral",
+              "confidence": 0.0,
+              "expected_edge": 0.0,
+              "regime_fit": 0.0,
+              "stability_score": 0.7,
+              "suppression_reason": "regime_mismatch:trend_up",
+              "evidence_trace": {
+                "regime": "trend_up",
+                "one_bar_return": 0.0022886287844111263,
+                "candle_range": 0.3300000000000125,
+                "avg_close_20": 149.95500000000033,
+                "volatility_20": 2.9918850367431545e-05,
+                "compression_ratio": 0.0022006601980594964,
+                "ema_slope": 0.35000000000002274
+              }
+            },
+            {
+              "signal_name": "mean_reversion_fade",
+              "active": false,
+              "direction": "neutral",
+              "confidence": 0.0,
+              "expected_edge": 0.0,
+              "regime_fit": 0.0,
+              "stability_score": 0.65,
+              "suppression_reason": "regime_mismatch:trend_up",
+              "evidence_trace": {
+                "regime": "trend_up",
+                "close_price": 153.2800000000003,
+                "avg_close_20": 149.95500000000033,
+                "deviation_from_mean": 0.022173318662265223,
+                "one_bar_return": 0.0022886287844111263
+              }
+            }
+          ]
+        },
+        {
+          "bar_index_1based": 54,
+          "timestamp": 1700063900000,
+          "student_lane_entry_path_v1": "baseline_024c",
+          "entry_close": 154.68000000000032,
+          "fusion_direction": "long",
+          "fusion_threshold_passed": true,
+          "fusion_scores": {
+            "long_score": 0.32520266525397895,
+            "short_score": 0.0,
+            "gross_score": 0.32520266525397895,
+            "fusion_score": 0.32520266525397895,
+            "conflict_score": 0.0,
+            "overlap_penalty": 0.0
+          },
+          "fusion_contributing_signals": [
+            "trend_continuation:long:0.3252"
+          ],
+          "fusion_suppressed_signals": [
+            "pullback_continuation:pullback_conditions_not_met",
+            "breakout_expansion:regime_mismatch:trend_up",
+            "mean_reversion_fade:regime_mismatch:trend_up"
+          ],
+          "active_signal_names_copied_to_trade": [
+            "trend_continuation"
+          ],
+          "risk": {
+            "allowed": true,
+            "veto_reasons": []
+          },
+          "atr_proxy_14_at_entry": 0.4199999999999936,
+          "signal_rows": [
+            {
+              "signal_name": "trend_continuation",
+              "active": true,
+              "direction": "long",
+              "confidence": 1.0,
+              "expected_edge": 0.011184495138653792,
+              "regime_fit": 1.0,
+              "stability_score": 1.0,
+              "suppression_reason": "",
+              "evidence_trace": {
+                "regime": "trend_up",
+                "ema_distance": 1.7300177080469723,
+                "ema_slope": 0.3499999999999943,
+                "one_bar_return": 0.0022678675565346567,
+                "directional_persistence_10": 1.0
+              }
+            },
+            {
+              "signal_name": "pullback_continuation",
+              "active": false,
+              "direction": "neutral",
+              "confidence": 0.0,
+              "expected_edge": 0.0,
+              "regime_fit": 0.9,
+              "stability_score": 1.0,
+              "suppression_reason": "pullback_conditions_not_met",
+              "evidence_trace": {
+                "regime": "trend_up",
+                "ema_distance": 1.7300177080469723,
+                "one_bar_return": 0.0022678675565346567,
+                "candle_body": 0.20000000000001705,
+                "candle_range": 0.3300000000000125,
+                "volatility_20": 2.936709571412105e-05
+              }
+            },
+            {
+              "signal_name": "breakout_expansion",
+              "active": false,
+              "direction": "neutral",
+              "confidence": 0.0,
+              "expected_edge": 0.0,
+              "regime_fit": 0.0,
+              "stability_score": 0.7,
+              "suppression_reason": "regime_mismatch:trend_up",
+              "evidence_trace": {
+                "regime": "trend_up",
+                "one_bar_return": 0.0022678675565346567,
+                "candle_range": 0.3300000000000125,
+                "avg_close_20": 151.3550000000003,
+                "volatility_20": 2.936709571412105e-05,
+                "compression_ratio": 0.002180304581943192,
+                "ema_slope": 0.3499999999999943
+              }
+            },
+            {
+              "signal_name": "mean_reversion_fade",
+              "active": false,
+              "direction": "neutral",
+              "confidence": 0.0,
+              "expected_edge": 0.0,
+              "regime_fit": 0.0,
+              "stability_score": 0.65,
+              "suppression_reason": "regime_mismatch:trend_up",
+              "evidence_trace": {
+                "regime": "trend_up",
+                "close_price": 154.68000000000032,
+                "avg_close_20": 151.3550000000003,
+                "deviation_from_mean": 0.021968220408972353,
+                "one_bar_return": 0.0022678675565346567
+              }
+            }
+          ]
+        },
+        {
+          "bar_index_1based": 58,
+          "timestamp": 1700065100000,
+          "student_lane_entry_path_v1": "baseline_024c",
+          "entry_close": 156.08000000000033,
+          "fusion_direction": "long",
+          "fusion_threshold_passed": true,
+          "fusion_scores": {
+            "long_score": 0.32447095200826803,
+            "short_score": 0.0,
+            "gross_score": 0.32447095200826803,
+            "fusion_score": 0.32447095200826803,
+            "conflict_score": 0.0,
+            "overlap_penalty": 0.0
+          },
+          "fusion_contributing_signals": [
+            "trend_continuation:long:0.3245"
+          ],
+          "fusion_suppressed_signals": [
+            "pullback_continuation:pullback_conditions_not_met",
+            "breakout_expansion:regime_mismatch:trend_up",
+            "mean_reversion_fade:regime_mismatch:trend_up"
+          ],
+          "active_signal_names_copied_to_trade": [
+            "trend_continuation"
+          ],
+          "risk": {
+            "allowed": true,
+            "veto_reasons": []
+          },
+          "atr_proxy_14_at_entry": 0.4199999999999936,
+          "signal_rows": [
+            {
+              "signal_name": "trend_continuation",
+              "active": true,
+              "direction": "long",
+              "confidence": 1.0,
+              "expected_edge": 0.011084172911628633,
+              "regime_fit": 1.0,
+              "stability_score": 1.0,
+              "suppression_reason": "",
+              "evidence_trace": {
+                "regime": "trend_up",
+                "ema_distance": 1.7300177080470007,
+                "ema_slope": 0.3499999999999943,
+                "one_bar_return": 0.0022474796121493743,
+                "directional_persistence_10": 1.0
+              }
+            },
+            {
+              "signal_name": "pullback_continuation",
+              "active": false,
+              "direction": "neutral",
+              "confidence": 0.0,
+              "expected_edge": 0.0,
+              "regime_fit": 0.9,
+              "stability_score": 1.0,
+              "suppression_reason": "pullback_conditions_not_met",
+              "evidence_trace": {
+                "regime": "trend_up",
+                "ema_distance": 1.7300177080470007,
+                "one_bar_return": 0.0022474796121493743,
+                "candle_body": 0.20000000000001705,
+                "candle_range": 0.3300000000000125,
+                "volatility_20": 2.883046617710212e-05
+              }
+            },
+            {
+              "signal_name": "breakout_expansion",
+              "active": false,
+              "direction": "neutral",
+              "confidence": 0.0,
+              "expected_edge": 0.0,
+              "regime_fit": 0.0,
+              "stability_score": 0.7,
+              "suppression_reason": "regime_mismatch:trend_up",
+              "evidence_trace": {
+                "regime": "trend_up",
+                "one_bar_return": 0.0022474796121493743,
+                "candle_range": 0.3300000000000125,
+                "avg_close_20": 152.7550000000003,
+                "volatility_20": 2.883046617710212e-05,
+                "compression_ratio": 0.0021603220843835675,
+                "ema_slope": 0.3499999999999943
+              }
+            },
+            {
+              "signal_name": "mean_reversion_fade",
+              "active": false,
+              "direction": "neutral",
+              "confidence": 0.0,
+              "expected_edge": 0.0,
+              "regime_fit": 0.0,
+              "stability_score": 0.65,
+              "suppression_reason": "regime_mismatch:trend_up",
+              "evidence_trace": {
+                "regime": "trend_up",
+                "close_price": 156.08000000000033,
+                "avg_close_20": 152.7550000000003,
+                "deviation_from_mean": 0.021766881607803414,
+                "one_bar_return": 0.0022474796121493743
+              }
+            }
+          ]
+        },
+        {
+          "bar_index_1based": 62,
+          "timestamp": 1700066300000,
+          "student_lane_entry_path_v1": "baseline_024c",
+          "entry_close": 157.4800000000003,
+          "fusion_direction": "long",
+          "fusion_threshold_passed": true,
+          "fusion_scores": {
+            "long_score": 0.3237473972321017,
+            "short_score": 0.0,
+            "gross_score": 0.3237473972321017,
+            "fusion_score": 0.3237473972321017,
+            "conflict_score": 0.0,
+            "overlap_penalty": 0.0
+          },
+          "fusion_contributing_signals": [
+            "trend_continuation:long:0.3237"
+          ],
+          "fusion_suppressed_signals": [
+            "pullback_continuation:pullback_conditions_not_met",
+            "breakout_expansion:regime_mismatch:trend_up",
+            "mean_reversion_fade:regime_mismatch:trend_up"
+          ],
+          "active_signal_names_copied_to_trade": [
+            "trend_continuation"
+          ],
+          "risk": {
+            "allowed": true,
+            "veto_reasons": []
+          },
+          "atr_proxy_14_at_entry": 0.41999999999999155,
+          "signal_rows": [
+            {
+              "signal_name": "trend_continuation",
+              "active": true,
+              "direction": "long",
+              "confidence": 1.0,
+              "expected_edge": 0.010985634417367269,
+              "regime_fit": 1.0,
+              "stability_score": 1.0,
+              "suppression_reason": "",
+              "evidence_trace": {
+                "regime": "trend_up",
+                "ema_distance": 1.7300177080470007,
+                "ema_slope": 0.3499999999999943,
+                "one_bar_return": 0.0022274549735887077,
+                "directional_persistence_10": 1.0
+              }
+            },
+            {
+              "signal_name": "pullback_continuation",
+              "active": false,
+              "direction": "neutral",
+              "confidence": 0.0,
+              "expected_edge": 0.0,
+              "regime_fit": 0.9,
+              "stability_score": 1.0,
+              "suppression_reason": "pullback_conditions_not_met",
+              "evidence_trace": {
+                "regime": "trend_up",
+                "ema_distance": 1.7300177080470007,
+                "one_bar_return": 0.0022274549735887077,
+                "candle_body": 0.20000000000001705,
+                "candle_range": 0.3300000000000125,
+                "volatility_20": 2.830841387630719e-05
+              }
+            },
+            {
+              "signal_name": "breakout_expansion",
+              "active": false,
+              "direction": "neutral",
+              "confidence": 0.0,
+              "expected_edge": 0.0,
+              "regime_fit": 0.0,
+              "stability_score": 0.7,
+              "suppression_reason": "regime_mismatch:trend_up",
+              "evidence_trace": {
+                "regime": "trend_up",
+                "one_bar_return": 0.0022274549735887077,
+                "candle_range": 0.3300000000000125,
+                "avg_close_20": 154.1550000000003,
+                "volatility_20": 2.830841387630719e-05,
+                "compression_ratio": 0.002140702539651726,
+                "ema_slope": 0.3499999999999943
+              }
+            },
+            {
+              "signal_name": "mean_reversion_fade",
+              "active": false,
+              "direction": "neutral",
+              "confidence": 0.0,
+              "expected_edge": 0.0,
+              "regime_fit": 0.0,
+              "stability_score": 0.65,
+              "suppression_reason": "regime_mismatch:trend_up",
+              "evidence_trace": {
+                "regime": "trend_up",
+                "close_price": 157.4800000000003,
+                "avg_close_20": 154.1550000000003,
+                "deviation_from_mean": 0.02156919983133847,
+                "one_bar_return": 0.0022274549735887077
+              }
+            }
+          ]
+        },
+        {
+          "bar_index_1based": 66,
+          "timestamp": 1700067500000,
+          "student_lane_entry_path_v1": "baseline_024c",
+          "entry_close": 158.8800000000003,
+          "fusion_direction": "long",
+          "fusion_threshold_passed": true,
+          "fusion_scores": {
+            "long_score": 0.3230318386344818,
+            "short_score": 0.0,
+            "gross_score": 0.3230318386344818,
+            "fusion_score": 0.3230318386344818,
+            "conflict_score": 0.0,
+            "overlap_penalty": 0.0
+          },
+          "fusion_contributing_signals": [
+            "trend_continuation:long:0.3230"
+          ],
+          "fusion_suppressed_signals": [
+            "pullback_continuation:pullback_conditions_not_met",
+            "breakout_expansion:regime_mismatch:trend_up",
+            "mean_reversion_fade:regime_mismatch:trend_up"
+          ],
+          "active_signal_names_copied_to_trade": [
+            "trend_continuation"
+          ],
+          "risk": {
+            "allowed": true,
+            "veto_reasons": []
+          },
+          "atr_proxy_14_at_entry": 0.4199999999999936,
+          "signal_rows": [
+            {
+              "signal_name": "trend_continuation",
+              "active": true,
+              "direction": "long",
+              "confidence": 1.0,
+              "expected_edge": 0.010888832502813427,
+              "regime_fit": 1.0,
+              "stability_score": 1.0,
+              "suppression_reason": "",
+              "evidence_trace": {
+                "regime": "trend_up",
+                "ema_distance": 1.7300177080470007,
+                "ema_slope": 0.3499999999999943,
+                "one_bar_return": 0.0022077840156436864,
+                "directional_persistence_10": 1.0
+              }
+            },
+            {
+              "signal_name": "pullback_continuation",
+              "active": false,
+              "direction": "neutral",
+              "confidence": 0.0,
+              "expected_edge": 0.0,
+              "regime_fit": 0.9,
+              "stability_score": 1.0,
+              "suppression_reason": "pullback_conditions_not_met",
+              "evidence_trace": {
+                "regime": "trend_up",
+                "ema_distance": 1.7300177080470007,
+                "one_bar_return": 0.0022077840156436864,
+                "candle_body": 0.20000000000001705,
+                "candle_range": 0.3300000000000125,
+                "volatility_20": 2.7800415519002234e-05
+              }
+            },
+            {
+              "signal_name": "breakout_expansion",
+              "active": false,
+              "direction": "neutral",
+              "confidence": 0.0,
+              "expected_edge": 0.0,
+              "regime_fit": 0.0,
+              "stability_score": 0.7,
+              "suppression_reason": "regime_mismatch:trend_up",
+              "evidence_trace": {
+                "regime": "trend_up",
+                "one_bar_return": 0.0022077840156436864,
+                "candle_range": 0.3300000000000125,
+                "avg_close_20": 155.5550000000003,
+                "volatility_20": 2.7800415519002234e-05,
+                "compression_ratio": 0.0021214361479863194,
+                "ema_slope": 0.3499999999999943
+              }
+            },
+            {
+              "signal_name": "mean_reversion_fade",
+              "active": false,
+              "direction": "neutral",
+              "confidence": 0.0,
+              "expected_edge": 0.0,
+              "regime_fit": 0.0,
+              "stability_score": 0.65,
+              "suppression_reason": "regime_mismatch:trend_up",
+              "evidence_trace": {
+                "regime": "trend_up",
+                "close_price": 158.8800000000003,
+                "avg_close_20": 155.5550000000003,
+                "deviation_from_mean": 0.021375076339558426,
+                "one_bar_return": 0.0022077840156436864
+              }
+            }
+          ]
+        },
+        {
+          "bar_index_1based": 70,
+          "timestamp": 1700068700000,
+          "student_lane_entry_path_v1": "baseline_024c",
+          "entry_close": 160.2800000000003,
+          "fusion_direction": "long",
+          "fusion_threshold_passed": true,
+          "fusion_scores": {
+            "long_score": 0.3223241185467327,
+            "short_score": 0.0,
+            "gross_score": 0.3223241185467327,
+            "fusion_score": 0.3223241185467327,
+            "conflict_score": 0.0,
+            "overlap_penalty": 0.0
+          },
+          "fusion_contributing_signals": [
+            "trend_continuation:long:0.3223"
+          ],
+          "fusion_suppressed_signals": [
+            "pullback_continuation:pullback_conditions_not_met",
+            "breakout_expansion:regime_mismatch:trend_up",
+            "mean_reversion_fade:regime_mismatch:trend_up"
+          ],
+          "active_signal_names_copied_to_trade": [
+            "trend_continuation"
+          ],
+          "risk": {
+            "allowed": true,
+            "veto_reasons": []
+          },
+          "atr_proxy_14_at_entry": 0.4199999999999936,
+          "signal_rows": [
+            {
+              "signal_name": "trend_continuation",
+              "active": true,
+              "direction": "long",
+              "confidence": 1.0,
+              "expected_edge": 0.01079372166238456,
+              "regime_fit": 1.0,
+              "stability_score": 1.0,
+              "suppression_reason": "",
+              "evidence_trace": {
+                "regime": "trend_up",
+                "ema_distance": 1.7300177080470007,
+                "ema_slope": 0.35000000000002274,
+                "one_bar_return": 0.0021884574501343937,
+                "directional_persistence_10": 1.0
+              }
+            },
+            {
+              "signal_name": "pullback_continuation",
+              "active": false,
+              "direction": "neutral",
+              "confidence": 0.0,
+              "expected_edge": 0.0,
+              "regime_fit": 0.9,
+              "stability_score": 1.0,
+              "suppression_reason": "pullback_conditions_not_met",
+              "evidence_trace": {
+                "regime": "trend_up",
+                "ema_distance": 1.7300177080470007,
+                "one_bar_return": 0.0021884574501343937,
+                "candle_body": 0.20000000000001705,
+                "candle_range": 0.3300000000000125,
+                "volatility_20": 2.730597108736556e-05
+              }
+            },
+            {
+              "signal_name": "breakout_expansion",
+              "active": false,
+              "direction": "neutral",
+              "confidence": 0.0,
+              "expected_edge": 0.0,
+              "regime_fit": 0.0,
+              "stability_score": 0.7,
+              "suppression_reason": "regime_mismatch:trend_up",
+              "evidence_trace": {
+                "regime": "trend_up",
+                "one_bar_return": 0.0021884574501343937,
+                "candle_range": 0.3300000000000125,
+                "avg_close_20": 156.95500000000033,
+                "volatility_20": 2.730597108736556e-05,
+                "compression_ratio": 0.002102513459271841,
+                "ema_slope": 0.35000000000002274
+              }
+            },
+            {
+              "signal_name": "mean_reversion_fade",
+              "active": false,
+              "direction": "neutral",
+              "confidence": 0.0,
+              "expected_edge": 0.0,
+              "regime_fit": 0.0,
+              "stability_score": 0.65,
+              "suppression_reason": "regime_mismatch:trend_up",
+              "evidence_trace": {
+                "regime": "trend_up",
+                "close_price": 160.2800000000003,
+                "avg_close_20": 156.95500000000033,
+                "deviation_from_mean": 0.021184415915389644,
+                "one_bar_return": 0.0021884574501343937
+              }
+            }
+          ]
+        },
+        {
+          "bar_index_1based": 74,
+          "timestamp": 1700069900000,
+          "student_lane_entry_path_v1": "baseline_024c",
+          "entry_close": 161.68000000000032,
+          "fusion_direction": "long",
+          "fusion_threshold_passed": true,
+          "fusion_scores": {
+            "long_score": 0.32162408375183615,
+            "short_score": 0.0,
+            "gross_score": 0.32162408375183615,
+            "fusion_score": 0.32162408375183615,
+            "conflict_score": 0.0,
+            "overlap_penalty": 0.0
+          },
+          "fusion_contributing_signals": [
+            "trend_continuation:long:0.3216"
+          ],
+          "fusion_suppressed_signals": [
+            "pullback_continuation:pullback_conditions_not_met",
+            "breakout_expansion:regime_mismatch:trend_up",
+            "mean_reversion_fade:regime_mismatch:trend_up"
+          ],
+          "active_signal_names_copied_to_trade": [
+            "trend_continuation"
+          ],
+          "risk": {
+            "allowed": true,
+            "veto_reasons": []
+          },
+          "atr_proxy_14_at_entry": 0.4199999999999936,
+          "signal_rows": [
+            {
+              "signal_name": "trend_continuation",
+              "active": true,
+              "direction": "long",
+              "confidence": 1.0,
+              "expected_edge": 0.010700257966643796,
+              "regime_fit": 1.0,
+              "stability_score": 1.0,
+              "suppression_reason": "",
+              "evidence_trace": {
+                "regime": "trend_up",
+                "ema_distance": 1.7300177080469723,
+                "ema_slope": 0.3499999999999943,
+                "one_bar_return": 0.0021694663112873836,
+                "directional_persistence_10": 1.0
+              }
+            },
+            {
+              "signal_name": "pullback_continuation",
+              "active": false,
+              "direction": "neutral",
+              "confidence": 0.0,
+              "expected_edge": 0.0,
+              "regime_fit": 0.9,
+              "stability_score": 1.0,
+              "suppression_reason": "pullback_conditions_not_met",
+              "evidence_trace": {
+                "regime": "trend_up",
+                "ema_distance": 1.7300177080469723,
+                "one_bar_return": 0.0021694663112873836,
+                "candle_body": 0.20000000000001705,
+                "candle_range": 0.3300000000000125,
+                "volatility_20": 2.6824602607098176e-05
+              }
+            },
+            {
+              "signal_name": "breakout_expansion",
+              "active": false,
+              "direction": "neutral",
+              "confidence": 0.0,
+              "expected_edge": 0.0,
+              "regime_fit": 0.0,
+              "stability_score": 0.7,
+              "suppression_reason": "regime_mismatch:trend_up",
+              "evidence_trace": {
+                "regime": "trend_up",
+                "one_bar_return": 0.0021694663112873836,
+                "candle_range": 0.3300000000000125,
+                "avg_close_20": 158.3550000000003,
+                "volatility_20": 2.6824602607098176e-05,
+                "compression_ratio": 0.0020839253575827216,
+                "ema_slope": 0.3499999999999943
+              }
+            },
+            {
+              "signal_name": "mean_reversion_fade",
+              "active": false,
+              "direction": "neutral",
+              "confidence": 0.0,
+              "expected_edge": 0.0,
+              "regime_fit": 0.0,
+              "stability_score": 0.65,
+              "suppression_reason": "regime_mismatch:trend_up",
+              "evidence_trace": {
+                "regime": "trend_up",
+                "close_price": 161.68000000000032,
+                "avg_close_20": 158.3550000000003,
+                "deviation_from_mean": 0.020997126708976733,
+                "one_bar_return": 0.0021694663112873836
+              }
+            }
+          ]
+        },
+        {
+          "bar_index_1based": 78,
+          "timestamp": 1700071100000,
+          "student_lane_entry_path_v1": "baseline_024c",
+          "entry_close": 163.08000000000033,
+          "fusion_direction": "long",
+          "fusion_threshold_passed": true,
+          "fusion_scores": {
+            "long_score": 0.3209315853214898,
+            "short_score": 0.0,
+            "gross_score": 0.3209315853214898,
+            "fusion_score": 0.3209315853214898,
+            "conflict_score": 0.0,
+            "overlap_penalty": 0.0
+          },
+          "fusion_contributing_signals": [
+            "trend_continuation:long:0.3209"
+          ],
+          "fusion_suppressed_signals": [
+            "pullback_continuation:pullback_conditions_not_met",
+            "breakout_expansion:regime_mismatch:trend_up",
+            "mean_reversion_fade:regime_mismatch:trend_up"
+          ],
+          "active_signal_names_copied_to_trade": [
+            "trend_continuation"
+          ],
+          "risk": {
+            "allowed": true,
+            "veto_reasons": []
+          },
+          "atr_proxy_14_at_entry": 0.4199999999999936,
+          "signal_rows": [
+            {
+              "signal_name": "trend_continuation",
+              "active": true,
+              "direction": "long",
+              "confidence": 1.0,
+              "expected_edge": 0.010608398994646783,
+              "regime_fit": 1.0,
+              "stability_score": 1.0,
+              "suppression_reason": "",
+              "evidence_trace": {
+                "regime": "trend_up",
+                "ema_distance": 1.7300177080470007,
+                "ema_slope": 0.3499999999999943,
+                "one_bar_return": 0.0021508019418670318,
+                "directional_persistence_10": 1.0
+              }
+            },
+            {
+              "signal_name": "pullback_continuation",
+              "active": false,
+              "direction": "neutral",
+              "confidence": 0.0,
+              "expected_edge": 0.0,
+              "regime_fit": 0.9,
+              "stability_score": 1.0,
+              "suppression_reason": "pullback_conditions_not_met",
+              "evidence_trace": {
+                "regime": "trend_up",
+                "ema_distance": 1.7300177080470007,
+                "one_bar_return": 0.0021508019418670318,
+                "candle_body": 0.20000000000001705,
+                "candle_range": 0.3300000000000125,
+                "volatility_20": 2.63558529912916e-05
+              }
+            },
+            {
+              "signal_name": "breakout_expansion",
+              "active": false,
+              "direction": "neutral",
+              "confidence": 0.0,
+              "expected_edge": 0.0,
+              "regime_fit": 0.0,
+              "stability_score": 0.7,
+              "suppression_reason": "regime_mismatch:trend_up",
+              "evidence_trace": {
+                "regime": "trend_up",
+                "one_bar_return": 0.0021508019418670318,
+                "candle_range": 0.3300000000000125,
+                "avg_close_20": 159.7550000000003,
+                "volatility_20": 2.63558529912916e-05,
+                "compression_ratio": 0.0020656630465400888,
+                "ema_slope": 0.3499999999999943
+              }
+            },
+            {
+              "signal_name": "mean_reversion_fade",
+              "active": false,
+              "direction": "neutral",
+              "confidence": 0.0,
+              "expected_edge": 0.0,
+              "regime_fit": 0.0,
+              "stability_score": 0.65,
+              "suppression_reason": "regime_mismatch:trend_up",
+              "evidence_trace": {
+                "regime": "trend_up",
+                "close_price": 163.08000000000033,
+                "avg_close_20": 159.7550000000003,
+                "deviation_from_mean": 0.02081312009013809,
+                "one_bar_return": 0.0021508019418670318
+              }
+            }
+          ]
+        }
+      ],
+      "trade_entry_raw_samples_max": 40,
+      "atr_usage_code_references_v1": {
+        "feature_atr_proxy_14": "renaissance_v4/core/feature_engine.py → FeatureSet.atr_proxy_14",
+        "execution_stop_target": "renaissance_v4/research/replay_runner.py passes features.atr_proxy_14 into ExecutionManager.open_trade; renaissance_v4/core/execution_manager.py sets stop_loss / take_profit from atr × atr_stop_mult / atr_target_mult (manifest or defaults).",
+        "signals_use_atr_proxy_14": false,
+        "signals_note": "Signal modules in renaissance_v4/signals/*.py use FeatureSet fields such as volatility_20; they do not reference atr_proxy_14 (repo grep)."
+      }
+    }
+  },
+  "outcome_measures": {
+    "schema": "outcome_measures_v1",
+    "from_referee_row": true,
+    "binary_scorecard": {
+      "wins": 7,
+      "losses": 0,
+      "trades": 7,
+      "win_rate": 1.0
+    },
+    "portfolio": {
+      "cumulative_pnl": 0.9848999999999878,
+      "expectancy": 0.1407,
+      "average_pnl": 0.1407,
+      "max_drawdown": 0.0
+    },
+    "lenses": {
+      "money": "positive",
+      "edge": "positive",
+      "win_rate_vs_coinflip": "above",
+      "drawdown": "none_or_flat"
+    },
+    "positive_signals": [
+      "cumulative_pnl_positive",
+      "expectancy_positive",
+      "average_trade_pnl_positive",
+      "win_rate_above_half",
+      "no_negative_drawdown_in_metrics"
+    ],
+    "positive_any": true,
+    "note": "Lenses interpret the same Referee row — not a second ledger. win_rate is binary scorecard; money/edge/drawdown are separate questions."
+  },
+  "decision_audit": {
+    "prior_outcomes_or_parameters_loaded_into_replay_engine": false,
+    "prior_run_id_provided": null,
+    "memory_bundle": null,
+    "human_readable_summary": "Trade decisions came from: (1) manifest JSON on disk, (2) optional CLI/scenario ATR overrides (applied after any bundle), (3) bar data forward in time. No memory bundle was merged. run_memory JSONL / prior session folders are **not** auto-read to alter execution.",
+    "if_prior_run_id_is_set": "No prior_run_id was supplied."
+  },
+  "post_mortem": {
+    "why": null,
+    "next_hypothesis": null,
+    "note": "Fill after review; optional Anna/human — does not affect Referee."
+  },
+  "learning_memory_evidence": {
+    "schema": "learning_memory_evidence_v1",
+    "memory_applied": false,
+    "groundhog_mode": "inactive",
+    "groundhog_note": "No bundle merge — promoted bundle was not in effect for this run.",
+    "learned_from": {
+      "prior_run_id_metadata": null,
+      "bundle_path": null,
+      "bundle_from_run_id": null,
+      "batch_folder": null
+    },
+    "behavior_change": "No memory bundle was merged into the manifest before replay. Execution followed the on-disk manifest (plus any scenario ATR overrides listed below).",
+    "context_quality": {
+      "raw_level": "missing",
+      "operator_label": "missing"
+    },
+    "training_claim": "none",
+    "operator_labels": {
+      "training_evidence": "none",
+      "memory_in_use": "no",
+      "groundhog_mode": "inactive",
+      "learned_from_prior_run_id": null,
+      "changed_this_run": "No memory bundle was merged into the manifest before replay. Execution followed the on-disk manifest (plus any scenario ATR overrides listed below).",
+      "context_quality": "missing",
+      "proof_type": "replay only"
+    },
+    "outcome_change_visible": "unknown",
+    "outcome_change_note": "No memory merge — outcome reflects manifest-only replay (plus scenario ATR overrides).",
+    "ablation": {
+      "available": false,
+      "note": "Same scenario was not also run without memory in this batch — no paired ablation proof."
+    }
+  },
+  "operator_run_audit": {
+    "operator_recipe_id": null,
+    "operator_recipe_label": null,
+    "evaluation_window": {
+      "candle_timeframe_minutes": 5
+    },
+    "manifest_path": "/Users/bigmac/Documents/code_projects/blackbox/renaissance_v4/configs/manifests/sr1_deterministic_trade_proof_v1.json",
+    "policy_framework_path": null,
+    "policy_framework_audit": null,
+    "replay_data_audit": {
+      "schema": "pattern_game_bar_window_v1",
+      "dataset_bars_before_window": 240,
+      "dataset_bars_after_window": 240,
+      "bar_window_calendar_months_requested": null,
+      "slicing_applied": false,
+      "bar_window_open_time_start": 1700000000,
+      "bar_window_open_time_end": 1700071700,
+      "note": "Full dataset — no calendar-month window slice.",
+      "replay_tail_bars_trim_v1": {
+        "schema": "replay_tail_bars_trim_v1",
+        "dropped_leading_bars_v1": 160,
+        "replay_max_bars_effective_v1": 80,
+        "dataset_bars_after_tail_trim_v1": 80
+      }
+    }
+  },
+  "learning_run_audit_v1": {
+    "schema": "learning_run_audit_v1",
+    "run_classification_v1": "execution_only",
+    "learning_engaged_v1": false,
+    "learning_mechanisms_observed_v1": [],
+    "bars_processed": 31,
+    "decision_windows_total": 31,
+    "trade_entries_total": 8,
+    "trade_exits_total": 7,
+    "trade_win_rate": 1.0,
+    "expectancy_per_trade": 0.1407,
+    "exit_efficiency": 0.095714,
+    "win_loss_size_ratio": null,
+    "trades_count": 7,
+    "memory_used_v1": false,
+    "memory_bundle_loaded": false,
+    "memory_bundle_applied": false,
+    "memory_bundle_path_resolved": null,
+    "memory_keys_applied": [],
+    "memory_operator_note_v1": "No memory bundle path resolved for this replay — execution-only with respect to promoted memory.",
+    "groundhog_operator_note_v1": "Promoted bundle: auto-merge explicitly disabled for this process.",
+    "memory_records_loaded_count": 0,
+    "groundhog_operator_lane_v1": "inactive",
+    "groundhog_auto_merge_env_enabled": false,
+    "recall_attempts_total": 0,
+    "recall_match_windows_total": 0,
+    "recall_match_records_total": 0,
+    "recall_bias_applied_total": 0,
+    "recall_signal_bias_applied_total": 0,
+    "suppressed_modules_count": 0,
+    "decision_context_recall_enabled": false,
+    "context_candidate_search_block_v1": {
+      "context_candidate_search_ran": false,
+      "candidate_count": 0,
+      "control_vs_candidate_comparison": "not_applicable",
+      "selected_candidate_id": null,
+      "none_beat_control": null,
+      "reason_codes_sample": [],
+      "winner_vs_control": null,
+      "winner_vs_control_delta_summary": null
+    },
+    "policy_framework_audit": null,
+    "operator_learning_status_line_v1": "classification=execution_only; decision_windows=31; candidate_search=not_run (parallel replay path — no multi-replay search in this worker); recall_matches=0; bias_applied_fusion=0 signal=0; memory_merged=no; verdict=execution_only — replayed policy on tape; no memory merge, recall match, bias application, or candidate search in this run."
+  }
+}

@@ -31,6 +31,17 @@ from langgraph.graph import END, START, StateGraph
 REPO_ROOT = Path(__file__).resolve().parents[2]
 
 try:
+    from secops_proof_lib import (
+        validate_eval_harness,
+        validate_final_exam,
+        write_proof_phase_6_certification,
+    )
+except ImportError:  # pragma: no cover
+    validate_eval_harness = None  # type: ignore
+    validate_final_exam = None  # type: ignore
+    write_proof_phase_6_certification = None  # type: ignore
+
+try:
     from langgraph.checkpoint.sqlite import SqliteSaver
 except ImportError as e:  # pragma: no cover
     raise SystemExit(
@@ -313,18 +324,6 @@ def smoke_train(state: NDEState) -> dict[str, Any]:
             _write_node_artifact(run_root, "smoke_train", status="blocked", failure_reason=msg)
             return {"train_ok": False, "last_error": msg}
 
-    train_py = REPO_ROOT / "finquant" / "training" / "train_qlora.py"
-
-    if state.get("dry_run"):
-        _write_node_artifact(
-            run_root,
-            "smoke_train",
-            status="ok",
-            stdout="dry_run: would train\n",
-            artifacts={"mode": mode, "dry_run": True},
-        )
-        return {"train_ok": True}
-
     # Domain-specific FINQUANT_BASE (historical script name)
     base_map = {
         "secops": nde / "secops",
@@ -335,6 +334,24 @@ def smoke_train(state: NDEState) -> dict[str, Any]:
         base = nde / domain
 
     cfg_secops = base / "training" / "config_secops_qwen1_5b_v0.1.yaml"
+
+    train_py = REPO_ROOT / "finquant" / "training" / "train_qlora.py"
+
+    if state.get("dry_run"):
+        train_mode_would = "full" if mode == "full" else "smoke"
+        _write_node_artifact(
+            run_root,
+            "smoke_train",
+            status="ok",
+            stdout="dry_run: would train\n",
+            artifacts={
+                "mode": mode,
+                "dry_run": True,
+                "train_mode": train_mode_would,
+                "secops_config": str(cfg_secops) if domain == "secops" and cfg_secops.is_file() else None,
+            },
+        )
+        return {"train_ok": True}
     cfg_finquant_repo = REPO_ROOT / "finquant" / "training" / "config_v0.1.yaml"
     if domain == "secops" and cfg_secops.is_file():
         cfg = cfg_secops
@@ -384,7 +401,11 @@ def smoke_train(state: NDEState) -> dict[str, Any]:
         failure_reason=None if ok else (proc.stderr[:8000] or proc.stdout[:8000]),
         stdout=(proc.stdout or "")[-48000:],
         stderr=(proc.stderr or "")[-48000:],
-        artifacts={"cmd": cmd, "train_mode": train_mode},
+        artifacts={
+            "cmd": cmd,
+            "train_mode": train_mode,
+            "secops_config": str(cfg_secops) if domain == "secops" and cfg_secops.is_file() else None,
+        },
     )
     return {"train_ok": ok, "last_error": "" if ok else "training subprocess failed"}
 
@@ -398,6 +419,73 @@ def run_eval(state: NDEState) -> dict[str, Any]:
         return {"eval_passed": False}
 
     staging = _domain_staging_path(domain, nde)
+
+    if domain == "secops":
+        eval_path = nde / "secops" / "eval" / "secops_eval_v0.1.json"
+        harness_ok = False
+        harness_detail: dict[str, Any] = {}
+        harness_errs: list[str] = []
+        if validate_eval_harness is None:
+            harness_errs.append("secops_proof_lib.validate_eval_harness unavailable")
+        elif not eval_path.is_file():
+            harness_errs.append(f"missing eval harness: {eval_path}")
+        else:
+            try:
+                eval_data = json.loads(eval_path.read_text(encoding="utf-8"))
+                harness_ok, harness_detail, harness_errs = validate_eval_harness(eval_data)
+            except Exception as e:
+                harness_errs.append(str(e))
+
+        staging_ok = staging is not None and staging.is_file()
+        sample_ok = False
+        sample_note = ""
+        if staging_ok:
+            try:
+                sample: list[Any] = []
+                with staging.open(encoding="utf-8") as f:
+                    for i, line in enumerate(f):
+                        if i >= 3:
+                            break
+                        sample.append(json.loads(line))
+                sample_ok = all(isinstance(r.get("source_ids"), list) and r["source_ids"] for r in sample)
+            except Exception as e:
+                sample_note = str(e)
+
+        passed = harness_ok and staging_ok and sample_ok
+        lines = [
+            "SecOps eval: secops_eval_v0.1.json harness + staging sample.",
+            f"eval_json={eval_path}",
+            json.dumps({"harness_ok": harness_ok, "harness_detail": harness_detail}, indent=2),
+            f"staging={staging}",
+            json.dumps({"staging_sample_ok": sample_ok, "note": sample_note}),
+        ]
+        if harness_errs:
+            lines.append("harness_errors: " + json.dumps(harness_errs))
+
+        fail_reason = None
+        if not passed:
+            bits = [x for x in harness_errs if x]
+            if not staging_ok:
+                bits.append("staging missing")
+            if staging_ok and not sample_ok:
+                bits.append("staging sample invalid: " + sample_note)
+            fail_reason = "; ".join(bits) or "eval checks failed"
+
+        _write_node_artifact(
+            run_root,
+            "run_eval",
+            status="ok" if passed else "failed",
+            failure_reason=fail_reason,
+            stdout="\n".join(lines),
+            artifacts={
+                "eval_json": str(eval_path),
+                "harness_ok": harness_ok,
+                "harness_detail": harness_detail,
+                "staging_path": str(staging) if staging else None,
+            },
+        )
+        return {"eval_passed": passed, "last_error": "" if passed else "run_eval failed"}
+
     lines = [
         "NDE domain eval (minimal): staging schema + row sampling.",
         f"staging={staging}",
@@ -489,12 +577,56 @@ def final_exam(state: NDEState) -> dict[str, Any]:
     nde = Path(state["nde_root"])
     domain = state["domain"]
     run_root = _run_dir(nde, domain, state["run_id"])
-    # Minimal exam: gate passed + dataset rows >= 1 + train ok
-    ok = (
+    base_ok = (
         bool(state.get("gate_passed"))
         and bool(state.get("train_ok"))
         and bool(state.get("dataset_ok"))
     )
+
+    if domain == "secops":
+        eval_path = nde / "secops" / "eval" / "secops_eval_v0.1.json"
+        final_path = nde / "secops" / "eval" / "secops_final_exam_v1.json"
+        fe_ok = False
+        fe_detail: dict[str, Any] = {}
+        fe_errs: list[str] = []
+        if validate_final_exam is None:
+            fe_errs.append("secops_proof_lib.validate_final_exam unavailable")
+        elif not eval_path.is_file() or not final_path.is_file():
+            fe_errs.append("missing eval or final exam JSON")
+        else:
+            try:
+                eval_data = json.loads(eval_path.read_text(encoding="utf-8"))
+                final_data = json.loads(final_path.read_text(encoding="utf-8"))
+                fe_ok, fe_detail, fe_errs = validate_final_exam(final_data, eval_data)
+            except Exception as e:
+                fe_errs.append(str(e))
+
+        ok = base_ok and fe_ok
+        stdout_obj = {
+            "gate_passed": state.get("gate_passed"),
+            "train_ok": state.get("train_ok"),
+            "dataset_ok": state.get("dataset_ok"),
+            "final_exam_json_ok": fe_ok,
+            "final_exam_detail": fe_detail,
+            "final_exam_errors": fe_errs,
+            "final_exam_passed": ok,
+            "final_exam_json": str(final_path),
+        }
+        _write_node_artifact(
+            run_root,
+            "final_exam",
+            status="ok" if ok else "failed",
+            failure_reason=None if ok else ("; ".join(fe_errs) if fe_errs else "final exam criteria not met"),
+            stdout=json.dumps(stdout_obj, indent=2),
+            artifacts={
+                "eval_json": str(eval_path),
+                "final_exam_json": str(final_path),
+                "structural_ok": fe_ok,
+            },
+        )
+        return {"final_exam_passed": ok}
+
+    ok = base_ok
     _write_node_artifact(
         run_root,
         "final_exam",
@@ -528,6 +660,13 @@ def certify(state: NDEState) -> dict[str, Any]:
         "run_id": state["run_id"],
         "at": _utc(),
         "note": "Mechanical certify flag from LangGraph; operational sign-off is separate.",
+        "eval_passed": bool(state.get("eval_passed")),
+        "final_exam_passed": bool(state.get("final_exam_passed")),
+        "pass_criteria": {
+            "min_score_fraction": 0.95,
+            "no_false_pass_on_incorrect_claim": True,
+            "data_evidence_required": True,
+        },
     }
     (run_root / "CERTIFICATE.json").write_text(json.dumps(body, indent=2), encoding="utf-8")
     _write_node_artifact(
@@ -537,6 +676,12 @@ def certify(state: NDEState) -> dict[str, Any]:
         stdout=json.dumps(body, indent=2),
         artifacts={"certificate": str(run_root / "CERTIFICATE.json")},
     )
+    if domain == "secops" and write_proof_phase_6_certification is not None:
+        snap = {
+            "eval_passed": bool(state.get("eval_passed")),
+            "final_exam_passed": bool(state.get("final_exam_passed")),
+        }
+        write_proof_phase_6_certification(run_root, snap)
     return {"certified": True}
 
 

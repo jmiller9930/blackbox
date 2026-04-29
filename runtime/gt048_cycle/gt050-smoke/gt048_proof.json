@@ -1,0 +1,34 @@
+{
+  "directive": "GT048",
+  "job_id": "gt050-smoke",
+  "memory_root": "/Users/bigmac/Documents/code_projects/blackbox/runtime/gt048_cycle/gt050-smoke",
+  "student_learning_store": "/Users/bigmac/Documents/code_projects/blackbox/runtime/gt048_cycle/gt050-smoke/student_learning_records_v1.jsonl",
+  "session_log_batch_dir_pass1": "/Users/bigmac/Documents/code_projects/blackbox/runtime/gt048_cycle/gt050-smoke/logs/batch_20260429T183000Z_23c90d2f",
+  "closed_trades": 7,
+  "memory_rows_promoted": 7,
+  "retrieval_matches": 7,
+  "retrieval_matches_later": 7,
+  "decisions_changed_due_to_memory_or_ev": true,
+  "repeated_losing_patterns": 0,
+  "memory_blocked_trades": 0,
+  "loss_avoided_count": 0,
+  "gt050": {
+    "repeated_losing_patterns": 0,
+    "memory_blocked_trades": 0,
+    "loss_avoided_count": 0,
+    "proof_pair": null
+  },
+  "seam_pass1": {
+    "student_learning_rows_appended": 7,
+    "student_retrieval_matches": 0
+  },
+  "seam_pass2": {
+    "student_learning_rows_appended": 7,
+    "student_retrieval_matches": 7
+  },
+  "acceptance": {
+    "memory_rows_promoted_gt_0": true,
+    "retrieval_matches_later_gt_0": true,
+    "met": true
+  }
+}
