@@ -25,7 +25,15 @@ from renaissance_v4.game_theory.student_proctor.student_context_builder_v1 impor
 
 GT041_MEMORY_EV_EXAM_ID_V1 = "d6-memory-ev-proof-001"
 
-# Three memory-positive, three memory-negative, two EV-positive, two EV-negative windows.
+# Same harness + seed path layout for follow-on proof exams (e.g. GT_DIRECTIVE_043).
+GT041_STYLE_EXAM_IDS_V1: frozenset[str] = frozenset(
+    {
+        "d6-memory-ev-proof-001",
+        "d6-memory-ev-proof-002",
+    }
+)
+
+
 def gt041_learning_store_path_v1(exam_id: str) -> Path:
     root = blackbox_repo_root() / "runtime" / "exam" / exam_id.strip()
     root.mkdir(parents=True, exist_ok=True)
@@ -266,6 +274,7 @@ def summarize_gt041_acceptance_v1(rows: list[dict[str, Any]]) -> dict[str, Any]:
 
 __all__ = [
     "GT041_MEMORY_EV_EXAM_ID_V1",
+    "GT041_STYLE_EXAM_IDS_V1",
     "extract_gt041_proof_row_v1",
     "gt041_learning_store_path_v1",
     "prepare_gt041_seeded_learning_store_v1",

@@ -89,6 +89,7 @@ def compute_expected_value_risk_cost_v1(
             "ev_long_v1": 0.0,
             "ev_short_v1": 0.0,
             "ev_no_trade_v1": 0.0,
+            "ev_best_value_v1": 0.0,
             "preferred_action_v1": "not_available_v1",
             "sample_count_v1": n,
             "basis_v1": basis_v1,
@@ -128,12 +129,15 @@ def compute_expected_value_risk_cost_v1(
     # Confidence rises modestly with sample depth (deterministic cap).
     conf = _clamp(0.35 + 0.045 * min(n, 12) + (0.02 if vol_pen == 0 else 0.0), 0.0, 1.0)
 
+    ev_best_value_v1 = round(max(ev_long_v1, ev_short_v1, ev_no_trade_v1), 6)
+
     inner = {
         "schema": SCHEMA_EXPECTED_VALUE_RISK_COST_V1,
         "available_v1": True,
         "ev_long_v1": ev_long_v1,
         "ev_short_v1": ev_short_v1,
         "ev_no_trade_v1": ev_no_trade_v1,
+        "ev_best_value_v1": ev_best_value_v1,
         "preferred_action_v1": preferred,
         "sample_count_v1": n,
         "basis_v1": basis_v1,
@@ -177,8 +181,66 @@ def compute_ev_score_adjustment_v1(
     return round(-0.02, 6)
 
 
+def apply_ev_decision_gate_v1(
+    *,
+    action_current: str,
+    expected_value_risk_cost_v1: dict[str, Any],
+) -> tuple[str, dict[str, Any]]:
+    """
+    GT_DIRECTIVE_043 — When EV is available, gate directional trades to EV preference or no_trade.
+
+    Does not alter scores/thresholds; action-only override after synthesis + EV score nudge.
+    """
+    ev = expected_value_risk_cost_v1 if isinstance(expected_value_risk_cost_v1, dict) else {}
+    act0 = str(action_current or "").strip()
+    if act0 not in ("enter_long", "enter_short", "no_trade"):
+        act0 = "no_trade"
+
+    audit: dict[str, Any] = {
+        "schema": "ev_decision_gate_v1",
+        "applied_v1": False,
+        "prior_action_v1": act0,
+        "post_action_v1": act0,
+        "wrong_direction_blocked_v1": False,
+        "forced_no_trade_ev_v1": False,
+    }
+
+    if not ev.get("available_v1"):
+        return act0, audit
+
+    pref = str(ev.get("preferred_action_v1") or "").strip()
+    el = float(ev.get("ev_long_v1") or 0.0)
+    es = float(ev.get("ev_short_v1") or 0.0)
+    en = float(ev.get("ev_no_trade_v1") or 0.0)
+    raw_best = ev.get("ev_best_value_v1")
+    if raw_best is None:
+        ev_best = max(el, es, en)
+    else:
+        ev_best = float(raw_best)
+
+    audit["applied_v1"] = True
+    post = act0
+
+    if pref == "no_trade" or ev_best <= 0.0:
+        post = "no_trade"
+        if act0 != "no_trade":
+            audit["forced_no_trade_ev_v1"] = True
+    elif pref == "enter_long":
+        if act0 == "enter_short":
+            post = "no_trade"
+            audit["wrong_direction_blocked_v1"] = True
+    elif pref == "enter_short":
+        if act0 == "enter_long":
+            post = "no_trade"
+            audit["wrong_direction_blocked_v1"] = True
+
+    audit["post_action_v1"] = post
+    return post, audit
+
+
 __all__ = [
     "SCHEMA_EXPECTED_VALUE_RISK_COST_V1",
+    "apply_ev_decision_gate_v1",
     "compute_ev_score_adjustment_v1",
     "compute_expected_value_risk_cost_v1",
     "ev_game_min_sample_v1",

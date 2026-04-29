@@ -37,6 +37,7 @@ from renaissance_v4.game_theory.student_proctor.student_reasoning_fault_map_v1 i
 from renaissance_v4.utils.math_utils import ema as ema_last, safe_mean
 
 from renaissance_v4.game_theory.reasoning_model.expected_value_risk_cost_v1 import (
+    apply_ev_decision_gate_v1,
     compute_ev_score_adjustment_v1,
     compute_expected_value_risk_cost_v1,
 )
@@ -870,6 +871,12 @@ def run_entry_reasoning_pipeline_v1(
             )
         )
 
+    # GT_DIRECTIVE_043 — EV decision-gating (action-only; after EV + synthesis; no RM/threshold edits).
+    action, ev_gate_audit = apply_ev_decision_gate_v1(
+        action_current=action,
+        expected_value_risk_cost_v1=expected_value_risk_cost_v1,
+    )
+
     ds = {
         "indicator_score": round(ind_s, 6),
         "memory_score": round(mscore, 6),
@@ -881,6 +888,7 @@ def run_entry_reasoning_pipeline_v1(
         "action": action,
         "long_threshold": long_threshold,
         "short_threshold": short_threshold,
+        "ev_decision_gate_v1": ev_gate_audit,
     }
     _t(
         "decision_synthesis_v1",

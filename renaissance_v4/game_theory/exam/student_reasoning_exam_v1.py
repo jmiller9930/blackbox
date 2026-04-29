@@ -9,9 +9,10 @@ Usage::
 
     python3 renaissance_v4/game_theory/exam/student_reasoning_exam_v1.py --exam-id d6-reasoning-quality-001
 
-GT_DIRECTIVE_041 (seeded pattern memory + EV proof)::
+GT_DIRECTIVE_041 / GT_DIRECTIVE_043 (seeded pattern memory + EV proof; same harness)::
 
     python3 renaissance_v4/game_theory/exam/student_reasoning_exam_v1.py --exam-id d6-memory-ev-proof-001
+    python3 renaissance_v4/game_theory/exam/student_reasoning_exam_v1.py --exam-id d6-memory-ev-proof-002
 
 Optional::
 
@@ -42,7 +43,7 @@ from renaissance_v4.game_theory.exam.student_reasoning_exam_grading_v1 import (
     grade_scenario_v1,
 )
 from renaissance_v4.game_theory.exam.student_reasoning_exam_gt041_v1 import (
-    GT041_MEMORY_EV_EXAM_ID_V1,
+    GT041_STYLE_EXAM_IDS_V1,
     extract_gt041_proof_row_v1,
     prepare_gt041_seeded_learning_store_v1,
     summarize_gt041_acceptance_v1,
@@ -138,7 +139,7 @@ def _run_exam_impl_v1(
 
     prev_learning_store = os.environ.get("PATTERN_GAME_STUDENT_LEARNING_STORE")
     gt041_seed_meta: dict[str, Any] | None = None
-    if exam_key == GT041_MEMORY_EV_EXAM_ID_V1:
+    if exam_key in GT041_STYLE_EXAM_IDS_V1:
         _store_path, gt041_seed_meta = prepare_gt041_seeded_learning_store_v1(
             exam_id=exam_key,
             db_path=db_used,
@@ -172,7 +173,7 @@ def _run_exam_impl_v1(
             if probe_err:
                 raise RuntimeError(probe_err)
 
-        entry_job_id = exam_key if exam_key == GT041_MEMORY_EV_EXAM_ID_V1 else ""
+        entry_job_id = exam_key if exam_key in GT041_STYLE_EXAM_IDS_V1 else ""
 
         scenario_rows: list[dict[str, Any]] = []
 
@@ -328,7 +329,7 @@ def _run_exam_impl_v1(
                 "llm_emit_errors_v1": llm_emit_errs,
                 "student_output_emitted_v1": student_output_emitted_v1,
             }
-            if exam_key == GT041_MEMORY_EV_EXAM_ID_V1:
+            if exam_key in GT041_STYLE_EXAM_IDS_V1:
                 row_out["gt041_proof_v1"] = extract_gt041_proof_row_v1(
                     scenario=sc,
                     ere=ere,
@@ -354,7 +355,7 @@ def _run_exam_impl_v1(
 
         acc = _acceptance_block_v1(scenario_rows)
         gt041_acceptance: dict[str, Any] | None = None
-        if exam_key == GT041_MEMORY_EV_EXAM_ID_V1:
+        if exam_key in GT041_STYLE_EXAM_IDS_V1:
             gt041_acceptance = summarize_gt041_acceptance_v1(scenario_rows)
 
         fb_auth = sum(1 for r in scenario_rows if not r.get("student_output_emitted_v1"))
@@ -389,7 +390,7 @@ def _run_exam_impl_v1(
         write_exam_fingerprint_summary_md_v1(results_doc, out_root)
         return results_doc
     finally:
-        if exam_key == GT041_MEMORY_EV_EXAM_ID_V1:
+        if exam_key in GT041_STYLE_EXAM_IDS_V1:
             if prev_learning_store is None:
                 os.environ.pop("PATTERN_GAME_STUDENT_LEARNING_STORE", None)
             else:
