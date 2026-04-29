@@ -26,6 +26,8 @@ Usage::
     --job-id d11-triple-barrier-proof-001 \\
     --promotion-e-min -0.05 --enable-labels --walk-forward --gt055-report
 
+Each successful run writes ``gt056`` (opportunity selection metrics from Referee truth × pass2 learning rows) into ``gt048_proof.json``.
+
 Exit: 0 pass, 2 insufficient trades, 3 acceptance fail, 4 error, 5 enforce-gt050 fail, 6 enforce-gt051 fail.
 """
 
@@ -540,6 +542,22 @@ def main() -> int:
             job_id=jid,
             closed_trades=int(n_closed),
         )
+
+    # GT056 — opportunity selection (Referee PnL × sealed student_action_v1), pass2 rows only.
+    try:
+        from renaissance_v4.game_theory.opportunity_selection_metrics_v1 import (
+            compute_opportunity_selection_metrics_v1,
+        )
+        from renaissance_v4.game_theory.student_proctor.student_learning_store_v1 import (
+            load_student_learning_records_v1,
+        )
+
+        _rows_all = load_student_learning_records_v1(store_p)
+        _pass2_id = f"{jid}-pass2"
+        _pass2_recs = [r for r in _rows_all if isinstance(r, dict) and str(r.get("run_id") or "") == _pass2_id]
+        proof["gt056"] = compute_opportunity_selection_metrics_v1(_pass2_recs)
+    except Exception as _gt056_err:
+        proof["gt056"] = {"schema": "opportunity_selection_metrics_v1", "error": str(_gt056_err)}
 
     out_path = Path(os.environ["PATTERN_GAME_MEMORY_ROOT"]) / "gt048_proof.json"
     out_path.write_text(json.dumps(proof, indent=2), encoding="utf-8")

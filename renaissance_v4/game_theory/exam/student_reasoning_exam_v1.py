@@ -386,6 +386,14 @@ def _run_exam_impl_v1(
         if gt041_acceptance is not None:
             results_doc["gt041_acceptance_v1"] = gt041_acceptance
 
+        # GT056 — exam scenarios do not emit Referee closed-trade PnL per row; full metrics come from GT048 harness.
+        results_doc["opportunity_selection_metrics_v1"] = {
+            "schema": "opportunity_selection_metrics_v1",
+            "contract_version": 1,
+            "available_v1": False,
+            "reason_v1": "student_reasoning_exam_v1 scenarios have no per-scenario Referee trade PnL; use gt048_proof.json gt056 from run_trade_cycle_gt048_v1.",
+        }
+
         json_path = out_root / "student_reasoning_exam_results_v1.json"
         json_path.write_text(json.dumps(results_doc, indent=2, ensure_ascii=False, default=str), encoding="utf-8")
         write_exam_fingerprint_summary_md_v1(results_doc, out_root)
