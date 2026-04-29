@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # NDE Studio — plain Docker (no docker-compose required).
-# Host policy: canonical deployment is trx40 only (see README.md).
+# Host policy: canonical UI/container test on lab host 172.20.1.66 (trx40) — not Mac Docker for acceptance (see README.md).
 # Usage:
 #   ./run-docker.sh              # build + run detached
 #   ./run-docker.sh --foreground

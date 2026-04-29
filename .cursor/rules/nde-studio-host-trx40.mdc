@@ -1,32 +1,39 @@
 ---
-description: NDE Studio (finquantv1 UI) — trx40-only; always synced with dev
+description: NDE Studio UI — lab host only (172.20.1.66); never Mac Docker as acceptance
 globs: nde_control_plane/**/*
 alwaysApply: false
 ---
 
-# NDE Studio — trx40 is the route (hard rule)
+# NDE Studio — lab host only (hard rule)
 
-## Where the UI runs
+## Canonical runtime
 
-**The NDE Studio web UI always runs on trx40.** That host is the operator route for this surface — not clawbot, not other lab boxes, unless governance explicitly changes this.
+**NDE Studio** (`nde_control_plane/`; ops label **finquantv1**) is validated **only** on the lab host (**trx40** / **`172.20.1.66`** for this project — same route).
 
-**NDE Studio** = `nde_control_plane/` (Docker/React control plane; ops label **finquantv1**).
+- **Operator / acceptance testing:** **`git pull`** on that host → **`./run-docker.sh`** → hit **`http://127.0.0.1:3999`** (or LAN URL) **there**.
+- **Not** clawbot and **not** “any server” unless governance changes this.
 
-## Sync with dev work (non-negotiable)
+## Never rely on your Mac for container acceptance
 
-Whenever **`nde_control_plane/`** (or anything that affects the trx40 UI deployment) changes in development:
+- **There should not be** a requirement that **Docker NDE Studio runs on the developer Mac** for sign-off.
+- **Do not** treat “container up on my laptop” as proof the UI is deployed or ready — **push to `origin`, pull on `172.20.1.66`, run the container there**, then test.
 
-1. **Commit + push** to **`origin/main`** (or the agreed integration branch).
-2. On **trx40**, **`git pull`** so the checkout matches what dev shipped.
-3. **Rebuild/restart** the container (`./run-docker.sh` or equivalent) so the running UI matches the commit.
+Local Mac may be used to **edit code** and **run linters / `npm run build`** — optional **`npm run dev`** for quick UI sketches only — but **canonical UI/container testing is remote on `172.20.1.66`.**
 
-Unpushed work or a trx40 tree behind **`origin/main`** is **not** “the UI is current.” Operators assume trx40 tracks dev unless told otherwise.
+## Sync with dev (non-negotiable)
+
+1. **Commit + push** (`origin/main` or integration branch).
+2. **SSH to `172.20.1.66`** (trx40 checkout, e.g. `~/blackbox`).
+3. **`git pull`** → **`cd nde_control_plane && ./run-docker.sh`** (or rebuild/restart).
+4. Confirm **HTTP** on port **3999** **on that host**.
+
+Unpushed work or a lab host behind **`origin/main`** is not “UI is current.”
 
 ## Agent behavior
 
-- Assume Docker/run docs target **trx40**.
-- Before closing tasks that touch **`nde_control_plane/`**, treat **push + trx40 pull + restart** as part of delivery when remote UI parity matters (same bar as other lab deploy rules unless user said local-only).
+- Do **not** instruct the operator that **local Mac Docker** is the deployment target for NDE Studio acceptance.
+- When closing **`nde_control_plane/`** work, default delivery is **pushed commit + remote pull + container on `172.20.1.66`** unless the user explicitly said **local-only scratch**.
 
 ## Orchestration vs UI
 
-LangGraph / `/data/NDE` tooling may be exercised elsewhere for CI; **the NDE Studio UI subproject stays pinned to trx40** as its canonical runtime.
+LangGraph / `/data/NDE` may be tested in other contexts; **the NDE Studio web UI** is pinned to **this lab host** for canonical runs.
