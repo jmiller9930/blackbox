@@ -170,13 +170,30 @@ def main() -> None:
         help="YAML config (default: finquant/training/config_v0.1.yaml next to this script)",
     )
     ap.add_argument("--base", type=Path, default=None, help="FINQUANT_BASE override")
+    ap.add_argument(
+        "--dataset",
+        type=Path,
+        default=None,
+        help="Override staging JSONL path (absolute or relative to cwd)",
+    )
+    ap.add_argument(
+        "--output-dir",
+        "--output_dir",
+        type=Path,
+        dest="output_dir",
+        default=None,
+        help="Override adapter output directory (absolute or relative to FINQUANT_BASE)",
+    )
     args = ap.parse_args()
 
     base = (args.base or finquant_base()).resolve()
     cfg_path = args.config or (Path(__file__).resolve().parent / "config_v0.1.yaml")
     cfg = load_config(cfg_path, base)
 
-    staging = cfg["_resolved_staging"]
+    if args.dataset is not None:
+        staging = Path(args.dataset).expanduser().resolve()
+    else:
+        staging = cfg["_resolved_staging"]
     if not staging.is_file():
         raise SystemExit(f"Staging JSONL not found: {staging} — run source_to_training.py build first.")
 
@@ -238,7 +255,12 @@ def main() -> None:
     )
     model = get_peft_model(model, peft_config)
 
-    out_dir = base / train_section["output_dir"]
+    if args.output_dir is not None:
+        od = Path(args.output_dir).expanduser()
+        out_dir = od if od.is_absolute() else (base / od)
+        out_dir = out_dir.resolve()
+    else:
+        out_dir = (base / train_section["output_dir"]).resolve()
     out_dir.mkdir(parents=True, exist_ok=True)
 
     max_seq = int(cfg["data"].get("max_seq_length", 4096))
@@ -290,6 +312,9 @@ def main() -> None:
     tokenizer.save_pretrained(str(out_dir))
 
     if args.mode == "smoke":
+        smoke_report_name = (
+            "smoke_training_report_v0.2.md" if args.dataset is not None else "smoke_training_report.md"
+        )
         write_training_report_md(
             base,
             mode=args.mode,
@@ -297,7 +322,7 @@ def main() -> None:
             staging=staging,
             out_dir=out_dir,
             log_history=log_history,
-            report_filename="smoke_training_report.md",
+            report_filename=smoke_report_name,
             heading="# FinQuant-1 — smoke training report",
             extra="## Status\n\n**Smoke run complete.** Review loss trend and checkpoint before full v0.1 training.\n",
             history_tail=40,
