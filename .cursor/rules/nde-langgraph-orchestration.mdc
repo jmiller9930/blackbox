@@ -1,11 +1,12 @@
 ---
-description: NDE Factory — LangGraph orchestration (global; always apply)
-alwaysApply: true
+description: NDE Factory — LangGraph orchestration (this repo only; globs)
+globs: nde/**/*,nde_factory/layout/**/*,scripts/install_nde_data_layout.sh
+alwaysApply: false
 ---
 
 # NDE Factory orchestration
 
-**Always apply.** Any work that adds or changes **multi-step NDE Factory** lifecycle behavior must align with this rule (including when the touched paths are outside `nde/`).
+This rule file lives under **this workspace’s** `.cursor/rules/` (the Black Box repo). It does **not** apply to other Cursor projects—only here, and only when the globs match or NDE context is relevant.
 
 ## Mandatory integration surface
 
