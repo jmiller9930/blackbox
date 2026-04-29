@@ -1,0 +1,7 @@
+Placeholder policy excerpt for pipeline smoke tests.
+
+Access Control (AC): Account management requires timely provisioning and deprovisioning.
+Identification and Authentication (IA): Multi-factor authentication is required for remote privileged sessions per organizational policy.
+Audit and Accountability (AU): Security-relevant events are logged and reviewed on a defined cadence.
+
+Drop authoritative PDF/HTML exports here; this file is synthetic scaffolding only until real sources are ingested.

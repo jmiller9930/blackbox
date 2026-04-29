@@ -1,0 +1,3 @@
+# NDE source processor (nde_source_processor.py)
+PyYAML>=6.0
+pypdf>=4.0

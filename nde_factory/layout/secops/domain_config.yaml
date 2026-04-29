@@ -1,0 +1,67 @@
+# SecOps NDE — domain config for nde_source_processor.py
+# Deploy: /data/NDE/secops/domain_config.yaml
+
+domain: secops
+version: "0.1"
+
+source_categories:
+  - compliance
+  - policy
+  - controls
+
+allowed_source_types:
+  - pdf
+  - html
+  - txt
+  - md
+  - json
+  - csv
+
+concept_schema_extensions:
+  framework_hints:
+    - CMMC
+    - NIST_SP_800_171
+    - CIS
+
+chunk_chars: 1200
+chunk_overlap: 200
+
+target_row_count: 150
+adversarial_ratio: 0.7
+
+default_risk_notes: >-
+  Compliance conclusions require control mapping, corroborating artifacts, and scope boundaries—not source excerpts alone.
+
+verifier:
+  instruction_template: >-
+    You are a SecOps verifier for CMMC-aligned security controls. Answer using exactly four labeled sections in this order:
+    Claim reviewed:, Math verdict:, DATA evidence required:, Final verifier status:. Be concise.
+
+data_evidence_template:
+  - "Control ID mapping (e.g., AC-2, AU-2, IA-5) tied to cited sources"
+  - "Logs: UTC timestamps, facility, collector source"
+  - "IAM evidence: roles, groups, MFA enrollment state"
+  - "Patch levels / CVE IDs when vulnerability context applies"
+  - "Audit artifacts: reviews, POA&M rows, assessor requests"
+
+adversarial_claim_templates:
+  - "VPN alone equals secure access; MFA is optional for admins."
+  - "Because there were no incidents, centralized logging is unnecessary."
+  - "Quarterly patching is sufficient for all production servers."
+  - "Disk encryption at rest removes the need for TLS on internal VPC traffic."
+  - "Shared administrator accounts are acceptable for internal maintenance."
+
+paths:
+  raw: sources/raw
+  extracted: sources/extracted
+  concepts: sources/concepts
+  reports: reports
+
+output:
+  concepts_filename: concepts_v0.1.jsonl
+  staging_filename: secops_v0.1.jsonl
+  report_filename: source_processor_report_v0.1.md
+
+quality_gates:
+  require_source_ids: true
+  min_rows: 1

@@ -17,4 +17,13 @@ echo "Installing NDE layout from ${LAYOUT} -> ${DEST}"
 mkdir -p "${DEST}"
 # Portable copy (no rsync dependency on minimal hosts).
 cp -a "${LAYOUT}/." "${DEST}/"
+
+TOOLS="${REPO_ROOT}/nde/tools"
+if [[ -d "${TOOLS}" ]]; then
+  mkdir -p "${DEST}/tools"
+  cp -f "${TOOLS}/nde_source_processor.py" "${DEST}/tools/"
+  [[ -f "${TOOLS}/requirements.txt" ]] && cp -f "${TOOLS}/requirements.txt" "${DEST}/tools/"
+  echo "Installed tools: ${DEST}/tools/nde_source_processor.py"
+fi
+
 echo "Done. Top-level README: ${DEST}/README.md"

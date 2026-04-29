@@ -161,5 +161,6 @@ Operator/architect sign-off per domain governance.
 
 - NDE layout: `nde_factory/layout/README.md`
 - Install script: `scripts/install_nde_data_layout.sh`
+- Universal processor (raw → extracted → concepts → staging JSONL → report): `nde/tools/nde_source_processor.py` (deploy: `/data/NDE/tools/nde_source_processor.py`). Per-domain **`domain_config.yaml`** under `/data/NDE/<domain>/`.
 
 **Default rule:** *Source extraction → concepts → staging JSONL → proof → training* is the **only** approved path for **new** NDE training data after this policy revision.
