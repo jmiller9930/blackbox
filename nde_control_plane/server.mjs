@@ -14,6 +14,10 @@ const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const PORT = Number(process.env.PORT || 3999);
 const DATA_NDE = process.env.NDE_DATA_ROOT || "/data/NDE";
 const REPO = process.env.REPO_MOUNT || "/repo";
+/** Legacy FinQuant tree (host: /data/finquant-1) — not migrated into /data/NDE yet */
+const FINQUANT_LEGACY_ROOT =
+  process.env.FINQUANT_LEGACY_ROOT || "/data/finquant-1";
+const LEGACY_FINQUANT_RUN_LABEL = "finquant-v0.2-full";
 
 const NODE_SEQUENCE = [
   "contract_ok",
@@ -139,6 +143,152 @@ function trainingLogTail(domain, runId) {
   return parts.join("\n\n").trim();
 }
 
+/** Parse last N/N step pair from FinQuant legacy logs (e.g. 2726/3000) */
+function parseLastProgressFraction(text) {
+  if (!text) return null;
+  const chunk =
+    text.length > 4 * 1024 * 1024 ? text.slice(-4 * 1024 * 1024) : text;
+  const re = /(\d+)\s*\/\s*(\d+)/g;
+  let m;
+  let last = null;
+  while ((m = re.exec(chunk)) !== null) {
+    const cur = parseInt(m[1], 10);
+    const tot = parseInt(m[2], 10);
+    if (tot > 0 && cur >= 0) last = { cur, tot };
+  }
+  return last;
+}
+
+function buildFinquantLegacySection() {
+  const paths = {
+    full_train_log: path.join(
+      FINQUANT_LEGACY_ROOT,
+      "reports",
+      "v0.2_full_train.log"
+    ),
+    full_stdout_log: path.join(
+      FINQUANT_LEGACY_ROOT,
+      "reports",
+      "full_train_stdout.log"
+    ),
+    adapters_dir: path.join(FINQUANT_LEGACY_ROOT, "adapters"),
+  };
+
+  let parseBlob = "";
+  if (fs.existsSync(paths.full_train_log)) {
+    try {
+      parseBlob = fs.readFileSync(paths.full_train_log, "utf8");
+    } catch {
+      parseBlob = "";
+    }
+  }
+  if (!parseBlob && fs.existsSync(paths.full_stdout_log)) {
+    try {
+      parseBlob = fs.readFileSync(paths.full_stdout_log, "utf8");
+    } catch {
+      parseBlob = "";
+    }
+  }
+
+  const lastFrac = parseLastProgressFraction(parseBlob);
+  let legacy_progress_percent = 0;
+  let current_step = null;
+  if (lastFrac && lastFrac.tot > 0) {
+    legacy_progress_percent = Math.min(
+      100,
+      Math.round((lastFrac.cur / lastFrac.tot) * 100)
+    );
+    current_step = `${lastFrac.cur}/${lastFrac.tot}`;
+  }
+
+  const hasTrainRuntime = /\btrain_runtime\b/i.test(parseBlob);
+  const explicit3000 =
+    /\b3000\s*\/\s*3000\b/.test(parseBlob) || current_step === "3000/3000";
+  const epochDone =
+    lastFrac &&
+    lastFrac.tot > 0 &&
+    lastFrac.cur >= lastFrac.tot &&
+    (lastFrac.tot >= 100 || lastFrac.tot === 3000);
+
+  let legacy_status = "idle";
+  if (hasTrainRuntime || explicit3000 || epochDone) {
+    legacy_status = "complete";
+  } else if (lastFrac && lastFrac.cur < lastFrac.tot) {
+    legacy_status = "training";
+  }
+
+  const legacy_log_tail =
+    tailFile(paths.full_train_log, 52000) ||
+    tailFile(paths.full_stdout_log, 52000) ||
+    "";
+
+  let adapters_hint = null;
+  try {
+    if (fs.existsSync(paths.adapters_dir)) {
+      const names = fs.readdirSync(paths.adapters_dir);
+      adapters_hint = {
+        path: paths.adapters_dir,
+        count: names.length,
+        sample: names.slice(0, 16),
+      };
+    }
+  } catch {
+    /* ignore */
+  }
+
+  return {
+    active_run_label: LEGACY_FINQUANT_RUN_LABEL,
+    legacy_progress_percent,
+    current_step,
+    legacy_status,
+    legacy_log_tail,
+    finquant_legacy_root: FINQUANT_LEGACY_ROOT,
+    paths_checked: paths,
+    adapters_hint,
+    log_mtime_full_train: fs.existsSync(paths.full_train_log)
+      ? fs.statSync(paths.full_train_log).mtime.toISOString()
+      : null,
+  };
+}
+
+function mergeFinquantDashboard(base, legacyFin) {
+  const out = { ...base, legacy_finquant: legacyFin };
+
+  const ndeEmpty = !base.latest_run_id;
+  const legacyActive =
+    legacyFin.legacy_status === "training" ||
+    legacyFin.legacy_status === "complete";
+
+  if (ndeEmpty && (legacyActive || legacyFin.current_step)) {
+    out.active_run_id = legacyFin.active_run_label;
+  }
+
+  if (legacyFin.legacy_status === "training") {
+    out.progress_percent = legacyFin.legacy_progress_percent;
+    out.current_status = "training";
+    out.finquant_legacy_training = true;
+  } else if (legacyFin.legacy_status === "complete" && ndeEmpty) {
+    out.progress_percent = legacyFin.legacy_progress_percent;
+    out.current_status = "complete";
+    out.finquant_legacy_complete = true;
+  } else if (legacyFin.legacy_status === "training" && base.latest_run_id) {
+    out.progress_percent = Math.max(
+      base.progress_percent ?? 0,
+      legacyFin.legacy_progress_percent
+    );
+    out.finquant_legacy_training = true;
+  }
+
+  const legacyHeader = legacyFin.legacy_log_tail
+    ? `=== Legacy FinQuant (${FINQUANT_LEGACY_ROOT}/reports) ===\n${legacyFin.legacy_log_tail}\n`
+    : "";
+  out.training_log_tail = [legacyHeader, base.training_log_tail || ""]
+    .filter(Boolean)
+    .join("\n");
+
+  return out;
+}
+
 // --- Upload storage: <nde>/<domain>/sources/raw ---
 function uploadsDir(domain) {
   const raw = path.join(DATA_NDE, domain, "sources", "raw");
@@ -197,9 +347,7 @@ app.get("/api/runs/:domain", (req, res) => {
   });
 });
 
-app.get("/api/dashboard/:domain", (req, res) => {
-  const domain = safeDomain(req.params.domain);
-  if (!domain) return res.status(400).json({ error: "bad_domain" });
+function buildDashboardPayload(domain) {
   const sorted = listRunsSorted(domain);
   const latest = sorted[0]?.run_id ?? null;
   let state = null;
@@ -216,15 +364,13 @@ app.get("/api/dashboard/:domain", (req, res) => {
     state?.artifacts?.staging_path ||
     null;
 
-  res.json({
+  const base = {
     domain,
     selected_domain: domain,
     active_run_id: latest,
     latest_run_id: latest,
     progress_percent: progressPct(state),
-    current_status: state
-      ? summarizeStatus(state)
-      : "no_runs",
+    current_status: state ? summarizeStatus(state) : "no_runs",
     latest_error: lastErr || null,
     certification_status: cert
       ? "issued"
@@ -235,7 +381,24 @@ app.get("/api/dashboard/:domain", (req, res) => {
     state_snapshot: state,
     staging_path_hint: stagingPath,
     training_log_tail: latest ? trainingLogTail(domain, latest) : "",
-  });
+  };
+
+  if (domain === "finquant") {
+    const lf = buildFinquantLegacySection();
+    return mergeFinquantDashboard(base, lf);
+  }
+  return base;
+}
+
+/** Same payload as GET /api/dashboard/:domain with domain=finquant */
+app.get("/api/dashboard/finquant", (_req, res) => {
+  res.json(buildDashboardPayload("finquant"));
+});
+
+app.get("/api/dashboard/:domain", (req, res) => {
+  const domain = safeDomain(req.params.domain);
+  if (!domain) return res.status(400).json({ error: "bad_domain" });
+  res.json(buildDashboardPayload(domain));
 });
 
 app.get("/api/sources/:domain", (req, res) => {

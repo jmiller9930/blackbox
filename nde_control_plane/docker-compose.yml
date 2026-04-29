@@ -16,6 +16,8 @@ services:
       PORT: "3999"
       NDE_DATA_ROOT: /data/NDE
       REPO_MOUNT: /repo
+      FINQUANT_LEGACY_ROOT: /data/finquant-1
     volumes:
       - /data/NDE:/data/NDE
+      - /data/finquant-1:/data/finquant-1
       - ${HOME}/blackbox:/repo:ro

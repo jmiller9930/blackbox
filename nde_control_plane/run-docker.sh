@@ -17,6 +17,7 @@ NAME="${NDE_STUDIO_CONTAINER:-nde-studio}"
 PORT="${NDE_STUDIO_PORT:-3999}"
 REPO_HOST="${REPO_HOST:-${HOME}/blackbox}"
 NDE_HOST="${NDE_HOST:-/data/NDE}"
+FINQUANT_LEGACY_HOST="${FINQUANT_LEGACY_HOST:-/data/finquant-1}"
 
 FOREGROUND=false
 for a in "$@"; do
@@ -34,7 +35,9 @@ RUN_ARGS=(
   -e PORT=3999
   -e NDE_DATA_ROOT=/data/NDE
   -e REPO_MOUNT=/repo
+  -e FINQUANT_LEGACY_ROOT=/data/finquant-1
   -v "${NDE_HOST}:/data/NDE"
+  -v "${FINQUANT_LEGACY_HOST}:/data/finquant-1"
   -v "${REPO_HOST}:/repo:ro"
 )
 

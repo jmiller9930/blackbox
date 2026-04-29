@@ -8,6 +8,18 @@ import {
   type ReactNode,
 } from "react";
 
+export type LegacyFinquantPayload = {
+  active_run_label: string;
+  legacy_progress_percent: number;
+  current_step: string | null;
+  legacy_status: "idle" | "training" | "complete";
+  legacy_log_tail: string;
+  finquant_legacy_root: string;
+  paths_checked: Record<string, string>;
+  adapters_hint?: { path: string; count: number; sample: string[] } | null;
+  log_mtime_full_train?: string | null;
+};
+
 export type DashboardPayload = {
   domain: string;
   active_run_id: string | null;
@@ -19,6 +31,9 @@ export type DashboardPayload = {
   state_snapshot: Record<string, unknown> | null;
   staging_path_hint: string | null;
   training_log_tail: string;
+  legacy_finquant?: LegacyFinquantPayload;
+  finquant_legacy_training?: boolean;
+  finquant_legacy_complete?: boolean;
 };
 
 type StudioCtx = {
@@ -74,13 +89,22 @@ export function StudioProvider({ children }: { children: ReactNode }) {
       const ids = (runList.runs ?? []).map((r) => r.run_id);
       setRuns(ids);
 
+      const lf = dash.legacy_finquant;
+      const legacyLabel = lf?.active_run_label;
       const preferred =
-        dash.active_run_id && ids.includes(dash.active_run_id)
+        dash.active_run_id &&
+        (ids.includes(dash.active_run_id) ||
+          (legacyLabel && dash.active_run_id === legacyLabel))
           ? dash.active_run_id
-          : ids[0] ?? null;
+          : ids[0] ?? legacyLabel ?? null;
 
       setSelectedRunId((cur) => {
-        if (cur && ids.includes(cur)) return cur;
+        if (
+          cur &&
+          (ids.includes(cur) || (legacyLabel && cur === legacyLabel))
+        ) {
+          return cur;
+        }
         return preferred;
       });
     } catch (e) {
