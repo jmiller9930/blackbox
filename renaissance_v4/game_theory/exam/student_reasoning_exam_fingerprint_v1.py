@@ -31,6 +31,22 @@ def write_exam_fingerprint_summary_md_v1(results: dict[str, Any], out_dir: Path)
         )
         lines.append(f"- **no_trade_correct:** {g.get('no_trade_correct')}")
         lines.append(f"- **sealed_ok_v1:** {row.get('sealed_ok_v1')}")
+        gp = row.get("gt041_proof_v1")
+        if isinstance(gp, dict):
+            lines.append(
+                f"- **GT041 proof:** matched=`{gp.get('matched_count_v1')}` · "
+                f"pattern_effect=`{gp.get('pattern_effect_to_score_v1')}` · "
+                f"EV avail=`{gp.get('expected_value_available_v1')}` · "
+                f"sample_count=`{gp.get('sample_count_v1')}` · "
+                f"ev_adj=`{gp.get('ev_score_adjustment_v1')}` · "
+                f"lane=`{gp.get('gt041_lane_v1')}`"
+            )
+        lines.append("")
+    ga = results.get("gt041_acceptance_v1")
+    if isinstance(ga, dict):
+        lines.append("## GT_DIRECTIVE_041 acceptance\n")
+        for k, v in ga.items():
+            lines.append(f"- **{k}:** `{v}`")
         lines.append("")
     lines.append("## Raw scenario blob (embedded)\n")
     try:

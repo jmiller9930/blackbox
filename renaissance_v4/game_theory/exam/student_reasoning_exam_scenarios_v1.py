@@ -22,6 +22,8 @@ from renaissance_v4.game_theory.student_proctor.student_context_builder_v1 impor
     fetch_all_5m_for_symbol_asc,
 )
 
+GT041_MEMORY_EV_EXAM_ID_V1 = "d6-memory-ev-proof-001"
+
 
 def _closes(bars: list[dict[str, Any]]) -> list[float]:
     return [float(b.get("close") or 0.0) for b in bars]
@@ -248,18 +250,70 @@ def scenario_templates_v1() -> list[dict[str, Any]]:
     ]
 
 
+def scenario_templates_gt041_memory_ev_v1() -> list[dict[str, Any]]:
+    """
+    GT_DIRECTIVE_041 — ten spread windows; lanes drive seeded PnL / proof expectations.
+
+    Resolver uses ``kind`` = ``gt041_spread`` + ``gt041_slot`` 0..9 across rolled bars.
+    """
+    lanes = (
+        "memory_positive",
+        "memory_positive",
+        "memory_positive",
+        "memory_negative",
+        "memory_negative",
+        "memory_negative",
+        "ev_positive",
+        "ev_positive",
+        "ev_negative",
+        "ev_negative",
+    )
+    out: list[dict[str, Any]] = []
+    for slot in range(10):
+        lane = lanes[slot]
+        out.append(
+            {
+                "scenario_id": f"d6_gt041_{lane}_{slot:02d}",
+                "symbol": "SOLUSDT",
+                # Use 5m so modest SQLite fixtures (hundreds of 5m rows) yield ≥80 rolled candles.
+                "timeframe_minutes": 5,
+                "kind": "gt041_spread",
+                "gt041_slot": slot,
+                "gt041_lane_v1": lane,
+                "memory_injection_v1": None,
+                "expected_state": f"gt041_{lane}",
+                "expected_behavior": "Pattern-memory store + EV proof — see GT_DIRECTIVE_041.",
+                "allowed_actions": ["enter_long", "enter_short", "no_trade"],
+                "disallowed_actions": [],
+                "required_signals": [
+                    "indicator_context_eval_v1",
+                    "decision_synthesis_v1",
+                    "pattern_memory_eval_v1",
+                    "expected_value_risk_cost_v1",
+                ],
+                "grade_primary_action_v1": "contextual",
+            }
+        )
+    return out
+
+
 def resolve_scenario_windows_v1(
     *,
     db_path: Path | str,
     symbol_override: str | None = None,
     timeframe_override: int | None = None,
+    exam_id: str | None = None,
 ) -> tuple[list[dict[str, Any]], str | None]:
     """
     Returns enriched scenario rows: each includes resolved ``symbol``, ``candle_timeframe_minutes``,
     ``decision_open_time_ms``, ``bars_window_note``, ``window_resolution_v1``.
     """
     p = Path(db_path)
-    templates = scenario_templates_v1()
+    eid = str(exam_id or "").strip()
+    if eid == GT041_MEMORY_EV_EXAM_ID_V1:
+        templates = scenario_templates_gt041_memory_ev_v1()
+    else:
+        templates = scenario_templates_v1()
     sym = (symbol_override or "").strip() or pick_dense_symbol_v1(p)
     if not sym:
         return [], "could not resolve symbol from database"
@@ -278,11 +332,24 @@ def resolve_scenario_windows_v1(
     # Scan indices (leave margin for causal packet).
     idx_lo = 120 if len(rolled) >= 200 else max(40, min_bars // 2)
     indices = range(idx_lo, len(rolled) - 2, 3)
+    idx_list = list(indices)
 
-    def best_match(kind: str) -> tuple[int | None, str]:
+    def best_match(tmpl: dict[str, Any]) -> tuple[int | None, str]:
+        kind = str(tmpl.get("kind") or "")
         best_i: int | None = None
         best_score = -1.0
         note = ""
+        if kind == "gt041_spread":
+            slot = int(tmpl.get("gt041_slot") or 0)
+            slot = max(0, min(slot, 9))
+            if not idx_list:
+                return None, "no_gt041_indices"
+            # Spread decisions across the scan range so signatures diverge.
+            stride = max(1, len(idx_list) // 11)
+            off = min(slot * stride + (slot % 3), len(idx_list) - 1)
+            picked = int(idx_list[off])
+            return picked, f"gt041_spread slot={slot} off={off}"
+
         if kind == "strong_trend_long":
             for i in indices:
                 ic = _indicator_tail(rolled, i)
@@ -405,7 +472,7 @@ def resolve_scenario_windows_v1(
 
     for tmpl in templates:
         kind = str(tmpl["kind"])
-        idx, note = best_match(kind)
+        idx, note = best_match(tmpl)
         if idx is None:
             idx = min(indices[len(indices) // 2], len(rolled) - 5)
             note = (note + "; " if note else "") + "used_mid_series_fallback"
@@ -449,8 +516,10 @@ def synthetic_retrieved_experience_v1(
 
 
 __all__ = [
+    "GT041_MEMORY_EV_EXAM_ID_V1",
     "pick_dense_symbol_v1",
     "resolve_scenario_windows_v1",
+    "scenario_templates_gt041_memory_ev_v1",
     "scenario_templates_v1",
     "synthetic_retrieved_experience_v1",
 ]
