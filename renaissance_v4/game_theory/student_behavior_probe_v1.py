@@ -1,8 +1,9 @@
 """
 Student **behavior probe** — optional seam exercise (shared helpers / manual or tests).
 
-``web_app`` parallel batches **do not** await this before ``run_scenarios_parallel``; RM preflight gates readiness,
-then workers start. This module remains callable for diagnostics.
+**GT064:** Parallel UI/API batches **never** await ``execute_student_behavior_probe_v1`` before
+``run_scenarios_parallel``. RM preflight gates readiness; workers start immediately after PASS.
+This module remains callable for diagnostics and unit tests; it is not on the operator Run critical path.
 
 * Does **not** call ``run_scenarios_parallel`` or Referee replay workers.
 * Builds a **thin** ``results`` row with synthetic :class:`OutcomeRecord` shells anchored on real DB bar

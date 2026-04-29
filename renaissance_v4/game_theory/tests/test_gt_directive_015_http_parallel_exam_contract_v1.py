@@ -78,24 +78,6 @@ def _fake_terminal_integrity_ok_for_job_v1() -> dict:
     }
 
 
-def _fake_execute_student_behavior_probe_pass_v1(*_a: object, **_kw: object) -> tuple[None, dict]:
-    """Avoid real subprocess probe — GT015 exercises HTTP + mocked parallel/seam only."""
-    return (
-        None,
-        {
-            "probe_summary_v1": {
-                "authority_count_v1": 1,
-                "sealed_count_v1": 1,
-                "rejection_count_v1": 0,
-                "contract_violation_count_v1": 0,
-            },
-            "probe_timeout_v1": False,
-            "probe_wall_clock_s_v1": 0.01,
-            "probe_wall_limit_s_v1": 120.0,
-        },
-    )
-
-
 def _fake_parallel_row() -> dict:
     return {
         "ok": True,
@@ -120,10 +102,6 @@ def _fake_parallel_row() -> dict:
     }
 
 
-@patch(
-    "renaissance_v4.game_theory.student_behavior_probe_v1.execute_student_behavior_probe_v1",
-    new=_fake_execute_student_behavior_probe_pass_v1,
-)
 def test_post_run_parallel_blocking_writes_lane_metadata(
     flask_client, tmp_path: Path
 ) -> None:
@@ -221,10 +199,6 @@ def test_post_run_parallel_blocking_writes_lane_metadata(
     assert last_meta.get("student_llm_execution_v1", {}).get("ollama_trades_succeeded") == 1
 
 
-@patch(
-    "renaissance_v4.game_theory.student_behavior_probe_v1.execute_student_behavior_probe_v1",
-    new=_fake_execute_student_behavior_probe_pass_v1,
-)
 def test_post_run_parallel_start_returns_200_with_exam_contract(
     flask_client, tmp_path: Path
 ) -> None:

@@ -2184,6 +2184,7 @@ def create_app() -> Flask:
                             )
                     return
 
+                # GT064 — probe must not block parallel execution (no await / no flag).
                 _parallel_job_append_rm_preflight_line_v1(
                     job_id,
                     "GATE: Student behavior probe = OFF critical path "
@@ -3211,6 +3212,7 @@ def create_app() -> Flask:
             print(f"[pattern_game_parallel] job_id={job_id} {_bp_pass}", file=sys.stderr, flush=True)
             cb_block = _parallel_job_progress_row_callback_v1(job_id)
 
+            # GT064 — probe must not block parallel execution (no await / no flag).
             _parallel_job_append_rm_preflight_line_v1(
                 job_id,
                 "GATE: Student behavior probe = OFF critical path "
