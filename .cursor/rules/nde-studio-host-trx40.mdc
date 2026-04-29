@@ -1,0 +1,24 @@
+---
+description: NDE Studio (finquantv1 UI) — trx40-only deployment hard rule
+globs: nde_control_plane/**/*
+alwaysApply: false
+---
+
+# NDE Studio — host policy (hard rule)
+
+## Canonical runtime host
+
+**NDE Studio** (`nde_control_plane/`: Docker/React control plane, **finquantv1** in ops naming) **must run only on trx40**.
+
+- **Approved:** Build/run the UI stack on **trx40** (lab GPU / trx40-class host where FinQuant training is anchored).
+- **Not approved:** Treating clawbot, generic jump hosts, or other servers as the **canonical** NDE Studio deployment unless the architect explicitly redefines this policy.
+
+Orchestration code (`nde/tools/*`, `/data/NDE`) may exist on other hosts for CI or experiments; **the NDE Studio container/UI subproject is pinned to trx40** as its production lab surface.
+
+## Sync expectation
+
+The trx40 checkout used for NDE Studio (**e.g. `~/blackbox`**) **must stay in git sync** with **`origin/main`** (or the named integration branch) **before** claiming “deployed” or “operator-visible on trx40.” Unsynced local-only trees are not compliant proof.
+
+## Agent behavior
+
+When editing **`nde_control_plane/`**, assume Docker/run instructions target **trx40**. Do not redirect deployment docs to other hosts by default. If SSH/access is wrong host, **stop** and align with this rule.
