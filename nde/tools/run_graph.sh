@@ -3,6 +3,9 @@
 set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+# Training code lives in the Black Box checkout, not under NDE_ROOT (/data/NDE).
+export REPO_ROOT="${REPO_ROOT:-$HOME/blackbox}"
+
 VENV="/data/NDE/.venv"
 
 if [[ ! -d "$VENV" ]]; then

@@ -33,8 +33,6 @@ except ImportError:  # pragma: no cover
 
 from langgraph.graph import END, START, StateGraph
 
-REPO_ROOT = Path(__file__).resolve().parents[2]
-
 try:
     from nde_validation_lib import (
         resolve_staging_jsonl,
@@ -180,6 +178,24 @@ def _sync_state_json(run_root: Path, state: dict[str, Any]) -> None:
 
 def _nde_root() -> Path:
     return Path(os.environ.get("NDE_ROOT", "/data/NDE")).resolve()
+
+
+def _repo_root() -> Path:
+    """Checkout root (contains ``finquant/training/``). ``/data/NDE`` is data-only — training code lives in the repo.
+
+    Resolution order:
+    1. ``REPO_ROOT`` environment variable (preferred in deployment under ``/data/NDE/tools/``).
+    2. Directory containing this file at ``…/nde/tools/nde_graph_runner.py`` → parents[2] if ``train_qlora.py`` exists there (local dev clone).
+    3. ``~/blackbox`` (default host convention).
+    """
+    raw = os.environ.get("REPO_ROOT", "").strip()
+    if raw:
+        return Path(raw).expanduser().resolve()
+    derived = Path(__file__).resolve().parents[2]
+    train_here = derived / "finquant" / "training" / "train_qlora.py"
+    if train_here.is_file():
+        return derived
+    return Path(os.path.expanduser("~/blackbox")).resolve()
 
 
 def _approval_file(run_root: Path) -> Path:
@@ -423,7 +439,8 @@ def smoke_train(state: NDEState) -> dict[str, Any]:
     base_map = {"secops": nde / "secops", "finquant": nde / "finquant"}
     base = base_map.get(domain) or (nde / domain)
     cfg_path = _training_config_path(nde, domain)
-    train_py = REPO_ROOT / "finquant" / "training" / "train_qlora.py"
+    repo_root = _repo_root()
+    train_py = repo_root / "finquant" / "training" / "train_qlora.py"
 
     if state.get("dry_run"):
         train_mode_would = "full" if mode == "full" else "smoke"
@@ -445,7 +462,7 @@ def smoke_train(state: NDEState) -> dict[str, Any]:
         )
         return {"train_ok": True}
 
-    cfg_finquant_repo = REPO_ROOT / "finquant" / "training" / "config_v0.1.yaml"
+    cfg_finquant_repo = repo_root / "finquant" / "training" / "config_v0.1.yaml"
     if cfg_path.is_file():
         cfg = cfg_path
     elif domain == "finquant":
@@ -461,7 +478,11 @@ def smoke_train(state: NDEState) -> dict[str, Any]:
         alt = Path(os.environ.get("FINQUANT_TRAIN_SCRIPT", ""))
         train_py = alt if alt.is_file() else train_py
     if not train_py.is_file():
-        msg = f"train_qlora.py not found; expected at {REPO_ROOT / 'finquant' / 'training' / 'train_qlora.py'}"
+        msg = (
+            f"train_qlora.py not found; expected under repo root {repo_root} "
+            f"(set REPO_ROOT or install checkout at ~/blackbox). "
+            f"Tried: {repo_root / 'finquant' / 'training' / 'train_qlora.py'}"
+        )
         _write_node_proof(
             run_root,
             "smoke_train",
@@ -471,6 +492,11 @@ def smoke_train(state: NDEState) -> dict[str, Any]:
             errors=[msg],
             next_node="END",
             failure_reason=msg,
+            artifacts={
+                "train_script_missing": True,
+                "repo_root": str(repo_root),
+                "train_script_expected": str(repo_root / "finquant" / "training" / "train_qlora.py"),
+            },
         )
         return {"train_ok": False, "last_error": msg}
 
@@ -481,7 +507,7 @@ def smoke_train(state: NDEState) -> dict[str, Any]:
         text=True,
         timeout=86400,
         env={**os.environ, "FINQUANT_BASE": str(base), "NDE_ROOT": str(nde)},
-        cwd=str(REPO_ROOT),
+        cwd=str(repo_root),
     )
     ok = proc.returncode == 0
     _write_node_proof(
@@ -495,7 +521,13 @@ def smoke_train(state: NDEState) -> dict[str, Any]:
         failure_reason=None if ok else (proc.stderr[:8000] or proc.stdout[:8000]),
         stdout=(proc.stdout or "")[-48000:],
         stderr=(proc.stderr or "")[-48000:],
-        artifacts={"cmd": cmd, "train_mode": train_mode, "training_config": str(cfg)},
+        artifacts={
+            "cmd": cmd,
+            "train_mode": train_mode,
+            "training_config": str(cfg),
+            "repo_root": str(repo_root),
+            "training_script": str(train_py),
+        },
     )
     return {"train_ok": ok, "last_error": "" if ok else "training subprocess failed"}
 
