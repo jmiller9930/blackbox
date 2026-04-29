@@ -1,5 +1,10 @@
-# NDE Studio — Control Plane UI
-# Run: cd nde_control_plane && docker compose up -d --build
+# NDE Studio — Control Plane UI (optional; requires a working docker compose plugin)
+#
+# If docker-compose v1 / Python shim is broken, use plain Docker instead:
+#   ./run-docker.sh
+#
+# Compose equivalent:
+#   cd nde_control_plane && docker compose up -d --build
 # URL: http://127.0.0.1:3999
 services:
   nde-studio:
