@@ -1,0 +1,17 @@
+{
+  "phase": "final_exam",
+  "status": "PASS",
+  "checks": {
+    "case_count": 40,
+    "adversarial_count": 32,
+    "adversarial_ratio": 0.8,
+    "duplicate_prompts_with_eval": 0,
+    "pass_criteria_encoded": true
+  },
+  "errors": [],
+  "encoded_pass_policy": {
+    "min_score_fraction": 0.95,
+    "no_false_pass_on_incorrect_claim": true,
+    "data_evidence_required": true
+  }
+}

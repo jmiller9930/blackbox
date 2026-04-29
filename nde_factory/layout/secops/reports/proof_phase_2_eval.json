@@ -1,0 +1,20 @@
+{
+  "phase": "eval",
+  "status": "PASS",
+  "checks": {
+    "case_count": 40,
+    "adversarial_count": 32,
+    "adversarial_ratio": 0.8,
+    "four_heading_flag_all": true,
+    "coverage_themes_present": [
+      "audit_evidence",
+      "encryption",
+      "identity",
+      "least_privilege",
+      "logging",
+      "patching",
+      "shared_accounts"
+    ]
+  },
+  "errors": []
+}

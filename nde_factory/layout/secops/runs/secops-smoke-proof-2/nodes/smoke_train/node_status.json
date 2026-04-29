@@ -1,0 +1,12 @@
+{
+  "node": "smoke_train",
+  "status": "ok",
+  "updated_at": "2026-04-29T19:46:00Z",
+  "artifacts": {
+    "mode": "smoke",
+    "dry_run": true,
+    "train_mode": "smoke",
+    "secops_config": "/Users/bigmac/Documents/code_projects/blackbox/nde_factory/layout/secops/training/config_secops_qwen1_5b_v0.1.yaml"
+  },
+  "failure_reason": null
+}

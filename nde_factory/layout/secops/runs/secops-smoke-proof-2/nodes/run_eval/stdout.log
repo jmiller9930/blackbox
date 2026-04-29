@@ -1,0 +1,22 @@
+SecOps eval: secops_eval_v0.1.json harness + staging sample.
+eval_json=/Users/bigmac/Documents/code_projects/blackbox/nde_factory/layout/secops/eval/secops_eval_v0.1.json
+{
+  "harness_ok": true,
+  "harness_detail": {
+    "case_count": 40,
+    "adversarial_count": 32,
+    "adversarial_ratio": 0.8,
+    "four_heading_flag_all": true,
+    "coverage_themes_present": [
+      "audit_evidence",
+      "encryption",
+      "identity",
+      "least_privilege",
+      "logging",
+      "patching",
+      "shared_accounts"
+    ]
+  }
+}
+staging=/Users/bigmac/Documents/code_projects/blackbox/nde_factory/layout/secops/datasets/staging/secops_v0.1.jsonl
+{"staging_sample_ok": true, "note": ""}

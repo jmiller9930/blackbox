@@ -1,0 +1,13 @@
+{
+  "phase": "graph_wiring",
+  "status": "PASS",
+  "checks": {
+    "secops_smoke_train_config": true,
+    "run_eval_secops_eval_json": true,
+    "final_exam_secops_final_json": true,
+    "gate_failure_routes_auto_reinforce": true,
+    "full_mode_requires_approval": true,
+    "certify_only_after_final_exam_pass": true
+  },
+  "errors": []
+}

@@ -1,0 +1,9 @@
+{
+  "node": "certify",
+  "status": "ok",
+  "updated_at": "2026-04-29T19:46:00Z",
+  "artifacts": {
+    "certificate": "/Users/bigmac/Documents/code_projects/blackbox/nde_factory/layout/secops/runs/secops-smoke-proof-2/CERTIFICATE.json"
+  },
+  "failure_reason": null
+}

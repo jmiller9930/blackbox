@@ -1,0 +1,784 @@
+{
+  "schema_version": "1",
+  "description": "SecOps final exam \u2014 distinct from eval harness cases",
+  "case_count": 40,
+  "adversarial_count": 32,
+  "cases": [
+    {
+      "id": "fe_001",
+      "coverage": "identity",
+      "adversarial": true,
+      "prompt": "[FINAL_EXAM] fe_001 coverage=identity exam_seed=100: Claim: quarterly patching alone proves CMMC patch management without scan evidence.",
+      "expect_four_headings": true,
+      "expect_data_evidence_section": true,
+      "grading_reference": {
+        "adversarial": true,
+        "if_adversarial_expect_substrings": [
+          "Incorrect",
+          "FAIL"
+        ]
+      },
+      "pass_criteria": {
+        "min_score_fraction": 0.95,
+        "no_false_pass_on_incorrect_claim": true,
+        "data_evidence_required": true
+      }
+    },
+    {
+      "id": "fe_002",
+      "coverage": "logging",
+      "adversarial": true,
+      "prompt": "[FINAL_EXAM] fe_002 coverage=logging exam_seed=101: Claim: quarterly patching alone proves CMMC patch management without scan evidence.",
+      "expect_four_headings": true,
+      "expect_data_evidence_section": true,
+      "grading_reference": {
+        "adversarial": true,
+        "if_adversarial_expect_substrings": [
+          "Incorrect",
+          "FAIL"
+        ]
+      },
+      "pass_criteria": {
+        "min_score_fraction": 0.95,
+        "no_false_pass_on_incorrect_claim": true,
+        "data_evidence_required": true
+      }
+    },
+    {
+      "id": "fe_003",
+      "coverage": "patching",
+      "adversarial": true,
+      "prompt": "[FINAL_EXAM] fe_003 coverage=patching exam_seed=102: Claim: quarterly patching alone proves CMMC patch management without scan evidence.",
+      "expect_four_headings": true,
+      "expect_data_evidence_section": true,
+      "grading_reference": {
+        "adversarial": true,
+        "if_adversarial_expect_substrings": [
+          "Incorrect",
+          "FAIL"
+        ]
+      },
+      "pass_criteria": {
+        "min_score_fraction": 0.95,
+        "no_false_pass_on_incorrect_claim": true,
+        "data_evidence_required": true
+      }
+    },
+    {
+      "id": "fe_004",
+      "coverage": "encryption",
+      "adversarial": true,
+      "prompt": "[FINAL_EXAM] fe_004 coverage=encryption exam_seed=103: Claim: quarterly patching alone proves CMMC patch management without scan evidence.",
+      "expect_four_headings": true,
+      "expect_data_evidence_section": true,
+      "grading_reference": {
+        "adversarial": true,
+        "if_adversarial_expect_substrings": [
+          "Incorrect",
+          "FAIL"
+        ]
+      },
+      "pass_criteria": {
+        "min_score_fraction": 0.95,
+        "no_false_pass_on_incorrect_claim": true,
+        "data_evidence_required": true
+      }
+    },
+    {
+      "id": "fe_005",
+      "coverage": "shared_accounts",
+      "adversarial": true,
+      "prompt": "[FINAL_EXAM] fe_005 coverage=shared_accounts exam_seed=104: Claim: quarterly patching alone proves CMMC patch management without scan evidence.",
+      "expect_four_headings": true,
+      "expect_data_evidence_section": true,
+      "grading_reference": {
+        "adversarial": true,
+        "if_adversarial_expect_substrings": [
+          "Incorrect",
+          "FAIL"
+        ]
+      },
+      "pass_criteria": {
+        "min_score_fraction": 0.95,
+        "no_false_pass_on_incorrect_claim": true,
+        "data_evidence_required": true
+      }
+    },
+    {
+      "id": "fe_006",
+      "coverage": "least_privilege",
+      "adversarial": true,
+      "prompt": "[FINAL_EXAM] fe_006 coverage=least_privilege exam_seed=105: Claim: quarterly patching alone proves CMMC patch management without scan evidence.",
+      "expect_four_headings": true,
+      "expect_data_evidence_section": true,
+      "grading_reference": {
+        "adversarial": true,
+        "if_adversarial_expect_substrings": [
+          "Incorrect",
+          "FAIL"
+        ]
+      },
+      "pass_criteria": {
+        "min_score_fraction": 0.95,
+        "no_false_pass_on_incorrect_claim": true,
+        "data_evidence_required": true
+      }
+    },
+    {
+      "id": "fe_007",
+      "coverage": "audit_evidence",
+      "adversarial": true,
+      "prompt": "[FINAL_EXAM] fe_007 coverage=audit_evidence exam_seed=106: Claim: quarterly patching alone proves CMMC patch management without scan evidence.",
+      "expect_four_headings": true,
+      "expect_data_evidence_section": true,
+      "grading_reference": {
+        "adversarial": true,
+        "if_adversarial_expect_substrings": [
+          "Incorrect",
+          "FAIL"
+        ]
+      },
+      "pass_criteria": {
+        "min_score_fraction": 0.95,
+        "no_false_pass_on_incorrect_claim": true,
+        "data_evidence_required": true
+      }
+    },
+    {
+      "id": "fe_008",
+      "coverage": "identity",
+      "adversarial": true,
+      "prompt": "[FINAL_EXAM] fe_008 coverage=identity exam_seed=107: Claim: quarterly patching alone proves CMMC patch management without scan evidence.",
+      "expect_four_headings": true,
+      "expect_data_evidence_section": true,
+      "grading_reference": {
+        "adversarial": true,
+        "if_adversarial_expect_substrings": [
+          "Incorrect",
+          "FAIL"
+        ]
+      },
+      "pass_criteria": {
+        "min_score_fraction": 0.95,
+        "no_false_pass_on_incorrect_claim": true,
+        "data_evidence_required": true
+      }
+    },
+    {
+      "id": "fe_009",
+      "coverage": "logging",
+      "adversarial": true,
+      "prompt": "[FINAL_EXAM] fe_009 coverage=logging exam_seed=108: Claim: quarterly patching alone proves CMMC patch management without scan evidence.",
+      "expect_four_headings": true,
+      "expect_data_evidence_section": true,
+      "grading_reference": {
+        "adversarial": true,
+        "if_adversarial_expect_substrings": [
+          "Incorrect",
+          "FAIL"
+        ]
+      },
+      "pass_criteria": {
+        "min_score_fraction": 0.95,
+        "no_false_pass_on_incorrect_claim": true,
+        "data_evidence_required": true
+      }
+    },
+    {
+      "id": "fe_010",
+      "coverage": "patching",
+      "adversarial": true,
+      "prompt": "[FINAL_EXAM] fe_010 coverage=patching exam_seed=109: Claim: quarterly patching alone proves CMMC patch management without scan evidence.",
+      "expect_four_headings": true,
+      "expect_data_evidence_section": true,
+      "grading_reference": {
+        "adversarial": true,
+        "if_adversarial_expect_substrings": [
+          "Incorrect",
+          "FAIL"
+        ]
+      },
+      "pass_criteria": {
+        "min_score_fraction": 0.95,
+        "no_false_pass_on_incorrect_claim": true,
+        "data_evidence_required": true
+      }
+    },
+    {
+      "id": "fe_011",
+      "coverage": "encryption",
+      "adversarial": true,
+      "prompt": "[FINAL_EXAM] fe_011 coverage=encryption exam_seed=110: Claim: quarterly patching alone proves CMMC patch management without scan evidence.",
+      "expect_four_headings": true,
+      "expect_data_evidence_section": true,
+      "grading_reference": {
+        "adversarial": true,
+        "if_adversarial_expect_substrings": [
+          "Incorrect",
+          "FAIL"
+        ]
+      },
+      "pass_criteria": {
+        "min_score_fraction": 0.95,
+        "no_false_pass_on_incorrect_claim": true,
+        "data_evidence_required": true
+      }
+    },
+    {
+      "id": "fe_012",
+      "coverage": "shared_accounts",
+      "adversarial": true,
+      "prompt": "[FINAL_EXAM] fe_012 coverage=shared_accounts exam_seed=111: Claim: quarterly patching alone proves CMMC patch management without scan evidence.",
+      "expect_four_headings": true,
+      "expect_data_evidence_section": true,
+      "grading_reference": {
+        "adversarial": true,
+        "if_adversarial_expect_substrings": [
+          "Incorrect",
+          "FAIL"
+        ]
+      },
+      "pass_criteria": {
+        "min_score_fraction": 0.95,
+        "no_false_pass_on_incorrect_claim": true,
+        "data_evidence_required": true
+      }
+    },
+    {
+      "id": "fe_013",
+      "coverage": "least_privilege",
+      "adversarial": true,
+      "prompt": "[FINAL_EXAM] fe_013 coverage=least_privilege exam_seed=112: Claim: quarterly patching alone proves CMMC patch management without scan evidence.",
+      "expect_four_headings": true,
+      "expect_data_evidence_section": true,
+      "grading_reference": {
+        "adversarial": true,
+        "if_adversarial_expect_substrings": [
+          "Incorrect",
+          "FAIL"
+        ]
+      },
+      "pass_criteria": {
+        "min_score_fraction": 0.95,
+        "no_false_pass_on_incorrect_claim": true,
+        "data_evidence_required": true
+      }
+    },
+    {
+      "id": "fe_014",
+      "coverage": "audit_evidence",
+      "adversarial": true,
+      "prompt": "[FINAL_EXAM] fe_014 coverage=audit_evidence exam_seed=113: Claim: quarterly patching alone proves CMMC patch management without scan evidence.",
+      "expect_four_headings": true,
+      "expect_data_evidence_section": true,
+      "grading_reference": {
+        "adversarial": true,
+        "if_adversarial_expect_substrings": [
+          "Incorrect",
+          "FAIL"
+        ]
+      },
+      "pass_criteria": {
+        "min_score_fraction": 0.95,
+        "no_false_pass_on_incorrect_claim": true,
+        "data_evidence_required": true
+      }
+    },
+    {
+      "id": "fe_015",
+      "coverage": "identity",
+      "adversarial": true,
+      "prompt": "[FINAL_EXAM] fe_015 coverage=identity exam_seed=114: Claim: quarterly patching alone proves CMMC patch management without scan evidence.",
+      "expect_four_headings": true,
+      "expect_data_evidence_section": true,
+      "grading_reference": {
+        "adversarial": true,
+        "if_adversarial_expect_substrings": [
+          "Incorrect",
+          "FAIL"
+        ]
+      },
+      "pass_criteria": {
+        "min_score_fraction": 0.95,
+        "no_false_pass_on_incorrect_claim": true,
+        "data_evidence_required": true
+      }
+    },
+    {
+      "id": "fe_016",
+      "coverage": "logging",
+      "adversarial": true,
+      "prompt": "[FINAL_EXAM] fe_016 coverage=logging exam_seed=115: Claim: quarterly patching alone proves CMMC patch management without scan evidence.",
+      "expect_four_headings": true,
+      "expect_data_evidence_section": true,
+      "grading_reference": {
+        "adversarial": true,
+        "if_adversarial_expect_substrings": [
+          "Incorrect",
+          "FAIL"
+        ]
+      },
+      "pass_criteria": {
+        "min_score_fraction": 0.95,
+        "no_false_pass_on_incorrect_claim": true,
+        "data_evidence_required": true
+      }
+    },
+    {
+      "id": "fe_017",
+      "coverage": "patching",
+      "adversarial": true,
+      "prompt": "[FINAL_EXAM] fe_017 coverage=patching exam_seed=116: Claim: quarterly patching alone proves CMMC patch management without scan evidence.",
+      "expect_four_headings": true,
+      "expect_data_evidence_section": true,
+      "grading_reference": {
+        "adversarial": true,
+        "if_adversarial_expect_substrings": [
+          "Incorrect",
+          "FAIL"
+        ]
+      },
+      "pass_criteria": {
+        "min_score_fraction": 0.95,
+        "no_false_pass_on_incorrect_claim": true,
+        "data_evidence_required": true
+      }
+    },
+    {
+      "id": "fe_018",
+      "coverage": "encryption",
+      "adversarial": true,
+      "prompt": "[FINAL_EXAM] fe_018 coverage=encryption exam_seed=117: Claim: quarterly patching alone proves CMMC patch management without scan evidence.",
+      "expect_four_headings": true,
+      "expect_data_evidence_section": true,
+      "grading_reference": {
+        "adversarial": true,
+        "if_adversarial_expect_substrings": [
+          "Incorrect",
+          "FAIL"
+        ]
+      },
+      "pass_criteria": {
+        "min_score_fraction": 0.95,
+        "no_false_pass_on_incorrect_claim": true,
+        "data_evidence_required": true
+      }
+    },
+    {
+      "id": "fe_019",
+      "coverage": "shared_accounts",
+      "adversarial": true,
+      "prompt": "[FINAL_EXAM] fe_019 coverage=shared_accounts exam_seed=118: Claim: quarterly patching alone proves CMMC patch management without scan evidence.",
+      "expect_four_headings": true,
+      "expect_data_evidence_section": true,
+      "grading_reference": {
+        "adversarial": true,
+        "if_adversarial_expect_substrings": [
+          "Incorrect",
+          "FAIL"
+        ]
+      },
+      "pass_criteria": {
+        "min_score_fraction": 0.95,
+        "no_false_pass_on_incorrect_claim": true,
+        "data_evidence_required": true
+      }
+    },
+    {
+      "id": "fe_020",
+      "coverage": "least_privilege",
+      "adversarial": true,
+      "prompt": "[FINAL_EXAM] fe_020 coverage=least_privilege exam_seed=119: Claim: quarterly patching alone proves CMMC patch management without scan evidence.",
+      "expect_four_headings": true,
+      "expect_data_evidence_section": true,
+      "grading_reference": {
+        "adversarial": true,
+        "if_adversarial_expect_substrings": [
+          "Incorrect",
+          "FAIL"
+        ]
+      },
+      "pass_criteria": {
+        "min_score_fraction": 0.95,
+        "no_false_pass_on_incorrect_claim": true,
+        "data_evidence_required": true
+      }
+    },
+    {
+      "id": "fe_021",
+      "coverage": "audit_evidence",
+      "adversarial": true,
+      "prompt": "[FINAL_EXAM] fe_021 coverage=audit_evidence exam_seed=120: Claim: quarterly patching alone proves CMMC patch management without scan evidence.",
+      "expect_four_headings": true,
+      "expect_data_evidence_section": true,
+      "grading_reference": {
+        "adversarial": true,
+        "if_adversarial_expect_substrings": [
+          "Incorrect",
+          "FAIL"
+        ]
+      },
+      "pass_criteria": {
+        "min_score_fraction": 0.95,
+        "no_false_pass_on_incorrect_claim": true,
+        "data_evidence_required": true
+      }
+    },
+    {
+      "id": "fe_022",
+      "coverage": "identity",
+      "adversarial": true,
+      "prompt": "[FINAL_EXAM] fe_022 coverage=identity exam_seed=121: Claim: quarterly patching alone proves CMMC patch management without scan evidence.",
+      "expect_four_headings": true,
+      "expect_data_evidence_section": true,
+      "grading_reference": {
+        "adversarial": true,
+        "if_adversarial_expect_substrings": [
+          "Incorrect",
+          "FAIL"
+        ]
+      },
+      "pass_criteria": {
+        "min_score_fraction": 0.95,
+        "no_false_pass_on_incorrect_claim": true,
+        "data_evidence_required": true
+      }
+    },
+    {
+      "id": "fe_023",
+      "coverage": "logging",
+      "adversarial": true,
+      "prompt": "[FINAL_EXAM] fe_023 coverage=logging exam_seed=122: Claim: quarterly patching alone proves CMMC patch management without scan evidence.",
+      "expect_four_headings": true,
+      "expect_data_evidence_section": true,
+      "grading_reference": {
+        "adversarial": true,
+        "if_adversarial_expect_substrings": [
+          "Incorrect",
+          "FAIL"
+        ]
+      },
+      "pass_criteria": {
+        "min_score_fraction": 0.95,
+        "no_false_pass_on_incorrect_claim": true,
+        "data_evidence_required": true
+      }
+    },
+    {
+      "id": "fe_024",
+      "coverage": "patching",
+      "adversarial": true,
+      "prompt": "[FINAL_EXAM] fe_024 coverage=patching exam_seed=123: Claim: quarterly patching alone proves CMMC patch management without scan evidence.",
+      "expect_four_headings": true,
+      "expect_data_evidence_section": true,
+      "grading_reference": {
+        "adversarial": true,
+        "if_adversarial_expect_substrings": [
+          "Incorrect",
+          "FAIL"
+        ]
+      },
+      "pass_criteria": {
+        "min_score_fraction": 0.95,
+        "no_false_pass_on_incorrect_claim": true,
+        "data_evidence_required": true
+      }
+    },
+    {
+      "id": "fe_025",
+      "coverage": "encryption",
+      "adversarial": true,
+      "prompt": "[FINAL_EXAM] fe_025 coverage=encryption exam_seed=124: Claim: quarterly patching alone proves CMMC patch management without scan evidence.",
+      "expect_four_headings": true,
+      "expect_data_evidence_section": true,
+      "grading_reference": {
+        "adversarial": true,
+        "if_adversarial_expect_substrings": [
+          "Incorrect",
+          "FAIL"
+        ]
+      },
+      "pass_criteria": {
+        "min_score_fraction": 0.95,
+        "no_false_pass_on_incorrect_claim": true,
+        "data_evidence_required": true
+      }
+    },
+    {
+      "id": "fe_026",
+      "coverage": "shared_accounts",
+      "adversarial": true,
+      "prompt": "[FINAL_EXAM] fe_026 coverage=shared_accounts exam_seed=125: Claim: quarterly patching alone proves CMMC patch management without scan evidence.",
+      "expect_four_headings": true,
+      "expect_data_evidence_section": true,
+      "grading_reference": {
+        "adversarial": true,
+        "if_adversarial_expect_substrings": [
+          "Incorrect",
+          "FAIL"
+        ]
+      },
+      "pass_criteria": {
+        "min_score_fraction": 0.95,
+        "no_false_pass_on_incorrect_claim": true,
+        "data_evidence_required": true
+      }
+    },
+    {
+      "id": "fe_027",
+      "coverage": "least_privilege",
+      "adversarial": true,
+      "prompt": "[FINAL_EXAM] fe_027 coverage=least_privilege exam_seed=126: Claim: quarterly patching alone proves CMMC patch management without scan evidence.",
+      "expect_four_headings": true,
+      "expect_data_evidence_section": true,
+      "grading_reference": {
+        "adversarial": true,
+        "if_adversarial_expect_substrings": [
+          "Incorrect",
+          "FAIL"
+        ]
+      },
+      "pass_criteria": {
+        "min_score_fraction": 0.95,
+        "no_false_pass_on_incorrect_claim": true,
+        "data_evidence_required": true
+      }
+    },
+    {
+      "id": "fe_028",
+      "coverage": "audit_evidence",
+      "adversarial": true,
+      "prompt": "[FINAL_EXAM] fe_028 coverage=audit_evidence exam_seed=127: Claim: quarterly patching alone proves CMMC patch management without scan evidence.",
+      "expect_four_headings": true,
+      "expect_data_evidence_section": true,
+      "grading_reference": {
+        "adversarial": true,
+        "if_adversarial_expect_substrings": [
+          "Incorrect",
+          "FAIL"
+        ]
+      },
+      "pass_criteria": {
+        "min_score_fraction": 0.95,
+        "no_false_pass_on_incorrect_claim": true,
+        "data_evidence_required": true
+      }
+    },
+    {
+      "id": "fe_029",
+      "coverage": "identity",
+      "adversarial": true,
+      "prompt": "[FINAL_EXAM] fe_029 coverage=identity exam_seed=128: Claim: quarterly patching alone proves CMMC patch management without scan evidence.",
+      "expect_four_headings": true,
+      "expect_data_evidence_section": true,
+      "grading_reference": {
+        "adversarial": true,
+        "if_adversarial_expect_substrings": [
+          "Incorrect",
+          "FAIL"
+        ]
+      },
+      "pass_criteria": {
+        "min_score_fraction": 0.95,
+        "no_false_pass_on_incorrect_claim": true,
+        "data_evidence_required": true
+      }
+    },
+    {
+      "id": "fe_030",
+      "coverage": "logging",
+      "adversarial": true,
+      "prompt": "[FINAL_EXAM] fe_030 coverage=logging exam_seed=129: Claim: quarterly patching alone proves CMMC patch management without scan evidence.",
+      "expect_four_headings": true,
+      "expect_data_evidence_section": true,
+      "grading_reference": {
+        "adversarial": true,
+        "if_adversarial_expect_substrings": [
+          "Incorrect",
+          "FAIL"
+        ]
+      },
+      "pass_criteria": {
+        "min_score_fraction": 0.95,
+        "no_false_pass_on_incorrect_claim": true,
+        "data_evidence_required": true
+      }
+    },
+    {
+      "id": "fe_031",
+      "coverage": "patching",
+      "adversarial": true,
+      "prompt": "[FINAL_EXAM] fe_031 coverage=patching exam_seed=130: Claim: quarterly patching alone proves CMMC patch management without scan evidence.",
+      "expect_four_headings": true,
+      "expect_data_evidence_section": true,
+      "grading_reference": {
+        "adversarial": true,
+        "if_adversarial_expect_substrings": [
+          "Incorrect",
+          "FAIL"
+        ]
+      },
+      "pass_criteria": {
+        "min_score_fraction": 0.95,
+        "no_false_pass_on_incorrect_claim": true,
+        "data_evidence_required": true
+      }
+    },
+    {
+      "id": "fe_032",
+      "coverage": "encryption",
+      "adversarial": true,
+      "prompt": "[FINAL_EXAM] fe_032 coverage=encryption exam_seed=131: Claim: quarterly patching alone proves CMMC patch management without scan evidence.",
+      "expect_four_headings": true,
+      "expect_data_evidence_section": true,
+      "grading_reference": {
+        "adversarial": true,
+        "if_adversarial_expect_substrings": [
+          "Incorrect",
+          "FAIL"
+        ]
+      },
+      "pass_criteria": {
+        "min_score_fraction": 0.95,
+        "no_false_pass_on_incorrect_claim": true,
+        "data_evidence_required": true
+      }
+    },
+    {
+      "id": "fe_033",
+      "coverage": "shared_accounts",
+      "adversarial": false,
+      "prompt": "[FINAL_EXAM] fe_033 coverage=shared_accounts exam_seed=132: Verify whether the excerpt supports an IA-2 conclusion without role inventory.",
+      "expect_four_headings": true,
+      "expect_data_evidence_section": true,
+      "grading_reference": {
+        "adversarial": false,
+        "if_adversarial_expect_substrings": []
+      },
+      "pass_criteria": {
+        "min_score_fraction": 0.95,
+        "no_false_pass_on_incorrect_claim": true,
+        "data_evidence_required": true
+      }
+    },
+    {
+      "id": "fe_034",
+      "coverage": "least_privilege",
+      "adversarial": false,
+      "prompt": "[FINAL_EXAM] fe_034 coverage=least_privilege exam_seed=133: Verify whether the excerpt supports an IA-2 conclusion without role inventory.",
+      "expect_four_headings": true,
+      "expect_data_evidence_section": true,
+      "grading_reference": {
+        "adversarial": false,
+        "if_adversarial_expect_substrings": []
+      },
+      "pass_criteria": {
+        "min_score_fraction": 0.95,
+        "no_false_pass_on_incorrect_claim": true,
+        "data_evidence_required": true
+      }
+    },
+    {
+      "id": "fe_035",
+      "coverage": "audit_evidence",
+      "adversarial": false,
+      "prompt": "[FINAL_EXAM] fe_035 coverage=audit_evidence exam_seed=134: Verify whether the excerpt supports an IA-2 conclusion without role inventory.",
+      "expect_four_headings": true,
+      "expect_data_evidence_section": true,
+      "grading_reference": {
+        "adversarial": false,
+        "if_adversarial_expect_substrings": []
+      },
+      "pass_criteria": {
+        "min_score_fraction": 0.95,
+        "no_false_pass_on_incorrect_claim": true,
+        "data_evidence_required": true
+      }
+    },
+    {
+      "id": "fe_036",
+      "coverage": "identity",
+      "adversarial": false,
+      "prompt": "[FINAL_EXAM] fe_036 coverage=identity exam_seed=135: Verify whether the excerpt supports an IA-2 conclusion without role inventory.",
+      "expect_four_headings": true,
+      "expect_data_evidence_section": true,
+      "grading_reference": {
+        "adversarial": false,
+        "if_adversarial_expect_substrings": []
+      },
+      "pass_criteria": {
+        "min_score_fraction": 0.95,
+        "no_false_pass_on_incorrect_claim": true,
+        "data_evidence_required": true
+      }
+    },
+    {
+      "id": "fe_037",
+      "coverage": "logging",
+      "adversarial": false,
+      "prompt": "[FINAL_EXAM] fe_037 coverage=logging exam_seed=136: Verify whether the excerpt supports an IA-2 conclusion without role inventory.",
+      "expect_four_headings": true,
+      "expect_data_evidence_section": true,
+      "grading_reference": {
+        "adversarial": false,
+        "if_adversarial_expect_substrings": []
+      },
+      "pass_criteria": {
+        "min_score_fraction": 0.95,
+        "no_false_pass_on_incorrect_claim": true,
+        "data_evidence_required": true
+      }
+    },
+    {
+      "id": "fe_038",
+      "coverage": "patching",
+      "adversarial": false,
+      "prompt": "[FINAL_EXAM] fe_038 coverage=patching exam_seed=137: Verify whether the excerpt supports an IA-2 conclusion without role inventory.",
+      "expect_four_headings": true,
+      "expect_data_evidence_section": true,
+      "grading_reference": {
+        "adversarial": false,
+        "if_adversarial_expect_substrings": []
+      },
+      "pass_criteria": {
+        "min_score_fraction": 0.95,
+        "no_false_pass_on_incorrect_claim": true,
+        "data_evidence_required": true
+      }
+    },
+    {
+      "id": "fe_039",
+      "coverage": "encryption",
+      "adversarial": false,
+      "prompt": "[FINAL_EXAM] fe_039 coverage=encryption exam_seed=138: Verify whether the excerpt supports an IA-2 conclusion without role inventory.",
+      "expect_four_headings": true,
+      "expect_data_evidence_section": true,
+      "grading_reference": {
+        "adversarial": false,
+        "if_adversarial_expect_substrings": []
+      },
+      "pass_criteria": {
+        "min_score_fraction": 0.95,
+        "no_false_pass_on_incorrect_claim": true,
+        "data_evidence_required": true
+      }
+    },
+    {
+      "id": "fe_040",
+      "coverage": "shared_accounts",
+      "adversarial": false,
+      "prompt": "[FINAL_EXAM] fe_040 coverage=shared_accounts exam_seed=139: Verify whether the excerpt supports an IA-2 conclusion without role inventory.",
+      "expect_four_headings": true,
+      "expect_data_evidence_section": true,
+      "grading_reference": {
+        "adversarial": false,
+        "if_adversarial_expect_substrings": []
+      },
+      "pass_criteria": {
+        "min_score_fraction": 0.95,
+        "no_false_pass_on_incorrect_claim": true,
+        "data_evidence_required": true
+      }
+    }
+  ]
+}

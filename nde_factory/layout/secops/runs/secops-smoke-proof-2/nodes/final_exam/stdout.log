@@ -1,0 +1,16 @@
+{
+  "gate_passed": true,
+  "train_ok": true,
+  "dataset_ok": true,
+  "final_exam_json_ok": true,
+  "final_exam_detail": {
+    "case_count": 40,
+    "adversarial_count": 32,
+    "adversarial_ratio": 0.8,
+    "duplicate_prompts_with_eval": 0,
+    "pass_criteria_encoded": true
+  },
+  "final_exam_errors": [],
+  "final_exam_passed": true,
+  "final_exam_json": "/Users/bigmac/Documents/code_projects/blackbox/nde_factory/layout/secops/eval/secops_final_exam_v1.json"
+}

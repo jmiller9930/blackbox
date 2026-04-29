@@ -1,0 +1,14 @@
+{
+  "certified": true,
+  "domain": "secops",
+  "run_id": "secops-smoke-proof-2",
+  "at": "2026-04-29T19:46:00Z",
+  "note": "Mechanical certify flag from LangGraph; operational sign-off is separate.",
+  "eval_passed": true,
+  "final_exam_passed": true,
+  "pass_criteria": {
+    "min_score_fraction": 0.95,
+    "no_false_pass_on_incorrect_claim": true,
+    "data_evidence_required": true
+  }
+}

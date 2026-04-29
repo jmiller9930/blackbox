@@ -1,0 +1,27 @@
+{
+  "phase": "smoke_pipeline",
+  "status": "PASS",
+  "checks": {
+    "run_root": "/Users/bigmac/Documents/code_projects/blackbox/nde_factory/layout/secops/runs/secops-smoke-proof-2",
+    "nodes": {
+      "validate_sources": "ok",
+      "process_sources": "skipped",
+      "validate_dataset": "ok",
+      "smoke_train": "ok",
+      "run_eval": "ok",
+      "evaluate_gate": "ok",
+      "auto_reinforce": null,
+      "retry_or_escalate": null,
+      "final_exam": "ok",
+      "certify": "ok"
+    },
+    "train_mode_observed": "smoke",
+    "mode": "smoke",
+    "dry_run": true,
+    "final_exam_blocked_reason": null,
+    "processor_node_status": "skipped",
+    "eval_node_status": "ok",
+    "final_exam_node_status": "ok"
+  },
+  "errors": []
+}

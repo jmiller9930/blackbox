@@ -1,0 +1,11 @@
+{
+  "node": "final_exam",
+  "status": "ok",
+  "updated_at": "2026-04-29T19:46:00Z",
+  "artifacts": {
+    "eval_json": "/Users/bigmac/Documents/code_projects/blackbox/nde_factory/layout/secops/eval/secops_eval_v0.1.json",
+    "final_exam_json": "/Users/bigmac/Documents/code_projects/blackbox/nde_factory/layout/secops/eval/secops_final_exam_v1.json",
+    "structural_ok": true
+  },
+  "failure_reason": null
+}

@@ -1,0 +1,25 @@
+{
+  "domain": "secops",
+  "mode": "smoke",
+  "nde_root": "/Users/bigmac/Documents/code_projects/blackbox/nde_factory/layout",
+  "run_id": "secops-smoke-proof-2",
+  "max_retries": 3,
+  "retry_count": 0,
+  "require_approval": false,
+  "dry_run": true,
+  "skip_train": false,
+  "sources_ok": true,
+  "process_ok": true,
+  "dataset_ok": true,
+  "train_ok": true,
+  "eval_passed": true,
+  "gate_passed": true,
+  "final_exam_passed": true,
+  "certified": true,
+  "last_error": "",
+  "artifacts": {
+    "staging_path": "/Users/bigmac/Documents/code_projects/blackbox/nde_factory/layout/secops/datasets/staging/secops_v0.1.jsonl",
+    "rows": 150,
+    "missing_source_ids": 0
+  }
+}

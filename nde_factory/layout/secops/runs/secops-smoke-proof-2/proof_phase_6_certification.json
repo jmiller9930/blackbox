@@ -1,0 +1,17 @@
+{
+  "phase": "certification",
+  "status": "PASS",
+  "checks": {
+    "certificate_exists": true,
+    "eval_pass_threshold_met_structural": true,
+    "final_exam_threshold_met_structural": true,
+    "no_false_pass_verdict_placeholder": true,
+    "data_evidence_policy": {
+      "min_score_fraction": 0.95,
+      "no_false_pass_on_incorrect_claim": true,
+      "data_evidence_required": true
+    },
+    "certificate_written": true
+  },
+  "errors": []
+}

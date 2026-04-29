@@ -1,0 +1,9 @@
+{
+  "node": "process_sources",
+  "status": "skipped",
+  "updated_at": "2026-04-29T19:46:00Z",
+  "artifacts": {
+    "skipped": true
+  },
+  "failure_reason": null
+}

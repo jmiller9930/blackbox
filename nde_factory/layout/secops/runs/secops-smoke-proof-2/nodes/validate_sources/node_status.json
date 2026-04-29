@@ -1,0 +1,13 @@
+{
+  "node": "validate_sources",
+  "status": "ok",
+  "updated_at": "2026-04-29T19:46:00Z",
+  "artifacts": {
+    "raw_dir": "/Users/bigmac/Documents/code_projects/blackbox/nde_factory/layout/secops/sources/raw",
+    "file_count": 1,
+    "files": [
+      "smoke_placeholder_policy_v0.1.txt"
+    ]
+  },
+  "failure_reason": null
+}
