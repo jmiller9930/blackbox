@@ -888,6 +888,39 @@ def student_loop_seam_after_parallel_batch_v1(
                                 require_directional_thesis_v1=True,
                                 llm_io_capture_v1=_io_capture_v1,
                             )
+                            if _io_capture_v1 is not None:
+                                try:
+                                    append_learning_trace_event_v1(
+                                        build_learning_trace_event_v1(
+                                            job_id=str(run_id).strip(),
+                                            fingerprint=fp_emit,
+                                            stage="student_llm_contract_resolution_v1",
+                                            status="pass"
+                                            if (so is not None and not soe)
+                                            else "error",
+                                            summary=(
+                                                "GT037 Student LLM JSON vs validation repair resolution"
+                                            ),
+                                            producer="student_loop_seam_v1",
+                                            scenario_id=sid,
+                                            trade_id=str(o.trade_id),
+                                            evidence_payload={
+                                                "json_repair_attempted_v1": bool(
+                                                    _io_capture_v1.get("json_repair_attempted_v1")
+                                                ),
+                                                "validation_repair_attempted_v1": bool(
+                                                    _io_capture_v1.get(
+                                                        "validation_repair_attempted_v1"
+                                                    )
+                                                ),
+                                                "final_validation_accepted_v1": bool(
+                                                    so is not None and not soe
+                                                ),
+                                            },
+                                        )
+                                    )
+                                except Exception:
+                                    pass
                             if soe or so is None:
                                 llm_student_output_rejections_v1 += 1
                                 errors.append(
@@ -952,6 +985,12 @@ def student_loop_seam_after_parallel_batch_v1(
                                                 "user_prompt_v1": str(_io_capture_v1.get("user_prompt_v1") or ""),
                                                 "raw_assistant_text_v1": str(
                                                     _io_capture_v1.get("raw_assistant_text_v1") or ""
+                                                ),
+                                                "json_repair_attempted_v1": bool(
+                                                    _io_capture_v1.get("json_repair_attempted_v1")
+                                                ),
+                                                "validation_repair_attempted_v1": bool(
+                                                    _io_capture_v1.get("validation_repair_attempted_v1")
                                                 ),
                                             },
                                         )

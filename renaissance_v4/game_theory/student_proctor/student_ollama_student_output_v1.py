@@ -331,6 +331,50 @@ def _truncate_middle_for_repair_prompt_v1(text: str, *, max_chars: int = 52000) 
     )
 
 
+def _is_parse_layer_failure_v1(errs: list[str]) -> bool:
+    """True when assistant text could not be parsed as a JSON object (vs schema/thesis rejection)."""
+    for e in errs:
+        s = str(e)
+        if s.startswith("ollama_response_not_json_object"):
+            return True
+    return False
+
+
+def _extract_parsed_json_dict_from_text_v1(text: str) -> dict[str, Any] | None:
+    stripped = _strip_markdown_code_fence_v1(text)
+    obj = _extract_json_object_v1(stripped)
+    return obj if isinstance(obj, dict) else None
+
+
+def _gt037_validation_repair_prompt_v1(
+    *,
+    failed_parsed_json: dict[str, Any],
+    validation_errors: list[str],
+    thesis_constraint_reminder: str,
+) -> str:
+    """GT_DIRECTIVE_037 — JSON parsed but validation/thesis failed; one correction pass."""
+    try:
+        blob = json.dumps(failed_parsed_json, ensure_ascii=False, default=str)
+    except TypeError:
+        blob = str(failed_parsed_json)
+    if len(blob) > 28000:
+        blob = blob[:28000] + "\n...[truncated]..."
+    errs = [str(x) for x in validation_errors][:40]
+    return (
+        "GT_DIRECTIVE_037 — VALIDATION REPAIR (exactly one attempt).\n"
+        "Your JSON parsed but FAILED validation/thesis rules below.\n"
+        "Return ONLY one corrected JSON object. No markdown. No ``` fences. No prose outside JSON.\n"
+        "Preserve the intended decision (act / direction / student_action_v1) unless those fields "
+        "contradict each other or the packet — fix invalid fields only.\n\n"
+        "VALIDATION ERRORS (fix every item):\n"
+        + ("\n".join(f"- {e}" for e in errs) or "- (unspecified)")
+        + "\n\nFIELD CONSTRAINTS (must all be satisfied):\n"
+        + thesis_constraint_reminder
+        + "\n\nFAILED PARSED JSON (emit a corrected single object):\n"
+        + blob
+    )
+
+
 def _gt036_json_repair_prompt_v1(
     *,
     failed_raw_assistant: str,
@@ -481,6 +525,8 @@ def emit_student_output_via_ollama_v1(
         if isinstance(llm_io_capture_v1, dict):
             llm_io_capture_v1["raw_assistant_text_v1"] = text1
             llm_io_capture_v1["json_contract_retry_used_v1"] = False
+            llm_io_capture_v1["json_repair_attempted_v1"] = False
+            llm_io_capture_v1["validation_repair_attempted_v1"] = False
         return out1, []
 
     if not student_contract:
@@ -488,48 +534,129 @@ def emit_student_output_via_ollama_v1(
             llm_io_capture_v1["raw_assistant_text_v1"] = text1
         return None, errs1
 
-    repair_user = _gt036_json_repair_prompt_v1(
-        failed_raw_assistant=text1,
-        failure_reasons=errs1,
-        original_prompt=user,
+    json_repair_attempted_v1 = False
+    validation_repair_attempted_v1 = False
+    thesis_constraint_reminder = thesis_lines + (
+        "\nRemember: context_interpretation_v1 must be at least 16 characters "
+        "(count characters in the string value).\n"
     )
-    text2, err2 = _ollama_chat_once_v1(
+
+    parse_fail_initial = _is_parse_layer_failure_v1(errs1)
+    text_after_json_phase = text1
+    errs_after_json_phase = errs1
+
+    if parse_fail_initial:
+        repair_user = _gt036_json_repair_prompt_v1(
+            failed_raw_assistant=text1,
+            failure_reasons=errs1,
+            original_prompt=user,
+        )
+        text_j, err_j = _ollama_chat_once_v1(
+            base_url=ollama_base_url,
+            model=llm_model,
+            user_prompt=repair_user,
+            options=ollama_opts,
+            system_prompt=sys1,
+        )
+        json_repair_attempted_v1 = True
+        if isinstance(llm_io_capture_v1, dict):
+            llm_io_capture_v1["json_contract_retry_used_v1"] = True
+            llm_io_capture_v1["json_repair_attempted_v1"] = True
+            llm_io_capture_v1["repair_user_prompt_v1"] = repair_user
+            llm_io_capture_v1["raw_assistant_text_attempt_2_v1"] = text_j if isinstance(text_j, str) else None
+
+        if err_j or not isinstance(text_j, str) or not text_j.strip():
+            if isinstance(llm_io_capture_v1, dict):
+                llm_io_capture_v1["raw_assistant_text_v1"] = text1
+                llm_io_capture_v1["validation_repair_attempted_v1"] = False
+            merged = list(errs1)
+            if err_j:
+                merged.append(err_j)
+            else:
+                merged.append("ollama_empty_on_json_repair_retry_v1")
+            return None, merged
+
+        out_j, errs_j = _finalize_student_output_from_assistant_text_v1(
+            text_j,
+            graded_unit_id=graded_unit_id,
+            decision_at_ms=decision_at_ms,
+            llm_model=llm_model,
+            require_directional_thesis_v1=require_directional_thesis_v1,
+        )
+        if out_j is not None:
+            if isinstance(llm_io_capture_v1, dict):
+                llm_io_capture_v1["raw_assistant_text_v1"] = text_j
+                llm_io_capture_v1["validation_repair_attempted_v1"] = False
+            return out_j, []
+
+        if _is_parse_layer_failure_v1(errs_j):
+            if isinstance(llm_io_capture_v1, dict):
+                llm_io_capture_v1["raw_assistant_text_v1"] = text1
+                llm_io_capture_v1["validation_repair_attempted_v1"] = False
+            return None, list(errs_j)
+
+        text_after_json_phase = text_j
+        errs_after_json_phase = errs_j
+    else:
+        if isinstance(llm_io_capture_v1, dict):
+            llm_io_capture_v1["json_contract_retry_used_v1"] = False
+            llm_io_capture_v1["json_repair_attempted_v1"] = False
+
+    parsed_for_validation_fix = _extract_parsed_json_dict_from_text_v1(text_after_json_phase)
+    if parsed_for_validation_fix is None:
+        if isinstance(llm_io_capture_v1, dict):
+            llm_io_capture_v1["raw_assistant_text_v1"] = text_after_json_phase
+            llm_io_capture_v1["validation_repair_attempted_v1"] = False
+        return None, errs_after_json_phase
+
+    val_prompt = _gt037_validation_repair_prompt_v1(
+        failed_parsed_json=parsed_for_validation_fix,
+        validation_errors=errs_after_json_phase,
+        thesis_constraint_reminder=thesis_constraint_reminder,
+    )
+    text_v, err_v = _ollama_chat_once_v1(
         base_url=ollama_base_url,
         model=llm_model,
-        user_prompt=repair_user,
+        user_prompt=val_prompt,
         options=ollama_opts,
         system_prompt=sys1,
     )
+    validation_repair_attempted_v1 = True
     if isinstance(llm_io_capture_v1, dict):
-        llm_io_capture_v1["json_contract_retry_used_v1"] = True
-        llm_io_capture_v1["repair_user_prompt_v1"] = repair_user
-        llm_io_capture_v1["raw_assistant_text_attempt_2_v1"] = text2 if isinstance(text2, str) else None
+        llm_io_capture_v1["validation_repair_attempted_v1"] = True
+        llm_io_capture_v1["validation_repair_prompt_v1"] = val_prompt
+        llm_io_capture_v1["raw_assistant_text_attempt_validation_v1"] = text_v if isinstance(text_v, str) else None
 
-    if err2 or not isinstance(text2, str) or not text2.strip():
+    if err_v or not isinstance(text_v, str) or not text_v.strip():
         if isinstance(llm_io_capture_v1, dict):
-            llm_io_capture_v1["raw_assistant_text_v1"] = text1
-        merged = list(errs1)
-        if err2:
-            merged.append(err2)
-        elif not isinstance(text2, str) or not str(text2).strip():
-            merged.append("ollama_empty_on_json_repair_retry_v1")
+            llm_io_capture_v1["raw_assistant_text_v1"] = text_after_json_phase
+        merged = list(errs_after_json_phase)
+        if err_v:
+            merged.append(err_v)
+        else:
+            merged.append("ollama_empty_on_validation_repair_v1")
         return None, merged
 
-    out2, errs2 = _finalize_student_output_from_assistant_text_v1(
-        text2,
+    out_v, errs_v = _finalize_student_output_from_assistant_text_v1(
+        text_v,
         graded_unit_id=graded_unit_id,
         decision_at_ms=decision_at_ms,
         llm_model=llm_model,
         require_directional_thesis_v1=require_directional_thesis_v1,
     )
-    if out2 is not None:
+    if out_v is not None:
         if isinstance(llm_io_capture_v1, dict):
-            llm_io_capture_v1["raw_assistant_text_v1"] = text2
-        return out2, []
+            llm_io_capture_v1["raw_assistant_text_v1"] = text_v
+            llm_io_capture_v1["json_repair_attempted_v1"] = json_repair_attempted_v1
+            llm_io_capture_v1["json_contract_retry_used_v1"] = bool(
+                json_repair_attempted_v1 or validation_repair_attempted_v1
+            )
+        return out_v, []
 
     if isinstance(llm_io_capture_v1, dict):
-        llm_io_capture_v1["raw_assistant_text_v1"] = text1
-    return None, errs1 + errs2
+        llm_io_capture_v1["raw_assistant_text_v1"] = text_after_json_phase
+        llm_io_capture_v1["json_repair_attempted_v1"] = json_repair_attempted_v1
+    return None, list(errs_after_json_phase) + list(errs_v)
 
 
 def verify_ollama_model_tag_available_v1(
