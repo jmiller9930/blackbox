@@ -1,5 +1,8 @@
 """
-Student **behavior probe** — deterministic fast-fail gate after RM preflight, before full parallel.
+Student **behavior probe** — optional seam exercise (shared helpers / manual or tests).
+
+``web_app`` parallel batches **do not** await this before ``run_scenarios_parallel``; RM preflight gates readiness,
+then workers start. This module remains callable for diagnostics.
 
 * Does **not** call ``run_scenarios_parallel`` or Referee replay workers.
 * Builds a **thin** ``results`` row with synthetic :class:`OutcomeRecord` shells anchored on real DB bar
@@ -104,9 +107,8 @@ def profile_requires_student_behavior_probe_v1(exam_req: dict[str, Any] | None) 
 
 def skip_student_behavior_probe_requested_v1(exam_req: dict[str, Any] | None) -> bool:
     """
-    GT062 — temporary bypass: when ``exam_run_contract_request_v1`` sets
-    ``skip_student_probe_v1``, parallel batch must not call ``execute_student_behavior_probe_v1``
-    and should go straight to ``run_scenarios_parallel``.
+    Legacy: ``skip_student_probe_v1`` on ``exam_run_contract_request_v1``. Parallel batch no longer
+    runs ``execute_student_behavior_probe_v1`` before ``run_scenarios_parallel``; key is ignored for gating.
     """
     if not isinstance(exam_req, dict):
         return False

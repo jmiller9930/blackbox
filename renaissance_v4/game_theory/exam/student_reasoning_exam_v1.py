@@ -23,12 +23,6 @@ Optional::
 GT060 minimal debug (1 scenario, default 5m for short SQLite fixtures)::
 
     python3 renaissance_v4/game_theory/exam/student_reasoning_exam_v1.py --exam-id d15-debug-001 --stub-llm
-
-GT062 — ``--skip-student-probe`` is accepted for CLI symmetry; the Student behavior probe runs only on the
-Pattern Machine parallel batch (pass ``skip_student_probe_v1`` in ``exam_run_contract_request_v1`` there).
-On this standalone harness the flag is recorded in stdout JSON only::
-
-    python3 renaissance_v4/game_theory/exam/student_reasoning_exam_v1.py --exam-id d16-student-exam-001 --stub-llm --skip-student-probe
 """
 
 from __future__ import annotations
@@ -429,26 +423,15 @@ def run_exam_v1(
     symbol: str | None,
     timeframe: int | None,
     stub_llm: bool,
-    skip_student_probe: bool = False,
 ) -> dict[str, Any]:
     with _student_test_isolation_for_exam_v1():
-        doc = _run_exam_impl_v1(
+        return _run_exam_impl_v1(
             exam_id=exam_id,
             db_path=db_path,
             symbol=symbol,
             timeframe=timeframe,
             stub_llm=stub_llm,
         )
-        if skip_student_probe:
-            doc = {
-                **doc,
-                "skip_student_probe_cli_v1": True,
-                "skip_student_probe_note_v1": (
-                    "Student behavior probe is Pattern Machine parallel-batch only; "
-                    "use exam_run_contract_request_v1.skip_student_probe_v1 on HTTP."
-                ),
-            }
-        return doc
 
 
 def _acceptance_block_v1(rows: list[dict[str, Any]], *, exam_id: str = "") -> dict[str, str]:
@@ -518,11 +501,6 @@ def main() -> None:
         action="store_true",
         help="Bypass live Ollama; emit deterministic JSON aligned to engine synthesis.",
     )
-    ap.add_argument(
-        "--skip-student-probe",
-        action="store_true",
-        help="GT062: no-op for this CLI (probe is parallel-batch only); echoed in JSON for audit.",
-    )
     ns = ap.parse_args()
     dbp = Path(ns.db_path).expanduser().resolve() if str(ns.db_path).strip() else None
     sym = str(ns.symbol).strip() or None
@@ -532,7 +510,6 @@ def main() -> None:
         symbol=sym,
         timeframe=ns.timeframe,
         stub_llm=bool(ns.stub_llm),
-        skip_student_probe=bool(ns.skip_student_probe),
     )
     root = _repo_runtime_exam_root_v1(str(ns.exam_id).strip())
     out_doc: dict[str, Any] = {
@@ -541,9 +518,6 @@ def main() -> None:
         "acceptance_v1": doc.get("acceptance_v1"),
         "sanity_metrics_v1": doc.get("sanity_metrics_v1"),
     }
-    if doc.get("skip_student_probe_cli_v1"):
-        out_doc["skip_student_probe_cli_v1"] = True
-        out_doc["skip_student_probe_note_v1"] = doc.get("skip_student_probe_note_v1")
     if doc.get("gt041_acceptance_v1"):
         out_doc["gt041_acceptance_v1"] = doc.get("gt041_acceptance_v1")
     print(json.dumps(out_doc, indent=2))

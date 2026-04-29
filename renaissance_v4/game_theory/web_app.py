@@ -8,6 +8,7 @@ is merged into each scenario and drives **calendar tape slicing**; trade window 
 Batches use **``POST /api/run-parallel/start``** + polling **``GET /api/run-parallel/status/<job_id>``**
 (or **``GET /api/run-status/<job_id>``**, same payload). New jobs begin with **``status: preflight``** until
 ``run_rm_preflight_wiring_v1`` passes, then **``status: running``** while ``run_scenarios_parallel`` executes.
+(The optional student-behavior **probe** is not on this critical path; it does not block parallel workers.)
 During preflight, status may include **``rm_preflight_telemetry_v1``** (phase, elapsed_s, heartbeat, bars cap),
 **``preflight_display_status_v1``**, and **``last_message``** updated from the preflight progress callback;
 see **``directives/GT_DIRECTIVE_027_rm_preflight_operator_contract_v1.md``**.
@@ -1033,7 +1034,6 @@ def _web_ui_require_hypothesis() -> bool:
 
 
 FAILED_RUNTIME_STUDENT_RM_TRACE_CONTRACT_V1 = "failed_runtime_student_rm_trace_contract_v1"
-FAILED_STUDENT_BEHAVIOR_PROBE_STATUS_V1 = "failed_student_behavior_probe_v1"
 FAILED_STUDENT_FULL_RUN_CONTRACT_STATUS_V1 = "failed_student_full_run_contract_v1"
 FAILED_FATAL_AUTHORITY_SEAL_MISMATCH_V1 = "fatal_authority_seal_mismatch_v1"
 
@@ -1880,13 +1880,9 @@ def create_app() -> Flask:
                 fingerprint_for_parallel_job_v1,
             )
             from renaissance_v4.game_theory.student_behavior_probe_v1 import (
-                FAILED_STUDENT_BEHAVIOR_PROBE_TIMEOUT_V1,
                 evaluate_full_student_run_contract_v1,
-                execute_student_behavior_probe_v1,
                 finalize_seam_audit_authority_seal_contract_v1,
                 profile_requires_student_behavior_probe_v1,
-                skip_student_behavior_probe_requested_v1,
-                student_behavior_probe_enabled_v1,
             )
 
             session_batch_dir: list[str | None] = [None]
@@ -2188,191 +2184,11 @@ def create_app() -> Flask:
                             )
                     return
 
-                _skip_probe_rq = skip_student_behavior_probe_requested_v1(
-                    exam_req if isinstance(exam_req, dict) else None
+                _parallel_job_append_rm_preflight_line_v1(
+                    job_id,
+                    "GATE: Student behavior probe = OFF critical path "
+                    "(RM preflight proves wiring readiness; parallel replay is not blocked by probe).",
                 )
-                _run_probe = (
-                    student_behavior_probe_enabled_v1()
-                    and profile_requires_student_behavior_probe_v1(
-                        exam_req if isinstance(exam_req, dict) else None
-                    )
-                    and not _skip_probe_rq
-                )
-                if _skip_probe_rq:
-                    _parallel_job_append_rm_preflight_line_v1(
-                        job_id,
-                        "GATE: Student behavior probe = SKIP (skip_student_probe_v1)",
-                    )
-                elif _run_probe:
-                    _parallel_job_append_rm_preflight_line_v1(job_id, "GATE: Student behavior probe = START")
-                    op_rid_pf = str(operator_batch_audit.get("operator_recipe_id") or "").strip() or None
-                    sb_fail, probe_sum = execute_student_behavior_probe_v1(
-                        scenarios=scenarios,
-                        main_job_id=job_id,
-                        exam_run_contract_request_v1=exam_req if isinstance(exam_req, dict) else None,
-                        operator_batch_audit=operator_batch_audit if isinstance(operator_batch_audit, dict) else None,
-                        telemetry_dir=telem_dir,
-                        strategy_id=op_rid_pf,
-                        probe_progress_line_cb_v1=lambda ln: _parallel_job_append_rm_preflight_line_v1(job_id, ln),
-                        probe_cancel_check_v1=lambda: _parallel_job_cancel_requested(job_id),
-                    )
-                    if isinstance(probe_sum, dict) and probe_sum.get("probe_cancelled_v1"):
-                        err_probe_c = (
-                            "Stopped by operator during student behavior probe — parallel workers were not started."
-                        )
-                        _parallel_job_append_rm_preflight_line_v1(
-                            job_id, "GATE: Student behavior probe = CANCELLED (operator)"
-                        )
-                        exam_line_probe_c = _exam_run_line_meta_for_parallel_job_v1(
-                            exam_req=exam_req if isinstance(exam_req, dict) else None,
-                            fingerprint_preview=fp_prev if isinstance(fp_prev, str) else None,
-                            operator_batch_audit=operator_batch_audit,
-                            results=None,
-                            job_id=job_id,
-                            seam_audit=None,
-                            error=err_probe_c,
-                        )
-                        timing_probe_c = record_parallel_batch_finished(
-                            job_id=job_id,
-                            started_at_utc=started_iso,
-                            start_unix=start_unix,
-                            total_scenarios=len(scenarios),
-                            workers_used=workers_used,
-                            results=None,
-                            session_log_batch_dir=None,
-                            error=err_probe_c,
-                            operator_batch_audit=operator_batch_audit,
-                            exam_run_line_meta_v1=exam_line_probe_c,
-                            parallel_cancel_partial_results=[],
-                        )
-                        with _JOBS_LOCK:
-                            jprobe_c = _JOBS.get(job_id)
-                            if jprobe_c:
-                                jprobe_c["status"] = "cancelled"
-                                jprobe_c["preflight_display_status_v1"] = "preflight_cancelled_during_student_probe_v1"
-                                jprobe_c["completed"] = 0
-                                jprobe_c["error"] = err_probe_c
-                                jprobe_c["batch_timing"] = timing_probe_c
-                                jprobe_c["last_message"] = err_probe_c
-                                jprobe_c["result"] = {
-                                    "ok": False,
-                                    "job_id": job_id,
-                                    "error": err_probe_c,
-                                    "cancelled": True,
-                                    "student_behavior_probe_summary_v1": probe_sum,
-                                    "rm_preflight_audit_v1": pf_audit,
-                                    "batch_timing": timing_probe_c,
-                                }
-                                _persist_parallel_terminal_v1(
-                                    job_id,
-                                    "cancelled",
-                                    jprobe_c["result"],
-                                    session_log_batch_dir=None,
-                                    telemetry_dir=telem_dir,
-                                )
-                        return
-                    pm = probe_sum.get("probe_summary_v1") if isinstance(probe_sum, dict) else {}
-                    _pa = int((pm or {}).get("authority_count_v1") or 0)
-                    _ps = int((pm or {}).get("sealed_count_v1") or 0)
-                    _pr = int((pm or {}).get("rejection_count_v1") or 0)
-                    _pv = int((pm or {}).get("contract_violation_count_v1") or 0)
-                    _wto = bool(probe_sum.get("probe_timeout_v1")) if isinstance(probe_sum, dict) else False
-                    _wclk = probe_sum.get("probe_wall_clock_s_v1") if isinstance(probe_sum, dict) else None
-                    _wbud = probe_sum.get("probe_wall_limit_s_v1") if isinstance(probe_sum, dict) else None
-                    if _wto:
-                        _probe_detail = (
-                            f"DETAIL: TIMEOUT wall_clock={_wclk}s budget={_wbud}s "
-                            f"(authority={_pa} sealed={_ps} rejected={_pr} violations={_pv})"
-                        )
-                    else:
-                        _probe_detail = (
-                            f"DETAIL: authority={_pa} sealed={_ps} rejected={_pr} violations={_pv}"
-                        )
-                    if sb_fail is None:
-                        _parallel_job_append_rm_preflight_line_v1(job_id, "GATE: Student behavior probe = PASS")
-                        _parallel_job_append_rm_preflight_line_v1(job_id, _probe_detail)
-                    else:
-                        _gate_probe = (
-                            "GATE: Student behavior probe = TIMEOUT"
-                            if _wto or sb_fail.get("probe_timeout_v1")
-                            else "GATE: Student behavior probe = FAIL"
-                        )
-                        _parallel_job_append_rm_preflight_line_v1(job_id, _gate_probe)
-                        _parallel_job_append_rm_preflight_line_v1(job_id, _probe_detail)
-                        _term_st = (
-                            FAILED_STUDENT_BEHAVIOR_PROBE_TIMEOUT_V1
-                            if _wto or sb_fail.get("probe_timeout_v1")
-                            else FAILED_STUDENT_BEHAVIOR_PROBE_STATUS_V1
-                        )
-                        err_sb = (
-                            f"{_term_st}: "
-                            + str(sb_fail.get("explicit_failure_reason_v1") or "")
-                            + (
-                                " — "
-                                + "; ".join(str(x) for x in (sb_fail.get("gate_errors_v1") or [])[:24])
-                                if sb_fail.get("gate_errors_v1")
-                                else ""
-                            )
-                        )
-                        exam_line_sb = _exam_run_line_meta_for_parallel_job_v1(
-                            exam_req=exam_req if isinstance(exam_req, dict) else None,
-                            fingerprint_preview=fp_prev if isinstance(fp_prev, str) else None,
-                            operator_batch_audit=operator_batch_audit,
-                            results=None,
-                            job_id=job_id,
-                            seam_audit=None,
-                            error=err_sb,
-                        )
-                        if isinstance(exam_line_sb, dict):
-                            exam_line_sb["failed_student_behavior_probe_v1"] = sb_fail
-                            exam_line_sb["batch_terminal_status_v1"] = _term_st
-                        timing_sb = record_parallel_batch_finished(
-                            job_id=job_id,
-                            started_at_utc=started_iso,
-                            start_unix=start_unix,
-                            total_scenarios=len(scenarios),
-                            workers_used=workers_used,
-                            results=None,
-                            session_log_batch_dir=None,
-                            error=err_sb,
-                            operator_batch_audit=operator_batch_audit,
-                            exam_run_line_meta_v1=exam_line_sb,
-                        )
-                        sb_payload = {
-                            "ok": False,
-                            "job_id": job_id,
-                            "error": err_sb,
-                            "failed_student_behavior_probe_v1": sb_fail,
-                            "student_behavior_probe_summary_v1": probe_sum,
-                            "batch_timing": timing_sb,
-                            "status_v1": _term_st,
-                            "rm_preflight_audit_v1": pf_audit,
-                        }
-                        with _JOBS_LOCK:
-                            jsb = _JOBS.get(job_id)
-                            if jsb:
-                                jsb["status"] = "error"
-                                jsb["preflight_display_status_v1"] = (
-                                    "student_behavior_probe_timeout_v1"
-                                    if _wto or sb_fail.get("probe_timeout_v1")
-                                    else "student_behavior_probe_failed_v1"
-                                )
-                                jsb["completed"] = 0
-                                jsb["error"] = err_sb
-                                jsb["batch_timing"] = timing_sb
-                                jsb["last_message"] = err_sb
-                                jsb["result"] = {
-                                    **sb_payload,
-                                    "operator_rm_gates_v1": _build_operator_rm_gates_v1(jsb, job_id),
-                                }
-                                _persist_parallel_terminal_v1(
-                                    job_id,
-                                    "error",
-                                    jsb["result"],
-                                    session_log_batch_dir=None,
-                                    telemetry_dir=telem_dir,
-                                )
-                        return
 
                 with _JOBS_LOCK:
                     j_go = _JOBS.get(job_id)
@@ -3016,9 +2832,7 @@ def create_app() -> Flask:
 
         Sets ``cancel_requested`` on the in-memory job. During **RM preflight**, the background
         thread checks this flag between wiring steps and finalizes **cancelled** without starting
-        ``run_scenarios_parallel`` when possible. During **student behavior probe** (still ``preflight``
-        status), the probe parent polls this flag ~every 0.5s and terminates the isolated subprocess so
-        cancel does not block on the probe SLA. During **running**, the pool stops scheduling new
+        ``run_scenarios_parallel`` when possible. During **running**, the pool stops scheduling new
         scenarios and raises :class:`ParallelBatchCancelledError` when the runner observes the flag.
         Already-running worker processes are not SIGKILL'd — they may complete while the parent
         tears down pending futures.
@@ -3266,13 +3080,9 @@ def create_app() -> Flask:
                 fingerprint_for_parallel_job_v1,
             )
             from renaissance_v4.game_theory.student_behavior_probe_v1 import (
-                FAILED_STUDENT_BEHAVIOR_PROBE_TIMEOUT_V1,
                 evaluate_full_student_run_contract_v1,
-                execute_student_behavior_probe_v1,
                 finalize_seam_audit_authority_seal_contract_v1,
                 profile_requires_student_behavior_probe_v1,
-                skip_student_behavior_probe_requested_v1,
-                student_behavior_probe_enabled_v1,
             )
 
             lt_fp_block = fingerprint_for_parallel_job_v1(
@@ -3401,214 +3211,11 @@ def create_app() -> Flask:
             print(f"[pattern_game_parallel] job_id={job_id} {_bp_pass}", file=sys.stderr, flush=True)
             cb_block = _parallel_job_progress_row_callback_v1(job_id)
 
-            _skip_probe_rq_b = skip_student_behavior_probe_requested_v1(
-                exam_req_block if isinstance(exam_req_block, dict) else None
+            _parallel_job_append_rm_preflight_line_v1(
+                job_id,
+                "GATE: Student behavior probe = OFF critical path "
+                "(RM preflight proves wiring readiness; parallel replay is not blocked by probe).",
             )
-            _run_probe_b = (
-                student_behavior_probe_enabled_v1()
-                and profile_requires_student_behavior_probe_v1(
-                    exam_req_block if isinstance(exam_req_block, dict) else None
-                )
-                and not _skip_probe_rq_b
-            )
-            if _skip_probe_rq_b:
-                _parallel_job_append_rm_preflight_line_v1(
-                    job_id,
-                    "GATE: Student behavior probe = SKIP (skip_student_probe_v1)",
-                )
-            elif _run_probe_b:
-                _parallel_job_append_rm_preflight_line_v1(job_id, "GATE: Student behavior probe = START")
-                op_rid_pf_b = str(operator_batch_audit.get("operator_recipe_id") or "").strip() or None
-                sb_fail_b, probe_sum_b = execute_student_behavior_probe_v1(
-                    scenarios=scenarios,
-                    main_job_id=job_id,
-                    exam_run_contract_request_v1=exam_req_block if isinstance(exam_req_block, dict) else None,
-                    operator_batch_audit=operator_batch_audit if isinstance(operator_batch_audit, dict) else None,
-                    telemetry_dir=telem_dir,
-                    strategy_id=op_rid_pf_b,
-                    probe_progress_line_cb_v1=lambda ln: _parallel_job_append_rm_preflight_line_v1(job_id, ln),
-                    probe_cancel_check_v1=lambda: _parallel_job_cancel_requested(job_id),
-                )
-                if isinstance(probe_sum_b, dict) and probe_sum_b.get("probe_cancelled_v1"):
-                    err_probe_cb = (
-                        "Stopped by operator during student behavior probe — parallel workers were not started."
-                    )
-                    _parallel_job_append_rm_preflight_line_v1(
-                        job_id, "GATE: Student behavior probe = CANCELLED (operator)"
-                    )
-                    exam_line_probe_cb = _exam_run_line_meta_for_parallel_job_v1(
-                        exam_req=exam_req_block if isinstance(exam_req_block, dict) else None,
-                        fingerprint_preview=fp_prev_block if isinstance(fp_prev_block, str) else None,
-                        operator_batch_audit=operator_batch_audit,
-                        results=None,
-                        job_id=job_id,
-                        seam_audit=None,
-                        error=err_probe_cb,
-                    )
-                    timing_probe_cb = record_parallel_batch_finished(
-                        job_id=job_id,
-                        started_at_utc=started_iso,
-                        start_unix=start_unix,
-                        total_scenarios=len(scenarios),
-                        workers_used=workers_used,
-                        results=None,
-                        session_log_batch_dir=None,
-                        error=err_probe_cb,
-                        operator_batch_audit=operator_batch_audit,
-                        exam_run_line_meta_v1=exam_line_probe_cb,
-                        parallel_cancel_partial_results=[],
-                    )
-                    cancel_probe_body: dict[str, Any] = {
-                        "ok": False,
-                        "job_id": job_id,
-                        "error": err_probe_cb,
-                        "cancelled": True,
-                        "student_behavior_probe_summary_v1": probe_sum_b,
-                        "batch_timing": timing_probe_cb,
-                        "rm_preflight_audit_v1": pf_audit_block,
-                    }
-                    _panel_probe_cb = pf_audit_block.get("rm_preflight_results_panel_v1")
-                    if isinstance(_panel_probe_cb, dict):
-                        cancel_probe_body["rm_preflight_results_panel_v1"] = copy.deepcopy(_panel_probe_cb)
-                    persisted_probe_cb = dict(cancel_probe_body)
-                    with _JOBS_LOCK:
-                        jpcb = _JOBS.get(job_id)
-                        if isinstance(jpcb, dict):
-                            jpcb["status"] = "cancelled"
-                            jpcb["preflight_display_status_v1"] = "preflight_cancelled_during_student_probe_v1"
-                            jpcb["completed"] = 0
-                            jpcb["error"] = err_probe_cb
-                            jpcb["batch_timing"] = timing_probe_cb
-                            try:
-                                jpcb["result"] = {
-                                    **cancel_probe_body,
-                                    "operator_rm_gates_v1": _build_operator_rm_gates_v1(jpcb, job_id),
-                                }
-                            except Exception:
-                                jpcb["result"] = dict(cancel_probe_body)
-                            persisted_probe_cb = jpcb["result"]
-                    _persist_parallel_terminal_v1(
-                        job_id,
-                        "cancelled",
-                        persisted_probe_cb,
-                        session_log_batch_dir=None,
-                        telemetry_dir=telem_dir,
-                    )
-                    print(
-                        f"[pattern_game_parallel] job_id={job_id} STUDENT BEHAVIOR PROBE CANCELLED (blocking)",
-                        file=sys.stderr,
-                        flush=True,
-                    )
-                    return jsonify(cancel_probe_body), 200
-                pm_b = probe_sum_b.get("probe_summary_v1") if isinstance(probe_sum_b, dict) else {}
-                _pab = int((pm_b or {}).get("authority_count_v1") or 0)
-                _psb = int((pm_b or {}).get("sealed_count_v1") or 0)
-                _prb = int((pm_b or {}).get("rejection_count_v1") or 0)
-                _pvb = int((pm_b or {}).get("contract_violation_count_v1") or 0)
-                _wto_b = bool(probe_sum_b.get("probe_timeout_v1")) if isinstance(probe_sum_b, dict) else False
-                _wclk_b = probe_sum_b.get("probe_wall_clock_s_v1") if isinstance(probe_sum_b, dict) else None
-                _wbud_b = probe_sum_b.get("probe_wall_limit_s_v1") if isinstance(probe_sum_b, dict) else None
-                if _wto_b:
-                    _probe_detail_b = (
-                        f"DETAIL: TIMEOUT wall_clock={_wclk_b}s budget={_wbud_b}s "
-                        f"(authority={_pab} sealed={_psb} rejected={_prb} violations={_pvb})"
-                    )
-                else:
-                    _probe_detail_b = (
-                        f"DETAIL: authority={_pab} sealed={_psb} rejected={_prb} violations={_pvb}"
-                    )
-                if sb_fail_b is None:
-                    _parallel_job_append_rm_preflight_line_v1(job_id, "GATE: Student behavior probe = PASS")
-                    _parallel_job_append_rm_preflight_line_v1(job_id, _probe_detail_b)
-                else:
-                    _gate_probe_b = (
-                        "GATE: Student behavior probe = TIMEOUT"
-                        if _wto_b or sb_fail_b.get("probe_timeout_v1")
-                        else "GATE: Student behavior probe = FAIL"
-                    )
-                    _parallel_job_append_rm_preflight_line_v1(job_id, _gate_probe_b)
-                    _parallel_job_append_rm_preflight_line_v1(job_id, _probe_detail_b)
-                    _term_st_b = (
-                        FAILED_STUDENT_BEHAVIOR_PROBE_TIMEOUT_V1
-                        if _wto_b or sb_fail_b.get("probe_timeout_v1")
-                        else FAILED_STUDENT_BEHAVIOR_PROBE_STATUS_V1
-                    )
-                    err_sbb = (
-                        f"{_term_st_b}: "
-                        + str(sb_fail_b.get("explicit_failure_reason_v1") or "")
-                        + (
-                            " — "
-                            + "; ".join(str(x) for x in (sb_fail_b.get("gate_errors_v1") or [])[:24])
-                            if sb_fail_b.get("gate_errors_v1")
-                            else ""
-                        )
-                    )
-                    exam_line_sbb = _exam_run_line_meta_for_parallel_job_v1(
-                        exam_req=exam_req_block if isinstance(exam_req_block, dict) else None,
-                        fingerprint_preview=fp_prev_block if isinstance(fp_prev_block, str) else None,
-                        operator_batch_audit=operator_batch_audit,
-                        results=None,
-                        job_id=job_id,
-                        seam_audit=None,
-                        error=err_sbb,
-                    )
-                    if isinstance(exam_line_sbb, dict):
-                        exam_line_sbb["failed_student_behavior_probe_v1"] = sb_fail_b
-                        exam_line_sbb["batch_terminal_status_v1"] = _term_st_b
-                    timing_sbb = record_parallel_batch_finished(
-                        job_id=job_id,
-                        started_at_utc=started_iso,
-                        start_unix=start_unix,
-                        total_scenarios=len(scenarios),
-                        workers_used=workers_used,
-                        results=None,
-                        session_log_batch_dir=None,
-                        error=err_sbb,
-                        operator_batch_audit=operator_batch_audit,
-                        exam_run_line_meta_v1=exam_line_sbb,
-                    )
-                    sb_fail_body: dict[str, Any] = {
-                        "ok": False,
-                        "error": err_sbb,
-                        "job_id": job_id,
-                        "failed_student_behavior_probe_v1": sb_fail_b,
-                        "student_behavior_probe_summary_v1": probe_sum_b,
-                        "batch_timing": timing_sbb,
-                        "status_v1": _term_st_b,
-                        "rm_preflight_audit_v1": pf_audit_block,
-                    }
-                    _panel_sbb = pf_audit_block.get("rm_preflight_results_panel_v1")
-                    if isinstance(_panel_sbb, dict):
-                        sb_fail_body["rm_preflight_results_panel_v1"] = copy.deepcopy(_panel_sbb)
-                    persisted_sbb = dict(sb_fail_body)
-                    with _JOBS_LOCK:
-                        jsbb = _JOBS.get(job_id)
-                        if isinstance(jsbb, dict):
-                            jsbb["status"] = "error"
-                            jsbb["preflight_display_status_v1"] = (
-                                "student_behavior_probe_timeout_v1"
-                                if _wto_b or sb_fail_b.get("probe_timeout_v1")
-                                else "student_behavior_probe_failed_v1"
-                            )
-                            jsbb["completed"] = 0
-                            jsbb["error"] = err_sbb
-                            jsbb["batch_timing"] = timing_sbb
-                            try:
-                                jsbb["result"] = {
-                                    **sb_fail_body,
-                                    "operator_rm_gates_v1": _build_operator_rm_gates_v1(jsbb, job_id),
-                                }
-                            except Exception:
-                                jsbb["result"] = dict(sb_fail_body)
-                            persisted_sbb = jsbb["result"]
-                    _persist_parallel_terminal_v1(
-                        job_id,
-                        "error",
-                        persisted_sbb,
-                        session_log_batch_dir=None,
-                        telemetry_dir=telem_dir,
-                    )
-                    return jsonify(sb_fail_body), 400
 
             with _JOBS_LOCK:
                 jrun = _JOBS.get(job_id)
