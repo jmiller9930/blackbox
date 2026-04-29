@@ -58,7 +58,13 @@ def test_seam_processes_trade_with_synthetic_db(
     _mk_synthetic_db(db)
     store = tmp_path / "learn.jsonl"
 
-    def _l3_ok(jid: str, tid: str) -> dict:
+    def _l3_ok(
+        jid: str,
+        tid: str,
+        *,
+        provisional_student_learning_record_v1: dict | None = None,
+        **_kw: object,
+    ) -> dict:
         return {
             "ok": True,
             "data_gaps": [],
