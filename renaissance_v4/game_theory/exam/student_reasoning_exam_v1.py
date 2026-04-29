@@ -19,6 +19,10 @@ Optional::
 
     --db-path /path/to/db.sqlite3
     --stub-llm  (deterministic JSON via engine-aligned stub — CI / offline)
+
+GT060 minimal debug (1 scenario, default 5m for short SQLite fixtures)::
+
+    python3 renaissance_v4/game_theory/exam/student_reasoning_exam_v1.py --exam-id d15-debug-001 --stub-llm
 """
 
 from __future__ import annotations
@@ -50,6 +54,7 @@ from renaissance_v4.game_theory.exam.student_reasoning_exam_gt041_v1 import (
     summarize_gt041_acceptance_v1,
 )
 from renaissance_v4.game_theory.exam.student_reasoning_exam_scenarios_v1 import (
+    DEBUG_MINIMAL_EXAM_IDS_V1,
     resolve_scenario_windows_v1,
     synthetic_retrieved_experience_v1,
 )
@@ -135,7 +140,10 @@ def _run_exam_impl_v1(
     )
     if err:
         raise RuntimeError(err)
-    if len(scenarios) != 10:
+    if exam_key in DEBUG_MINIMAL_EXAM_IDS_V1:
+        if len(scenarios) != 1:
+            raise RuntimeError(f"debug exam expected 1 scenario, got {len(scenarios)}")
+    elif len(scenarios) != 10:
         raise RuntimeError(f"expected 10 scenarios, got {len(scenarios)}")
 
     prev_learning_store = os.environ.get("PATTERN_GAME_STUDENT_LEARNING_STORE")
@@ -354,7 +362,7 @@ def _run_exam_impl_v1(
                 },
             )
 
-        acc = _acceptance_block_v1(scenario_rows)
+        acc = _acceptance_block_v1(scenario_rows, exam_id=exam_key)
         gt041_acceptance: dict[str, Any] | None = None
         if exam_key in GT041_STYLE_EXAM_IDS_V1:
             gt041_acceptance = summarize_gt041_acceptance_v1(scenario_rows)
@@ -371,6 +379,8 @@ def _run_exam_impl_v1(
             "sanity_metrics_v1": {
                 "all_10_scenarios_executed": acc.get("all_10_scenarios_executed_v1"),
                 "all_10_scenarios_sealed": acc.get("all_scenarios_sealed_v1"),
+                "scenarios_executed_count_v1": len(scenario_rows),
+                "debug_minimal_exam_v1": acc.get("minimal_debug_exam_v1") or "NO",
                 "no_runtime_errors": "YES",
                 "results_file_created": "YES",
                 "trace_file_created": "YES",
@@ -424,8 +434,27 @@ def run_exam_v1(
         )
 
 
-def _acceptance_block_v1(rows: list[dict[str, Any]]) -> dict[str, str]:
+def _acceptance_block_v1(rows: list[dict[str, Any]], *, exam_id: str = "") -> dict[str, str]:
     n = len(rows)
+
+    def yn(x: bool) -> str:
+        return "YES" if x else "NO"
+
+    if str(exam_id).strip() in DEBUG_MINIMAL_EXAM_IDS_V1:
+        all_sealed = n > 0 and all(bool(r.get("sealed_ok_v1")) for r in rows)
+        return {
+            "minimal_debug_exam_v1": "YES",
+            "all_10_scenarios_executed_v1": yn(n == 1),
+            "all_scenarios_sealed_v1": yn(all_sealed),
+            "no_trade_correctly_used_v1": "N/A",
+            "hallucination_absent_v1": "N/A",
+            "memory_influenced_decisions_correctly_v1": "N/A",
+            "ev_influenced_decisions_correctly_v1": "N/A",
+            "high_risk_scenarios_handled_v1": "N/A",
+            "exam_results_file_created_v1": "YES",
+            "trace_file_created_v1": "YES",
+        }
+
     all_run = n == 10
     all_sealed = all(bool(r.get("sealed_ok_v1")) for r in rows)
     strict_nt = ("d6_s03_sideways_chop", "d6_s04_fake_breakout_trap", "d6_s10_memory_warning_trade")
@@ -447,9 +476,6 @@ def _acceptance_block_v1(rows: list[dict[str, Any]]) -> dict[str, str]:
         for r in rows
         if str(r.get("scenario_id") or "") == "d6_s08_high_volatility_danger"
     )
-
-    def yn(x: bool) -> str:
-        return "YES" if x else "NO"
 
     return {
         "all_10_scenarios_executed_v1": yn(all_run),

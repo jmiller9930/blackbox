@@ -21,6 +21,9 @@ from renaissance_v4.game_theory.student_proctor.entry_reasoning_engine_v1 import
 from renaissance_v4.game_theory.exam.student_reasoning_exam_gt041_v1 import (
     GT041_STYLE_EXAM_IDS_V1,
 )
+
+# GT060 — single-scenario debug (fixture-sized DBs); forces 5m rollup so rolled bar count stays usable.
+DEBUG_MINIMAL_EXAM_IDS_V1 = frozenset({"d15-debug-001"})
 from renaissance_v4.game_theory.student_proctor.student_context_builder_v1 import (
     fetch_all_5m_for_symbol_asc,
 )
@@ -313,13 +316,20 @@ def resolve_scenario_windows_v1(
     eid = str(exam_id or "").strip()
     if eid in GT041_STYLE_EXAM_IDS_V1:
         templates = scenario_templates_gt041_memory_ev_v1()
+    elif eid in DEBUG_MINIMAL_EXAM_IDS_V1:
+        templates = scenario_templates_v1()[:1]
     else:
         templates = scenario_templates_v1()
     sym = (symbol_override or "").strip() or pick_dense_symbol_v1(p)
     if not sym:
         return [], "could not resolve symbol from database"
 
-    tf = int(timeframe_override) if timeframe_override is not None else int(templates[0]["timeframe_minutes"])
+    if timeframe_override is not None:
+        tf = int(timeframe_override)
+    elif eid in DEBUG_MINIMAL_EXAM_IDS_V1:
+        tf = 5
+    else:
+        tf = int(templates[0]["timeframe_minutes"])
     if not is_allowed_candle_timeframe_minutes_v1(tf):
         return [], f"invalid timeframe_minutes: {tf}"
 
@@ -517,6 +527,7 @@ def synthetic_retrieved_experience_v1(
 
 
 __all__ = [
+    "DEBUG_MINIMAL_EXAM_IDS_V1",
     "GT041_STYLE_EXAM_IDS_V1",
     "pick_dense_symbol_v1",
     "resolve_scenario_windows_v1",
