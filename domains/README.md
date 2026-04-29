@@ -15,3 +15,5 @@ This directory holds **Narrow Domain Expert (NDE)** domain definitions for the *
 Add new domains as **`domains/<name>/`** with a README that covers: source manifest rules, dataset generation, verifier contract, eval cases, training defaults, promotion criteria.
 
 **Note:** Training and dataset **code** for FinQuant still live under `finquant/` in the tree today; this folder is the **abstraction boundary** for documentation and phased migration — see `nde_factory_v0.1.md` §11.
+
+**Training-server data tree (`/data/NDE/`):** Canonical files live under **`nde_factory/layout/`**; install with **`scripts/install_nde_data_layout.sh`** on the host (does not modify `/data/finquant-1/`).

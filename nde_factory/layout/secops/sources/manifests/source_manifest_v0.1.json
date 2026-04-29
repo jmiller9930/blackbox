@@ -1,0 +1,89 @@
+{
+  "schema": "nde_source_manifest_v0.1",
+  "version": "0.1",
+  "domain": "secops",
+  "description": "Authoritative and planned sources for SecOps NDE dataset preparation. Placeholders are not yet ingested.",
+  "sources": [
+    {
+      "id": "cmmc_resources_documentation_hub",
+      "title": "CMMC Resources & Documentation",
+      "kind": "web_hub",
+      "url": "https://dodcio.defense.gov/cmmc/Resources-Documentation/",
+      "authority": "primary",
+      "status": "seeded",
+      "notes": "Authoritative CMMC policy and documentation entry point (DoD CIO)."
+    },
+    {
+      "id": "nvd_cve_api",
+      "title": "NVD CVE API",
+      "kind": "api",
+      "url": "https://nvd.nist.gov/developers/vulnerabilities",
+      "authority": "planned",
+      "status": "placeholder",
+      "notes": "National Vulnerability Database CVE retrieval; rate limits and API key policy TBD."
+    },
+    {
+      "id": "cisa_kev",
+      "title": "CISA Known Exploited Vulnerabilities",
+      "kind": "catalog",
+      "url": "https://www.cisa.gov/known-exploited-vulnerabilities-catalog",
+      "authority": "planned",
+      "status": "placeholder",
+      "notes": "KEV catalog for prioritization context in verifier rows."
+    },
+    {
+      "id": "mitre_attack",
+      "title": "MITRE ATT&CK",
+      "kind": "framework",
+      "url": "https://attack.mitre.org/",
+      "authority": "planned",
+      "status": "placeholder",
+      "notes": "Tactics/techniques references; STIX/TAXII usage TBD."
+    },
+    {
+      "id": "nist_csf",
+      "title": "NIST Cybersecurity Framework",
+      "kind": "framework",
+      "url": "https://www.nist.gov/cyberframework",
+      "authority": "planned",
+      "status": "placeholder",
+      "notes": "CSF core functions and categories for control-mapping tasks."
+    },
+    {
+      "id": "nist_sp_800_171",
+      "title": "NIST SP 800-171",
+      "kind": "publication",
+      "url": "https://csrc.nist.gov/publications/detail/sp/800-171/rev-3/final",
+      "authority": "planned",
+      "status": "placeholder",
+      "notes": "Protecting CUI in nonfederal systems; rev appropriate to acquisition policy."
+    },
+    {
+      "id": "nist_sp_800_172",
+      "title": "NIST SP 800-172",
+      "kind": "publication",
+      "url": "https://csrc.nist.gov/publications/detail/sp/800-172/final",
+      "authority": "planned",
+      "status": "placeholder",
+      "notes": "Enhanced security requirements for CUI."
+    },
+    {
+      "id": "fedramp",
+      "title": "FedRAMP",
+      "kind": "program",
+      "url": "https://www.fedramp.gov/",
+      "authority": "planned",
+      "status": "placeholder",
+      "notes": "Cloud security authorization criteria; baselines and controls references."
+    },
+    {
+      "id": "cis_benchmarks",
+      "title": "CIS Benchmarks",
+      "kind": "benchmarks",
+      "url": "https://www.cisecurity.org/cis-benchmarks",
+      "authority": "planned",
+      "status": "placeholder",
+      "notes": "Use only if licensing permits redistribution or excerpting for training; confirm legal review."
+    }
+  ]
+}
