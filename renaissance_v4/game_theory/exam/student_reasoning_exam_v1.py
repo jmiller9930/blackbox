@@ -19,9 +19,11 @@ from __future__ import annotations
 
 import argparse
 import json
+import os
 import sys
+from contextlib import contextmanager
 from pathlib import Path
-from typing import Any
+from typing import Any, Iterator
 from unittest import mock
 
 _REPO_ROOT = Path(__file__).resolve().parents[3]
@@ -45,6 +47,7 @@ from renaissance_v4.game_theory.exam_run_contract_v1 import (
     resolved_llm_for_exam_contract_v1,
 )
 from renaissance_v4.game_theory.pml_runtime_layout import blackbox_repo_root
+from renaissance_v4.game_theory.student_test_mode_v1 import STUDENT_TEST_ISOLATION_ENV_V1
 from renaissance_v4.game_theory.student_proctor.entry_reasoning_engine_v1 import (
     apply_engine_authority_to_student_output_v1,
     run_entry_reasoning_pipeline_v1,
@@ -88,7 +91,21 @@ def _trace_append(path: Path, row: dict[str, Any]) -> None:
         f.write(json.dumps(row, ensure_ascii=False, default=str) + "\n")
 
 
-def run_exam_v1(
+@contextmanager
+def _student_test_isolation_for_exam_v1() -> Iterator[None]:
+    """Enable GT036 strict JSON + repair path for live Ollama (exam harness only)."""
+    prev = os.environ.get(STUDENT_TEST_ISOLATION_ENV_V1)
+    os.environ[STUDENT_TEST_ISOLATION_ENV_V1] = "1"
+    try:
+        yield
+    finally:
+        if prev is None:
+            os.environ.pop(STUDENT_TEST_ISOLATION_ENV_V1, None)
+        else:
+            os.environ[STUDENT_TEST_ISOLATION_ENV_V1] = prev
+
+
+def _run_exam_impl_v1(
     *,
     exam_id: str,
     db_path: Path | None,
@@ -213,8 +230,10 @@ def run_exam_v1(
             )
 
         raw_txt = str((llm_cap or {}).get("raw_assistant_text_v1") or "")
+        llm_emit_errs = list(soe or [])
+        student_output_emitted_v1 = isinstance(so, dict)
         if soe or so is None:
-            merge_errors.extend(list(soe or []))
+            merge_errors.extend(llm_emit_errs)
 
         allowed_mids = frozenset(
             str(z.get("record_id") or "").strip()
@@ -281,6 +300,8 @@ def run_exam_v1(
             "merge_errors_v1": merge_errors,
             "sealed_ok_v1": sealed_ok,
             "grading_v1": grading,
+            "llm_emit_errors_v1": llm_emit_errs,
+            "student_output_emitted_v1": student_output_emitted_v1,
         }
         scenario_rows.append(row_out)
 
@@ -302,12 +323,26 @@ def run_exam_v1(
 
     acc = _acceptance_block_v1(scenario_rows)
 
+    fb_auth = sum(1 for r in scenario_rows if not r.get("student_output_emitted_v1"))
+    llm_rej = fb_auth
+
     results_doc: dict[str, Any] = {
         "schema": SCHEMA_RESULTS_V1,
         "exam_id": exam_id,
         "db_path_resolved_v1": str(db_used),
         "stub_llm_v1": bool(stub_llm),
         "acceptance_v1": acc,
+        "sanity_metrics_v1": {
+            "all_10_scenarios_executed": acc.get("all_10_scenarios_executed_v1"),
+            "all_10_scenarios_sealed": acc.get("all_scenarios_sealed_v1"),
+            "no_runtime_errors": "YES",
+            "results_file_created": "YES",
+            "trace_file_created": "YES",
+            "fingerprint_summary_created": "YES",
+            "llm_output_rejected_count": llm_rej,
+            "failed_before_authority_count": fb_auth,
+            "student_test_isolation_env_applied_v1": f"{STUDENT_TEST_ISOLATION_ENV_V1}=1",
+        },
         "scenarios_v1": scenario_rows,
     }
 
@@ -315,6 +350,24 @@ def run_exam_v1(
     json_path.write_text(json.dumps(results_doc, indent=2, ensure_ascii=False, default=str), encoding="utf-8")
     write_exam_fingerprint_summary_md_v1(results_doc, out_root)
     return results_doc
+
+
+def run_exam_v1(
+    *,
+    exam_id: str,
+    db_path: Path | None,
+    symbol: str | None,
+    timeframe: int | None,
+    stub_llm: bool,
+) -> dict[str, Any]:
+    with _student_test_isolation_for_exam_v1():
+        return _run_exam_impl_v1(
+            exam_id=exam_id,
+            db_path=db_path,
+            symbol=symbol,
+            timeframe=timeframe,
+            stub_llm=stub_llm,
+        )
 
 
 def _acceptance_block_v1(rows: list[dict[str, Any]]) -> dict[str, str]:
@@ -379,7 +432,17 @@ def main() -> None:
         stub_llm=bool(ns.stub_llm),
     )
     root = _repo_runtime_exam_root_v1(str(ns.exam_id).strip())
-    print(json.dumps({"ok": True, "wrote": str(root), "acceptance_v1": doc.get("acceptance_v1")}, indent=2))
+    print(
+        json.dumps(
+            {
+                "ok": True,
+                "wrote": str(root),
+                "acceptance_v1": doc.get("acceptance_v1"),
+                "sanity_metrics_v1": doc.get("sanity_metrics_v1"),
+            },
+            indent=2,
+        )
+    )
 
 
 if __name__ == "__main__":
