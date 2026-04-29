@@ -1,0 +1,26 @@
+{
+  "node": "smoke_train",
+  "status": "PASS",
+  "inputs": [
+    {
+      "mode": "smoke"
+    }
+  ],
+  "outputs": [
+    {
+      "dry_run": true,
+      "train_mode": "smoke",
+      "config": "/Users/bigmac/Documents/code_projects/blackbox/nde_factory/layout/secops/training/config.yaml"
+    }
+  ],
+  "errors": [],
+  "next_node": "smoke_eval",
+  "updated_at": "2026-04-29T20:36:05Z",
+  "artifacts": {
+    "mode": "smoke",
+    "dry_run": true,
+    "train_mode": "smoke",
+    "training_config": "/Users/bigmac/Documents/code_projects/blackbox/nde_factory/layout/secops/training/config.yaml"
+  },
+  "failure_reason": null
+}

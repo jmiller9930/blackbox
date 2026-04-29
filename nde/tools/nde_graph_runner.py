@@ -2,8 +2,8 @@
 """
 NDE Factory — LangGraph orchestration for domain pipelines.
 
-LangGraph provides workflow state, checkpoint/resume, and explicit routing.
-LangChain is not required for core edges; use it elsewhere for tool/model wrappers.
+Autonomous flow after staging JSONL exists: domain contract → dataset validation →
+train → eval → gate → reinforcement/retry → final exam → certify.
 
 Deploy: /data/NDE/tools/nde_graph_runner.py
 """
@@ -13,8 +13,8 @@ import argparse
 import json
 import os
 import subprocess
-import sys
 import sqlite3
+import sys
 import traceback
 import uuid
 from datetime import datetime, timezone
@@ -26,9 +26,27 @@ try:
 except ImportError:  # pragma: no cover
     from typing import TypedDict  # type: ignore
 
+try:
+    import yaml
+except ImportError:  # pragma: no cover
+    yaml = None  # type: ignore
+
 from langgraph.graph import END, START, StateGraph
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
+
+try:
+    from nde_validation_lib import (
+        resolve_staging_jsonl,
+        sha256_file,
+        validate_domain_contract,
+        validate_training_dataset_for_domain,
+    )
+except ImportError:  # pragma: no cover
+    validate_domain_contract = None  # type: ignore
+    validate_training_dataset_for_domain = None  # type: ignore
+    resolve_staging_jsonl = None  # type: ignore
+    sha256_file = None  # type: ignore
 
 try:
     from secops_proof_lib import (
@@ -62,9 +80,7 @@ class NDEState(TypedDict, total=False):
     require_approval: bool
     dry_run: bool
     skip_train: bool
-    # routing / outcomes
-    sources_ok: bool
-    process_ok: bool
+    contract_ok: bool
     dataset_ok: bool
     train_ok: bool
     eval_passed: bool
@@ -76,16 +92,18 @@ class NDEState(TypedDict, total=False):
     last_error: str
     escalate_reason: str
     artifacts: dict[str, Any]
-    # LangGraph messages channel for checkpoint compatibility (optional)
+    staging_path: str
+    dataset_sha256: str
+    eval_score: float
+    final_exam_score: float
     messages: list[Any]
 
 
 NODE_ORDER = [
-    "validate_sources",
-    "process_sources",
-    "validate_dataset",
+    "validate_domain_contract",
+    "validate_training_dataset",
     "smoke_train",
-    "run_eval",
+    "smoke_eval",
     "evaluate_gate",
     "auto_reinforce",
     "retry_or_escalate",
@@ -108,11 +126,28 @@ def _node_dir(run_root: Path, name: str) -> Path:
     return d
 
 
-def _write_node_artifact(
+def _norm_proof_status(status: str) -> str:
+    s = status.lower()
+    if s in ("ok", "passed", "pass"):
+        return "PASS"
+    if s in ("failed", "fail"):
+        return "FAIL"
+    if s == "skipped":
+        return "SKIPPED"
+    if s == "blocked":
+        return "BLOCKED"
+    return status.upper()
+
+
+def _write_node_proof(
     run_root: Path,
     name: str,
     *,
     status: str,
+    inputs: list[Any],
+    outputs: list[Any],
+    errors: list[str],
+    next_node: str,
     artifacts: dict[str, Any] | None = None,
     failure_reason: str | None = None,
     stdout: str = "",
@@ -121,7 +156,11 @@ def _write_node_artifact(
     nd = _node_dir(run_root, name)
     payload = {
         "node": name,
-        "status": status,
+        "status": _norm_proof_status(status),
+        "inputs": inputs,
+        "outputs": outputs,
+        "errors": errors,
+        "next_node": next_node,
         "updated_at": _utc(),
         "artifacts": artifacts or {},
         "failure_reason": failure_reason,
@@ -146,219 +185,219 @@ def _approval_file(run_root: Path) -> Path:
     return run_root / "APPROVED"
 
 
-def _domain_staging_path(domain: str, nde: Path) -> Path | None:
-    """Resolve primary staging JSONL for validate_dataset / eval."""
-    if domain == "secops":
-        for name in (
-            "secops_nist_v0.3_from_sources.jsonl",
-            "secops_cmmc_v0.3_from_sources.jsonl",
-            "secops_v0.1.jsonl",
-        ):
-            p = nde / "secops" / "datasets" / "staging" / name
-            if p.is_file():
-                return p
-        return nde / "secops" / "datasets" / "staging" / "secops_nist_v0.3_from_sources.jsonl"
-    if domain == "finquant":
-        for name in ("finquant_v0.3_from_sources.jsonl", "finquant_staging_v0.1.jsonl"):
-            p = nde / "finquant" / "datasets" / "staging" / name
-            if p.is_file():
-                return p
-        return None
+def _load_domain_cfg(nde: Path, domain: str) -> dict[str, Any]:
+    p = nde / domain / "domain_config.yaml"
+    if yaml is None or not p.is_file():
+        return {}
+    raw = yaml.safe_load(p.read_text(encoding="utf-8"))
+    return raw if isinstance(raw, dict) else {}
+
+
+def _staging_path_resolved(nde: Path, domain: str) -> Path | None:
+    cfg = _load_domain_cfg(nde, domain)
+    if resolve_staging_jsonl:
+        return resolve_staging_jsonl(domain, nde, cfg)
     return None
 
 
-def _processor_cmd(nde: Path, domain: str) -> list[str]:
-    py = nde / "tools" / "nde_source_processor.py"
-    venv_py = nde / ".venv" / "bin" / "python"
-    exe = str(venv_py) if venv_py.is_file() else sys.executable
-    return [
-        exe,
-        str(py),
-        "--domain",
-        domain,
-        "--nde-root",
-        str(nde),
-    ]
+def _secops_eval_paths(nde: Path) -> tuple[Path, Path]:
+    ev = nde / "secops" / "eval" / "eval_v1.json"
+    if not ev.is_file():
+        ev = nde / "secops" / "eval" / "secops_eval_v0.1.json"
+    fe = nde / "secops" / "eval" / "final_exam_v1.json"
+    if not fe.is_file():
+        fe = nde / "secops" / "eval" / "secops_final_exam_v1.json"
+    return ev, fe
 
 
-def validate_sources(state: NDEState) -> dict[str, Any]:
+def _training_config_path(nde: Path, domain: str) -> Path:
+    base = nde / domain / "training"
+    cand = base / "config.yaml"
+    if cand.is_file():
+        return cand
+    if domain == "secops":
+        legacy = base / "config_secops_qwen1_5b_v0.1.yaml"
+        if legacy.is_file():
+            return legacy
+    return cand
+
+
+def validate_domain_contract(state: NDEState) -> dict[str, Any]:
     nde = Path(state["nde_root"])
     domain = state["domain"]
     run_root = _run_dir(nde, domain, state["run_id"])
-    raw = nde / domain / "sources" / "raw"
-    out_lines: list[str] = []
-    ok = raw.is_dir()
-    files: list[str] = []
-    if ok:
-        for p in sorted(raw.rglob("*")):
-            if p.is_file() and p.name != ".gitkeep":
-                files.append(str(p.relative_to(raw)))
-    ok = ok and len(files) > 0
-    if not ok:
-        msg = f"No source files under {raw}" if raw.is_dir() else f"Missing raw dir {raw}"
-        _write_node_artifact(
-            run_root,
-            "validate_sources",
-            status="failed",
-            failure_reason=msg,
-            stdout="\n".join(out_lines),
-        )
-        return {"sources_ok": False, "last_error": msg, "artifacts": {"raw_files": files}}
-
-    _write_node_artifact(
+    inputs: list[Any] = [{"nde_root": str(nde), "domain": domain}]
+    errors: list[str] = []
+    if validate_domain_contract is None:
+        errors.append("nde_validation_lib unavailable")
+        ok = False
+        detail: dict[str, Any] = {}
+    else:
+        ok, errs, detail = validate_domain_contract(nde, domain)
+        errors.extend(errs)
+    outs = [detail]
+    next_n = "validate_training_dataset" if ok else "END"
+    _write_node_proof(
         run_root,
-        "validate_sources",
-        status="ok",
-        artifacts={"raw_dir": str(raw), "file_count": len(files), "files": files[:200]},
-        stdout=f"Found {len(files)} files\n",
-    )
-    return {"sources_ok": True, "last_error": "", "artifacts": {"validate_sources": {"files": files}}}
-
-
-def process_sources(state: NDEState) -> dict[str, Any]:
-    nde = Path(state["nde_root"])
-    domain = state["domain"]
-    run_root = _run_dir(nde, domain, state["run_id"])
-    if not state.get("sources_ok"):
-        _write_node_artifact(run_root, "process_sources", status="skipped", failure_reason="sources not ok")
-        return {"process_ok": False}
-
-    if state.get("dry_run"):
-        _write_node_artifact(
-            run_root,
-            "process_sources",
-            status="skipped",
-            stdout="dry_run: skipped nde_source_processor subprocess\n",
-            artifacts={"skipped": True},
-        )
-        return {"process_ok": True}
-
-    cmd = _processor_cmd(nde, domain)
-    proc = subprocess.run(
-        cmd,
-        capture_output=True,
-        text=True,
-        timeout=7200,
-        env={**os.environ, "NDE_ROOT": str(nde)},
-    )
-    ok = proc.returncode == 0
-    _write_node_artifact(
-        run_root,
-        "process_sources",
+        "validate_domain_contract",
         status="ok" if ok else "failed",
-        failure_reason=None if ok else (proc.stderr[:8000] or f"exit {proc.returncode}"),
-        stdout=proc.stdout[-32000:] if proc.stdout else "",
-        stderr=proc.stderr[-32000:] if proc.stderr else "",
-        artifacts={"cmd": cmd},
+        inputs=inputs,
+        outputs=outs,
+        errors=errors,
+        next_node=next_n,
+        failure_reason=None if ok else "; ".join(errors),
+        stdout=json.dumps({"contract_ok": ok, "detail": detail}, indent=2),
+        artifacts={"detail": detail},
     )
-    return {"process_ok": ok, "last_error": "" if ok else (proc.stderr[:2000] or "process_sources failed")}
+    return {"contract_ok": ok, "last_error": "" if ok else "; ".join(errors)}
 
 
-def validate_dataset(state: NDEState) -> dict[str, Any]:
+def validate_training_dataset(state: NDEState) -> dict[str, Any]:
     nde = Path(state["nde_root"])
     domain = state["domain"]
     run_root = _run_dir(nde, domain, state["run_id"])
-    if not state.get("process_ok"):
-        _write_node_artifact(run_root, "validate_dataset", status="skipped", failure_reason="process_sources failed")
+    inputs = [{"domain": domain, "nde_root": str(nde)}]
+    if not state.get("contract_ok"):
+        _write_node_proof(
+            run_root,
+            "validate_training_dataset",
+            status="skipped",
+            inputs=inputs,
+            outputs=[],
+            errors=["contract_ok is false"],
+            next_node="END",
+            failure_reason="skipped: domain contract failed",
+        )
         return {"dataset_ok": False}
 
-    staging = _domain_staging_path(domain, nde)
-    if staging is None or not staging.is_file():
-        msg = "Staging JSONL not found for domain"
-        _write_node_artifact(run_root, "validate_dataset", status="failed", failure_reason=msg)
-        return {"dataset_ok": False, "last_error": msg}
-
-    bad = total = 0
-    try:
-        with staging.open(encoding="utf-8") as f:
-            for line in f:
-                line = line.strip()
-                if not line:
-                    continue
-                total += 1
-                row = json.loads(line)
-                if not row.get("source_ids"):
-                    bad += 1
-        ok = total > 0 and bad == 0
-    except Exception as e:
-        msg = str(e)
-        _write_node_artifact(
+    if validate_training_dataset_for_domain is None:
+        err = "nde_validation_lib unavailable"
+        _write_node_proof(
             run_root,
-            "validate_dataset",
+            "validate_training_dataset",
             status="failed",
-            failure_reason=msg,
-            stderr=traceback.format_exc(),
+            inputs=inputs,
+            outputs=[],
+            errors=[err],
+            next_node="END",
+            failure_reason=err,
         )
-        return {"dataset_ok": False, "last_error": msg}
+        return {"dataset_ok": False, "last_error": err}
 
-    arts = {"staging_path": str(staging), "rows": total, "missing_source_ids": bad}
-    _write_node_artifact(
+    ok, detail, errs = validate_training_dataset_for_domain(nde, domain)
+    staging_s = detail.get("staging_path")
+    ds_hash = ""
+    if ok and staging_s and sha256_file:
+        try:
+            ds_hash = sha256_file(Path(staging_s))
+        except OSError:
+            pass
+
+    next_n = "smoke_train" if ok else "END"
+    _write_node_proof(
         run_root,
-        "validate_dataset",
+        "validate_training_dataset",
         status="ok" if ok else "failed",
-        failure_reason=None if ok else "missing source_ids or empty",
-        artifacts=arts,
-        stdout=json.dumps(arts, indent=2),
+        inputs=inputs,
+        outputs=[detail],
+        errors=errs,
+        next_node=next_n,
+        failure_reason=None if ok else "; ".join(errs),
+        stdout=json.dumps({"dataset_ok": ok, "detail": detail}, indent=2),
+        artifacts={"staging_path": staging_s, "dataset_sha256": ds_hash},
     )
-    return {"dataset_ok": ok, "last_error": "" if ok else "dataset validation failed", "artifacts": arts}
+    out: dict[str, Any] = {
+        "dataset_ok": ok,
+        "last_error": "" if ok else "; ".join(errs),
+        "artifacts": detail,
+    }
+    if staging_s:
+        out["staging_path"] = staging_s
+    if ds_hash:
+        out["dataset_sha256"] = ds_hash
+    return out
 
 
 def smoke_train(state: NDEState) -> dict[str, Any]:
-    """Smoke QLoRA OR full train on mode full + approval. Never full unless mode full."""
     nde = Path(state["nde_root"])
     domain = state["domain"]
     mode = state.get("mode", "smoke")
     run_root = _run_dir(nde, domain, state["run_id"])
+    inputs = [{"mode": mode}]
     if not state.get("dataset_ok"):
-        _write_node_artifact(run_root, "smoke_train", status="skipped", failure_reason="dataset not ok")
+        _write_node_proof(
+            run_root,
+            "smoke_train",
+            status="skipped",
+            inputs=inputs,
+            outputs=[],
+            errors=["dataset_ok is false"],
+            next_node="END",
+            failure_reason="dataset validation failed",
+        )
         return {"train_ok": False}
 
     if state.get("skip_train"):
-        _write_node_artifact(run_root, "smoke_train", status="skipped", stdout="skip_train=1")
+        _write_node_proof(
+            run_root,
+            "smoke_train",
+            status="skipped",
+            inputs=inputs,
+            outputs=[{"skip_train": True}],
+            errors=[],
+            next_node="smoke_eval",
+            stdout="skip_train=1",
+            artifacts={"skip_train": True, "train_mode": "smoke"},
+        )
         return {"train_ok": True}
 
-    # Human approval before full training only
     if mode == "full":
         if state.get("require_approval") and not _approval_file(run_root).is_file():
             msg = "Full training blocked: create APPROVED file or pass --require-approval workflow"
-            _write_node_artifact(run_root, "smoke_train", status="blocked", failure_reason=msg)
+            _write_node_proof(
+                run_root,
+                "smoke_train",
+                status="blocked",
+                inputs=inputs,
+                outputs=[],
+                errors=[msg],
+                next_node="END",
+                failure_reason=msg,
+            )
             return {"train_ok": False, "last_error": msg}
 
-    # Domain-specific FINQUANT_BASE (historical script name)
-    base_map = {
-        "secops": nde / "secops",
-        "finquant": nde / "finquant",
-    }
-    base = base_map.get(domain)
-    if base is None:
-        base = nde / domain
-
-    cfg_secops = base / "training" / "config_secops_qwen1_5b_v0.1.yaml"
-
+    base_map = {"secops": nde / "secops", "finquant": nde / "finquant"}
+    base = base_map.get(domain) or (nde / domain)
+    cfg_path = _training_config_path(nde, domain)
     train_py = REPO_ROOT / "finquant" / "training" / "train_qlora.py"
 
     if state.get("dry_run"):
         train_mode_would = "full" if mode == "full" else "smoke"
-        _write_node_artifact(
+        _write_node_proof(
             run_root,
             "smoke_train",
             status="ok",
+            inputs=inputs,
+            outputs=[{"dry_run": True, "train_mode": train_mode_would, "config": str(cfg_path)}],
+            errors=[],
+            next_node="smoke_eval",
             stdout="dry_run: would train\n",
             artifacts={
                 "mode": mode,
                 "dry_run": True,
                 "train_mode": train_mode_would,
-                "secops_config": str(cfg_secops) if domain == "secops" and cfg_secops.is_file() else None,
+                "training_config": str(cfg_path),
             },
         )
         return {"train_ok": True}
+
     cfg_finquant_repo = REPO_ROOT / "finquant" / "training" / "config_v0.1.yaml"
-    if domain == "secops" and cfg_secops.is_file():
-        cfg = cfg_secops
+    if cfg_path.is_file():
+        cfg = cfg_path
     elif domain == "finquant":
         cfg = (nde / "finquant" / "training" / "config_v0.1.yaml") if (nde / "finquant" / "training" / "config_v0.1.yaml").is_file() else cfg_finquant_repo
     else:
-        cfg = cfg_secops if cfg_secops.is_file() else cfg_finquant_repo
+        cfg = cfg_finquant_repo
 
     train_mode = "full" if mode == "full" else "smoke"
     venv_py = nde / ".venv" / "bin" / "python"
@@ -369,59 +408,67 @@ def smoke_train(state: NDEState) -> dict[str, Any]:
         train_py = alt if alt.is_file() else train_py
     if not train_py.is_file():
         msg = f"train_qlora.py not found; expected at {REPO_ROOT / 'finquant' / 'training' / 'train_qlora.py'}"
-        _write_node_artifact(run_root, "smoke_train", status="failed", failure_reason=msg)
+        _write_node_proof(
+            run_root,
+            "smoke_train",
+            status="failed",
+            inputs=inputs,
+            outputs=[],
+            errors=[msg],
+            next_node="END",
+            failure_reason=msg,
+        )
         return {"train_ok": False, "last_error": msg}
 
-    cmd = [
-        exe,
-        str(train_py),
-        train_mode,
-        "--config",
-        str(cfg),
-        "--base",
-        str(base),
-    ]
+    cmd = [exe, str(train_py), train_mode, "--config", str(cfg), "--base", str(base)]
     proc = subprocess.run(
         cmd,
         capture_output=True,
         text=True,
         timeout=86400,
-        env={
-            **os.environ,
-            "FINQUANT_BASE": str(base),
-            "NDE_ROOT": str(nde),
-        },
+        env={**os.environ, "FINQUANT_BASE": str(base), "NDE_ROOT": str(nde)},
         cwd=str(REPO_ROOT),
     )
     ok = proc.returncode == 0
-    _write_node_artifact(
+    _write_node_proof(
         run_root,
         "smoke_train",
         status="ok" if ok else "failed",
+        inputs=inputs,
+        outputs=[{"cmd": cmd, "exit_code": proc.returncode}],
+        errors=[] if ok else [proc.stderr[:2000] or "training failed"],
+        next_node="smoke_eval" if ok else "END",
         failure_reason=None if ok else (proc.stderr[:8000] or proc.stdout[:8000]),
         stdout=(proc.stdout or "")[-48000:],
         stderr=(proc.stderr or "")[-48000:],
-        artifacts={
-            "cmd": cmd,
-            "train_mode": train_mode,
-            "secops_config": str(cfg_secops) if domain == "secops" and cfg_secops.is_file() else None,
-        },
+        artifacts={"cmd": cmd, "train_mode": train_mode, "training_config": str(cfg)},
     )
     return {"train_ok": ok, "last_error": "" if ok else "training subprocess failed"}
 
 
-def run_eval(state: NDEState) -> dict[str, Any]:
+def smoke_eval(state: NDEState) -> dict[str, Any]:
     nde = Path(state["nde_root"])
     domain = state["domain"]
     run_root = _run_dir(nde, domain, state["run_id"])
+    inputs = [{"domain": domain}]
     if not state.get("train_ok"):
-        _write_node_artifact(run_root, "run_eval", status="skipped", failure_reason="train not ok")
-        return {"eval_passed": False}
+        _write_node_proof(
+            run_root,
+            "smoke_eval",
+            status="skipped",
+            inputs=inputs,
+            outputs=[],
+            errors=["train_ok is false"],
+            next_node="END",
+            failure_reason="train not ok",
+        )
+        return {"eval_passed": False, "eval_score": 0.0}
 
-    staging = _domain_staging_path(domain, nde)
+    staging = _staging_path_resolved(nde, domain)
+    score = 0.0
 
     if domain == "secops":
-        eval_path = nde / "secops" / "eval" / "secops_eval_v0.1.json"
+        eval_path, _fe_unused = _secops_eval_paths(nde)
         harness_ok = False
         harness_detail: dict[str, Any] = {}
         harness_errs: list[str] = []
@@ -452,8 +499,9 @@ def run_eval(state: NDEState) -> dict[str, Any]:
                 sample_note = str(e)
 
         passed = harness_ok and staging_ok and sample_ok
+        score = 1.0 if passed else 0.0
         lines = [
-            "SecOps eval: secops_eval_v0.1.json harness + staging sample.",
+            "SecOps smoke_eval: eval_v1.json harness + staging sample.",
             f"eval_json={eval_path}",
             json.dumps({"harness_ok": harness_ok, "harness_detail": harness_detail}, indent=2),
             f"staging={staging}",
@@ -471,25 +519,24 @@ def run_eval(state: NDEState) -> dict[str, Any]:
                 bits.append("staging sample invalid: " + sample_note)
             fail_reason = "; ".join(bits) or "eval checks failed"
 
-        _write_node_artifact(
+        _write_node_proof(
             run_root,
-            "run_eval",
+            "smoke_eval",
             status="ok" if passed else "failed",
+            inputs=inputs,
+            outputs=[{"eval_score": score, "harness_detail": harness_detail}],
+            errors=harness_errs if not passed else [],
+            next_node="evaluate_gate" if passed else "evaluate_gate",
             failure_reason=fail_reason,
             stdout="\n".join(lines),
             artifacts={
                 "eval_json": str(eval_path),
-                "harness_ok": harness_ok,
-                "harness_detail": harness_detail,
+                "eval_score": score,
                 "staging_path": str(staging) if staging else None,
             },
         )
-        return {"eval_passed": passed, "last_error": "" if passed else "run_eval failed"}
+        return {"eval_passed": passed, "eval_score": score, "last_error": "" if passed else "smoke_eval failed"}
 
-    lines = [
-        "NDE domain eval (minimal): staging schema + row sampling.",
-        f"staging={staging}",
-    ]
     passed = staging is not None and staging.is_file()
     if passed:
         try:
@@ -500,20 +547,22 @@ def run_eval(state: NDEState) -> dict[str, Any]:
                         break
                     sample.append(json.loads(line))
             passed = all(isinstance(r.get("source_ids"), list) and r["source_ids"] for r in sample)
-            lines.append(json.dumps({"sample_ok": passed, "rows_checked": len(sample)}))
         except Exception as e:
             passed = False
-            lines.append(str(e))
-
-    _write_node_artifact(
+    score = 1.0 if passed else 0.0
+    _write_node_proof(
         run_root,
-        "run_eval",
+        "smoke_eval",
         status="ok" if passed else "failed",
+        inputs=inputs,
+        outputs=[{"eval_score": score}],
+        errors=[] if passed else ["staging schema check failed"],
+        next_node="evaluate_gate",
         failure_reason=None if passed else "eval checks failed",
-        stdout="\n".join(lines),
-        artifacts={"staging": str(staging) if staging else None},
+        stdout=json.dumps({"staging": str(staging), "passed": passed}),
+        artifacts={"staging_path": str(staging) if staging else None, "eval_score": score},
     )
-    return {"eval_passed": passed, "last_error": "" if passed else "run_eval failed"}
+    return {"eval_passed": passed, "eval_score": score, "last_error": "" if passed else "smoke_eval failed"}
 
 
 def evaluate_gate(state: NDEState) -> dict[str, Any]:
@@ -521,10 +570,15 @@ def evaluate_gate(state: NDEState) -> dict[str, Any]:
     domain = state["domain"]
     run_root = _run_dir(nde, domain, state["run_id"])
     gate = bool(state.get("eval_passed"))
-    _write_node_artifact(
+    next_n = "final_exam" if gate else "auto_reinforce"
+    _write_node_proof(
         run_root,
         "evaluate_gate",
         status="ok" if gate else "failed",
+        inputs=[{"eval_passed": state.get("eval_passed")}],
+        outputs=[{"gate_passed": gate}],
+        errors=[] if gate else ["eval_passed is false"],
+        next_node=next_n,
         failure_reason=None if gate else "gate: eval_passed is false",
         stdout=json.dumps({"gate_passed": gate}, indent=2),
     )
@@ -536,13 +590,17 @@ def auto_reinforce(state: NDEState) -> dict[str, Any]:
     domain = state["domain"]
     run_root = _run_dir(nde, domain, state["run_id"])
     note = (
-        "auto_reinforce placeholder: would queue reinforcement dataset build per domain policy; "
+        "auto_reinforce: reinforcement dataset build would run per domain policy; "
         "no external calls in this layer."
     )
-    _write_node_artifact(
+    _write_node_proof(
         run_root,
         "auto_reinforce",
         status="ok",
+        inputs=[{"gate_passed": state.get("gate_passed")}],
+        outputs=[{"policy": "nde reinforcement stub"}],
+        errors=[],
+        next_node="retry_or_escalate",
         stdout=note + "\n",
         artifacts={"policy": "nde reinforcement stub"},
     )
@@ -558,10 +616,15 @@ def retry_or_escalate(state: NDEState) -> dict[str, Any]:
     retries += 1
     escalate = retries > max_r
     reason = f"retry {retries}/{max_r}" + (" — ESCALATE" if escalate else "")
-    _write_node_artifact(
+    next_n = "END" if escalate else "validate_training_dataset"
+    _write_node_proof(
         run_root,
         "retry_or_escalate",
-        status="escalated" if escalate else "retry",
+        status="escalated" if escalate else "ok",
+        inputs=[{"retry_before": retries - 1}],
+        outputs=[{"retry_count": retries, "max_retries": max_r, "escalate": escalate}],
+        errors=[],
+        next_node=next_n,
         stdout=reason + "\n",
         failure_reason="max_retries exceeded" if escalate else None,
         artifacts={"retry_count": retries, "max_retries": max_r},
@@ -582,10 +645,10 @@ def final_exam(state: NDEState) -> dict[str, Any]:
         and bool(state.get("train_ok"))
         and bool(state.get("dataset_ok"))
     )
+    fe_score = 0.0
 
     if domain == "secops":
-        eval_path = nde / "secops" / "eval" / "secops_eval_v0.1.json"
-        final_path = nde / "secops" / "eval" / "secops_final_exam_v1.json"
+        eval_path, final_path = _secops_eval_paths(nde)
         fe_ok = False
         fe_detail: dict[str, Any] = {}
         fe_errs: list[str] = []
@@ -602,6 +665,7 @@ def final_exam(state: NDEState) -> dict[str, Any]:
                 fe_errs.append(str(e))
 
         ok = base_ok and fe_ok
+        fe_score = 1.0 if ok else 0.0
         stdout_obj = {
             "gate_passed": state.get("gate_passed"),
             "train_ok": state.get("train_ok"),
@@ -610,27 +674,38 @@ def final_exam(state: NDEState) -> dict[str, Any]:
             "final_exam_detail": fe_detail,
             "final_exam_errors": fe_errs,
             "final_exam_passed": ok,
+            "final_exam_score": fe_score,
             "final_exam_json": str(final_path),
         }
-        _write_node_artifact(
+        _write_node_proof(
             run_root,
             "final_exam",
             status="ok" if ok else "failed",
+            inputs=[{"eval_json": str(eval_path)}],
+            outputs=[stdout_obj],
+            errors=fe_errs if not ok else [],
+            next_node="certify" if ok else "END",
             failure_reason=None if ok else ("; ".join(fe_errs) if fe_errs else "final exam criteria not met"),
             stdout=json.dumps(stdout_obj, indent=2),
             artifacts={
                 "eval_json": str(eval_path),
                 "final_exam_json": str(final_path),
                 "structural_ok": fe_ok,
+                "final_exam_score": fe_score,
             },
         )
-        return {"final_exam_passed": ok}
+        return {"final_exam_passed": ok, "final_exam_score": fe_score}
 
     ok = base_ok
-    _write_node_artifact(
+    fe_score = 1.0 if ok else 0.0
+    _write_node_proof(
         run_root,
         "final_exam",
         status="ok" if ok else "failed",
+        inputs=[],
+        outputs=[{"final_exam_passed": ok}],
+        errors=[] if ok else ["criteria not met"],
+        next_node="certify" if ok else "END",
         failure_reason=None if ok else "final exam criteria not met",
         stdout=json.dumps(
             {
@@ -638,11 +713,13 @@ def final_exam(state: NDEState) -> dict[str, Any]:
                 "train_ok": state.get("train_ok"),
                 "dataset_ok": state.get("dataset_ok"),
                 "final_exam_passed": ok,
+                "final_exam_score": fe_score,
             },
             indent=2,
         ),
+        artifacts={"final_exam_score": fe_score},
     )
-    return {"final_exam_passed": ok}
+    return {"final_exam_passed": ok, "final_exam_score": fe_score}
 
 
 def certify(state: NDEState) -> dict[str, Any]:
@@ -651,28 +728,62 @@ def certify(state: NDEState) -> dict[str, Any]:
     run_root = _run_dir(nde, domain, state["run_id"])
     if not state.get("final_exam_passed"):
         msg = "Certification blocked until final_exam passes"
-        _write_node_artifact(run_root, "certify", status="blocked", failure_reason=msg)
+        _write_node_proof(
+            run_root,
+            "certify",
+            status="blocked",
+            inputs=[],
+            outputs=[],
+            errors=[msg],
+            next_node="END",
+            failure_reason=msg,
+        )
         return {"certified": False, "last_error": msg}
+
+    cfg_path = _training_config_path(nde, domain)
+    model_name = ""
+    if yaml and cfg_path.is_file():
+        try:
+            cfg = yaml.safe_load(cfg_path.read_text(encoding="utf-8")) or {}
+            model_name = str(cfg.get("model_name_or_path") or "")
+        except Exception:
+            pass
+
+    staging = state.get("staging_path") or ""
+    ds_hash = state.get("dataset_sha256") or ""
+    if not ds_hash and staging:
+        p = Path(staging)
+        if p.is_file() and sha256_file:
+            try:
+                ds_hash = sha256_file(p)
+            except OSError:
+                pass
+
+    eval_score = float(state.get("eval_score") or 0.0)
+    fe_score = float(state.get("final_exam_score") or 0.0)
 
     body = {
         "certified": True,
         "domain": domain,
+        "model": model_name,
+        "dataset_sha256": ds_hash,
+        "staging_path": staging,
+        "eval_score": eval_score,
+        "final_exam_score": fe_score,
         "run_id": state["run_id"],
-        "at": _utc(),
-        "note": "Mechanical certify flag from LangGraph; operational sign-off is separate.",
-        "eval_passed": bool(state.get("eval_passed")),
-        "final_exam_passed": bool(state.get("final_exam_passed")),
-        "pass_criteria": {
-            "min_score_fraction": 0.95,
-            "no_false_pass_on_incorrect_claim": True,
-            "data_evidence_required": True,
-        },
+        "certified_at": _utc(),
+        "training_config": str(cfg_path),
+        "note": "Structural certification via LangGraph; operational sign-off is separate.",
     }
     (run_root / "CERTIFICATE.json").write_text(json.dumps(body, indent=2), encoding="utf-8")
-    _write_node_artifact(
+    _write_node_proof(
         run_root,
         "certify",
         status="ok",
+        inputs=[{"final_exam_passed": True}],
+        outputs=[body],
+        errors=[],
+        next_node="END",
         stdout=json.dumps(body, indent=2),
         artifacts={"certificate": str(run_root / "CERTIFICATE.json")},
     )
@@ -685,6 +796,18 @@ def certify(state: NDEState) -> dict[str, Any]:
     return {"certified": True}
 
 
+def route_after_contract(state: NDEState) -> str:
+    if state.get("contract_ok"):
+        return "validate_training_dataset"
+    return END  # type: ignore[return-value]
+
+
+def route_after_training_dataset(state: NDEState) -> str:
+    if state.get("dataset_ok"):
+        return "smoke_train"
+    return END  # type: ignore[return-value]
+
+
 def route_after_gate(state: NDEState) -> str:
     if state.get("gate_passed"):
         return "final_exam"
@@ -694,7 +817,7 @@ def route_after_gate(state: NDEState) -> str:
 def route_after_retry(state: NDEState) -> str:
     if state.get("escalated"):
         return END  # type: ignore[return-value]
-    return "validate_sources"
+    return "validate_training_dataset"
 
 
 def route_after_final_exam(state: NDEState) -> str:
@@ -705,7 +828,7 @@ def route_after_final_exam(state: NDEState) -> str:
 
 def main() -> None:
     ap = argparse.ArgumentParser(description="NDE LangGraph runner")
-    ap.add_argument("--domain", required=True, choices=("secops", "finquant"))
+    ap.add_argument("--domain", required=True)
     ap.add_argument("--mode", default="smoke", choices=("smoke", "full"))
     ap.add_argument("--require-approval", action="store_true", help="Require APPROVED file before full training")
     ap.add_argument("--nde-root", type=Path, default=None)
@@ -716,8 +839,8 @@ def main() -> None:
         action="store_true",
         help="Continue from LangGraph checkpoint (same --run-id, expects checkpoints.sqlite)",
     )
-    ap.add_argument("--dry-run", action="store_true", help="Skip processor/train subprocesses; exercise graph")
-    ap.add_argument("--skip-train", action="store_true", help="Skip train subprocess (still runs eval on staging)")
+    ap.add_argument("--dry-run", action="store_true", help="Skip train subprocess; exercise graph")
+    ap.add_argument("--skip-train", action="store_true", help="Skip train subprocess (still runs eval)")
     args = ap.parse_args()
 
     nde = (args.nde_root or _nde_root()).resolve()
@@ -734,7 +857,6 @@ def main() -> None:
     run_root = _run_dir(nde, args.domain, run_id)
     run_root.mkdir(parents=True, exist_ok=True)
 
-    # Persistent checkpoint store per run (durable execution)
     db_path = run_root / "checkpoints.sqlite"
     conn = sqlite3.connect(str(db_path), check_same_thread=False)
     checkpointer = SqliteSaver(conn)
@@ -742,12 +864,20 @@ def main() -> None:
     graph = StateGraph(NDEState)
     for n in NODE_ORDER:
         graph.add_node(n, globals()[n])
-    graph.add_edge(START, "validate_sources")
-    graph.add_edge("validate_sources", "process_sources")
-    graph.add_edge("process_sources", "validate_dataset")
-    graph.add_edge("validate_dataset", "smoke_train")
-    graph.add_edge("smoke_train", "run_eval")
-    graph.add_edge("run_eval", "evaluate_gate")
+
+    graph.add_edge(START, "validate_domain_contract")
+    graph.add_conditional_edges(
+        "validate_domain_contract",
+        route_after_contract,
+        {"validate_training_dataset": "validate_training_dataset", END: END},
+    )
+    graph.add_conditional_edges(
+        "validate_training_dataset",
+        route_after_training_dataset,
+        {"smoke_train": "smoke_train", END: END},
+    )
+    graph.add_edge("smoke_train", "smoke_eval")
+    graph.add_edge("smoke_eval", "evaluate_gate")
     graph.add_conditional_edges(
         "evaluate_gate",
         route_after_gate,
@@ -757,7 +887,7 @@ def main() -> None:
     graph.add_conditional_edges(
         "retry_or_escalate",
         route_after_retry,
-        {"validate_sources": "validate_sources", END: END},
+        {"validate_training_dataset": "validate_training_dataset", END: END},
     )
     graph.add_conditional_edges(
         "final_exam",

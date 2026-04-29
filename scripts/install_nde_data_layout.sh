@@ -26,7 +26,7 @@ if [[ ! -d "${TOOLS}" ]]; then
   echo "warning: repo nde/tools missing at ${TOOLS}; ${DEST}/tools left empty except mkdir" >&2
 else
   # Python entrypoints and SecOps proof libs (nde_graph_runner imports secops_proof_lib from cwd).
-  for _py in nde_source_processor.py nde_graph_runner.py secops_proof_lib.py secops_nde_proof_runner.py check_langgraph_enforcement.py; do
+  for _py in nde_source_processor.py nde_graph_runner.py nde_validation_lib.py secops_proof_lib.py secops_nde_proof_runner.py check_langgraph_enforcement.py validate_domain_contract.py validate_training_dataset.py; do
     [[ -f "${TOOLS}/${_py}" ]] && cp -f "${TOOLS}/${_py}" "${DEST}/tools/"
   done
   [[ -f "${TOOLS}/requirements.txt" ]] && cp -f "${TOOLS}/requirements.txt" "${DEST}/tools/"

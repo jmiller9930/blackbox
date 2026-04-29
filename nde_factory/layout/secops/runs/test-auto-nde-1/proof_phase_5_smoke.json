@@ -1,0 +1,24 @@
+{
+  "phase": "smoke_pipeline",
+  "status": "PASS",
+  "checks": {
+    "run_root": "/Users/bigmac/Documents/code_projects/blackbox/nde_factory/layout/secops/runs/test-auto-nde-1",
+    "nodes": {
+      "validate_domain_contract": "PASS",
+      "validate_training_dataset": "PASS",
+      "smoke_train": "PASS",
+      "smoke_eval": "PASS",
+      "evaluate_gate": "PASS",
+      "auto_reinforce": null,
+      "retry_or_escalate": null,
+      "final_exam": "PASS",
+      "certify": "PASS"
+    },
+    "train_mode_observed": "smoke",
+    "mode": "smoke",
+    "dry_run": true,
+    "eval_node_status": "PASS",
+    "final_exam_node_status": "PASS"
+  },
+  "errors": []
+}

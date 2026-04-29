@@ -34,7 +34,9 @@ def _write_reports(path: Path, payload: dict[str, object]) -> None:
 
 
 def phase_1_config(nde: Path) -> tuple[bool, Path]:
-    cfg = nde / "secops" / "training" / "config_secops_qwen1_5b_v0.1.yaml"
+    cfg = nde / "secops" / "training" / "config.yaml"
+    if not cfg.is_file():
+        cfg = nde / "secops" / "training" / "config_secops_qwen1_5b_v0.1.yaml"
     ok, detail, errs = validate_secops_training_config(cfg, nde)
     proof = {"phase": "config", "status": "PASS" if ok else "FAIL", "checks": detail, "errors": errs}
     out = nde / REPORTS_REL / "proof_phase_1_config.json"
@@ -43,7 +45,9 @@ def phase_1_config(nde: Path) -> tuple[bool, Path]:
 
 
 def phase_2_eval(nde: Path) -> tuple[bool, Path]:
-    eval_path = nde / "secops" / "eval" / "secops_eval_v0.1.json"
+    eval_path = nde / "secops" / "eval" / "eval_v1.json"
+    if not eval_path.is_file():
+        eval_path = nde / "secops" / "eval" / "secops_eval_v0.1.json"
     data = json.loads(eval_path.read_text(encoding="utf-8"))
     ok, detail, errs = validate_eval_harness(data)
     proof = {"phase": "eval", "status": "PASS" if ok else "FAIL", "checks": detail, "errors": errs}
@@ -53,8 +57,12 @@ def phase_2_eval(nde: Path) -> tuple[bool, Path]:
 
 
 def phase_3_final_exam(nde: Path) -> tuple[bool, Path]:
-    eval_path = nde / "secops" / "eval" / "secops_eval_v0.1.json"
-    final_path = nde / "secops" / "eval" / "secops_final_exam_v1.json"
+    eval_path = nde / "secops" / "eval" / "eval_v1.json"
+    if not eval_path.is_file():
+        eval_path = nde / "secops" / "eval" / "secops_eval_v0.1.json"
+    final_path = nde / "secops" / "eval" / "final_exam_v1.json"
+    if not final_path.is_file():
+        final_path = nde / "secops" / "eval" / "secops_final_exam_v1.json"
     eval_data = json.loads(eval_path.read_text(encoding="utf-8"))
     final_data = json.loads(final_path.read_text(encoding="utf-8"))
     ok, detail, errs = validate_final_exam(final_data, eval_data)

@@ -156,11 +156,10 @@ def structural_final_exam_pass_criteria() -> dict[str, Any]:
 
 
 SECOPS_GRAPH_NODES = [
-    "validate_sources",
-    "process_sources",
-    "validate_dataset",
+    "validate_domain_contract",
+    "validate_training_dataset",
     "smoke_train",
-    "run_eval",
+    "smoke_eval",
     "evaluate_gate",
     "auto_reinforce",
     "retry_or_escalate",
@@ -174,9 +173,10 @@ def validate_langgraph_wiring_source(py_source: str) -> tuple[bool, dict[str, An
     errs: list[str] = []
     checks: dict[str, Any] = {}
 
-    checks["secops_smoke_train_config"] = "config_secops_qwen1_5b_v0.1.yaml" in py_source
-    checks["run_eval_secops_eval_json"] = "secops_eval_v0.1.json" in py_source
-    checks["final_exam_secops_final_json"] = "secops_final_exam_v1.json" in py_source
+    checks["domain_contract_node"] = "validate_domain_contract" in py_source
+    checks["training_dataset_node"] = "validate_training_dataset" in py_source
+    checks["training_config_yaml"] = "config.yaml" in py_source
+    checks["smoke_eval_and_eval_v1"] = "smoke_eval" in py_source and "eval_v1.json" in py_source
     checks["gate_failure_routes_auto_reinforce"] = (
         "route_after_gate" in py_source and "auto_reinforce" in py_source
     )
@@ -184,6 +184,7 @@ def validate_langgraph_wiring_source(py_source: str) -> tuple[bool, dict[str, An
     checks["certify_only_after_final_exam_pass"] = (
         "route_after_final_exam" in py_source and "final_exam_passed" in py_source and "certify" in py_source
     )
+    checks["nde_validation_lib_import"] = "nde_validation_lib" in py_source
 
     for k, v in checks.items():
         if not v:
@@ -194,7 +195,7 @@ def validate_langgraph_wiring_source(py_source: str) -> tuple[bool, dict[str, An
 
 
 def write_proof_phase_5_smoke(nde: Path, run_id: str) -> tuple[bool, Path, dict[str, Any]]:
-    """Proof after a graph run: nodes exercised; smoke mode never runs full train."""
+    """Proof after a graph run: autonomous pipeline nodes; smoke mode never records full train."""
     run_root = nde / "secops" / "runs" / run_id
     errs: list[str] = []
     detail: dict[str, Any] = {"run_root": str(run_root), "nodes": {}}
@@ -218,18 +219,16 @@ def write_proof_phase_5_smoke(nde: Path, run_id: str) -> tuple[bool, Path, dict[
         nodes_meta[node] = {"status": st, "present": True, "artifacts": meta.get("artifacts") or {}}
         detail["nodes"][node] = st
 
-    proc = nodes_meta.get("process_sources", {}).get("status")
-    if proc not in ("ok", "skipped"):
-        errs.append(f"process_sources not exercised (got {proc})")
-    if proc == "skipped" and not dry_run:
-        errs.append("process_sources skipped without dry_run")
+    vdc = nodes_meta.get("validate_domain_contract", {}).get("status")
+    if vdc != "PASS":
+        errs.append(f"validate_domain_contract expected PASS, got {vdc}")
 
-    vd = nodes_meta.get("validate_dataset", {}).get("status")
-    if vd != "ok":
-        errs.append(f"validate_dataset expected ok, got {vd}")
+    vtd = nodes_meta.get("validate_training_dataset", {}).get("status")
+    if vtd != "PASS":
+        errs.append(f"validate_training_dataset expected PASS, got {vtd}")
 
     st_stat = nodes_meta.get("smoke_train", {}).get("status")
-    if st_stat not in ("ok", "skipped", "blocked"):
+    if st_stat not in ("PASS", "SKIPPED", "BLOCKED"):
         errs.append(f"smoke_train unexpected status {st_stat}")
 
     arts = nodes_meta.get("smoke_train", {}).get("artifacts") or {}
@@ -241,36 +240,25 @@ def write_proof_phase_5_smoke(nde: Path, run_id: str) -> tuple[bool, Path, dict[
     if mode == "smoke" and train_mode == "full":
         errs.append("smoke pipeline recorded full training train_mode")
 
-    ev = nodes_meta.get("run_eval", {}).get("status")
-    if ev not in ("ok", "failed", "skipped"):
-        errs.append(f"run_eval did not execute meaningfully (status={ev})")
+    ev = nodes_meta.get("smoke_eval", {}).get("status")
+    if ev not in ("PASS", "FAIL", "SKIPPED"):
+        errs.append(f"smoke_eval did not execute meaningfully (status={ev})")
 
     gate = nodes_meta.get("evaluate_gate", {}).get("status")
     final_ns = nodes_meta.get("final_exam", {}).get("status")
-    if gate == "ok":
+    if gate == "PASS":
         if final_ns is None:
-            errs.append("gate ok but final_exam missing")
-    elif gate == "failed":
-        detail["final_exam_note"] = "skipped_or_absent: gate failed (expected)"
-        # final_exam node may be absent on failure path
+            errs.append("gate PASS but final_exam missing")
+    elif gate == "FAIL":
+        detail["final_exam_note"] = "gate FAIL — may skip final_exam or retry path"
     else:
         errs.append(f"evaluate_gate unexpected status {gate}")
 
-    fe_note = None
-    if final_ns is None and gate == "failed":
-        fe_note = "blocked: evaluate_gate failed"
-        detail["final_exam_blocked_reason"] = fe_note
-    elif final_ns in ("ok", "failed"):
-        detail["final_exam_blocked_reason"] = None
-    elif gate == "ok":
-        errs.append("gate ok but no final_exam node_status")
-
     cert_st = nodes_meta.get("certify", {}).get("status")
     fe_passed = bool(state.get("final_exam_passed"))
-    if fe_passed and cert_st != "ok":
-        errs.append("certify expected ok when final_exam_passed (certificate path)")
+    if fe_passed and cert_st != "PASS":
+        errs.append("certify expected PASS when final_exam_passed (certificate path)")
 
-    detail["processor_node_status"] = proc
     detail["eval_node_status"] = ev
     detail["final_exam_node_status"] = final_ns
 

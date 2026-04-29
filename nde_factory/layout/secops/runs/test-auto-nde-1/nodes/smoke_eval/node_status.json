@@ -1,0 +1,38 @@
+{
+  "node": "smoke_eval",
+  "status": "PASS",
+  "inputs": [
+    {
+      "domain": "secops"
+    }
+  ],
+  "outputs": [
+    {
+      "eval_score": 1.0,
+      "harness_detail": {
+        "case_count": 40,
+        "adversarial_count": 32,
+        "adversarial_ratio": 0.8,
+        "four_heading_flag_all": true,
+        "coverage_themes_present": [
+          "audit_evidence",
+          "encryption",
+          "identity",
+          "least_privilege",
+          "logging",
+          "patching",
+          "shared_accounts"
+        ]
+      }
+    }
+  ],
+  "errors": [],
+  "next_node": "evaluate_gate",
+  "updated_at": "2026-04-29T20:36:05Z",
+  "artifacts": {
+    "eval_json": "/Users/bigmac/Documents/code_projects/blackbox/nde_factory/layout/secops/eval/eval_v1.json",
+    "eval_score": 1.0,
+    "staging_path": "/Users/bigmac/Documents/code_projects/blackbox/nde_factory/layout/secops/datasets/staging/secops_nist_v0.3_from_sources.jsonl"
+  },
+  "failure_reason": null
+}

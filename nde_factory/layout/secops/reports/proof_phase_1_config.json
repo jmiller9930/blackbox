@@ -3,10 +3,10 @@
   "status": "PASS",
   "checks": {
     "model": "Qwen/Qwen2.5-1.5B-Instruct",
-    "staging_path": "/Users/bigmac/Documents/code_projects/blackbox/nde_factory/layout/secops/datasets/staging/secops_v0.1.jsonl",
+    "staging_path": "/Users/bigmac/Documents/code_projects/blackbox/nde_factory/layout/secops/datasets/staging/secops_nist_v0.3_from_sources.jsonl",
     "dataset_exists": true,
-    "smoke_output_dir": "adapters/secops-qwen2.5-1.5b-v0.1-smoke",
-    "full_output_dir": "adapters/secops-qwen2.5-1.5b-v0.1",
+    "smoke_output_dir": "adapters/secops-qwen1.5b-v0.1-smoke",
+    "full_output_dir": "adapters/secops-qwen1.5b-v0.1",
     "smoke_full_distinct": true
   },
   "errors": []

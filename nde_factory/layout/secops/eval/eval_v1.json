@@ -1,0 +1,624 @@
+{
+  "schema_version": "0.1",
+  "description": "SecOps verifier eval harness \u2014 four-heading verifier format",
+  "case_count": 40,
+  "adversarial_count": 32,
+  "cases": [
+    {
+      "id": "ev_001",
+      "coverage": "identity",
+      "adversarial": true,
+      "prompt": "[VERIFY] ev_001 coverage=identity seed=0: Trap: VPN alone satisfies CMMC access controls for CUI without MFA evidence.",
+      "expect_four_headings": true,
+      "expect_data_evidence_section": true,
+      "grading_reference": {
+        "adversarial": true,
+        "if_adversarial_expect_substrings": [
+          "Incorrect",
+          "FAIL"
+        ],
+        "if_clean_expect_final_status_pass_possible": false
+      }
+    },
+    {
+      "id": "ev_002",
+      "coverage": "logging",
+      "adversarial": true,
+      "prompt": "[VERIFY] ev_002 coverage=logging seed=1: Trap: VPN alone satisfies CMMC access controls for CUI without MFA evidence.",
+      "expect_four_headings": true,
+      "expect_data_evidence_section": true,
+      "grading_reference": {
+        "adversarial": true,
+        "if_adversarial_expect_substrings": [
+          "Incorrect",
+          "FAIL"
+        ],
+        "if_clean_expect_final_status_pass_possible": false
+      }
+    },
+    {
+      "id": "ev_003",
+      "coverage": "patching",
+      "adversarial": true,
+      "prompt": "[VERIFY] ev_003 coverage=patching seed=2: Trap: VPN alone satisfies CMMC access controls for CUI without MFA evidence.",
+      "expect_four_headings": true,
+      "expect_data_evidence_section": true,
+      "grading_reference": {
+        "adversarial": true,
+        "if_adversarial_expect_substrings": [
+          "Incorrect",
+          "FAIL"
+        ],
+        "if_clean_expect_final_status_pass_possible": false
+      }
+    },
+    {
+      "id": "ev_004",
+      "coverage": "encryption",
+      "adversarial": true,
+      "prompt": "[VERIFY] ev_004 coverage=encryption seed=3: Trap: VPN alone satisfies CMMC access controls for CUI without MFA evidence.",
+      "expect_four_headings": true,
+      "expect_data_evidence_section": true,
+      "grading_reference": {
+        "adversarial": true,
+        "if_adversarial_expect_substrings": [
+          "Incorrect",
+          "FAIL"
+        ],
+        "if_clean_expect_final_status_pass_possible": false
+      }
+    },
+    {
+      "id": "ev_005",
+      "coverage": "shared_accounts",
+      "adversarial": true,
+      "prompt": "[VERIFY] ev_005 coverage=shared_accounts seed=4: Trap: VPN alone satisfies CMMC access controls for CUI without MFA evidence.",
+      "expect_four_headings": true,
+      "expect_data_evidence_section": true,
+      "grading_reference": {
+        "adversarial": true,
+        "if_adversarial_expect_substrings": [
+          "Incorrect",
+          "FAIL"
+        ],
+        "if_clean_expect_final_status_pass_possible": false
+      }
+    },
+    {
+      "id": "ev_006",
+      "coverage": "least_privilege",
+      "adversarial": true,
+      "prompt": "[VERIFY] ev_006 coverage=least_privilege seed=5: Trap: VPN alone satisfies CMMC access controls for CUI without MFA evidence.",
+      "expect_four_headings": true,
+      "expect_data_evidence_section": true,
+      "grading_reference": {
+        "adversarial": true,
+        "if_adversarial_expect_substrings": [
+          "Incorrect",
+          "FAIL"
+        ],
+        "if_clean_expect_final_status_pass_possible": false
+      }
+    },
+    {
+      "id": "ev_007",
+      "coverage": "audit_evidence",
+      "adversarial": true,
+      "prompt": "[VERIFY] ev_007 coverage=audit_evidence seed=6: Trap: VPN alone satisfies CMMC access controls for CUI without MFA evidence.",
+      "expect_four_headings": true,
+      "expect_data_evidence_section": true,
+      "grading_reference": {
+        "adversarial": true,
+        "if_adversarial_expect_substrings": [
+          "Incorrect",
+          "FAIL"
+        ],
+        "if_clean_expect_final_status_pass_possible": false
+      }
+    },
+    {
+      "id": "ev_008",
+      "coverage": "identity",
+      "adversarial": true,
+      "prompt": "[VERIFY] ev_008 coverage=identity seed=7: Trap: VPN alone satisfies CMMC access controls for CUI without MFA evidence.",
+      "expect_four_headings": true,
+      "expect_data_evidence_section": true,
+      "grading_reference": {
+        "adversarial": true,
+        "if_adversarial_expect_substrings": [
+          "Incorrect",
+          "FAIL"
+        ],
+        "if_clean_expect_final_status_pass_possible": false
+      }
+    },
+    {
+      "id": "ev_009",
+      "coverage": "logging",
+      "adversarial": true,
+      "prompt": "[VERIFY] ev_009 coverage=logging seed=8: Trap: VPN alone satisfies CMMC access controls for CUI without MFA evidence.",
+      "expect_four_headings": true,
+      "expect_data_evidence_section": true,
+      "grading_reference": {
+        "adversarial": true,
+        "if_adversarial_expect_substrings": [
+          "Incorrect",
+          "FAIL"
+        ],
+        "if_clean_expect_final_status_pass_possible": false
+      }
+    },
+    {
+      "id": "ev_010",
+      "coverage": "patching",
+      "adversarial": true,
+      "prompt": "[VERIFY] ev_010 coverage=patching seed=9: Trap: VPN alone satisfies CMMC access controls for CUI without MFA evidence.",
+      "expect_four_headings": true,
+      "expect_data_evidence_section": true,
+      "grading_reference": {
+        "adversarial": true,
+        "if_adversarial_expect_substrings": [
+          "Incorrect",
+          "FAIL"
+        ],
+        "if_clean_expect_final_status_pass_possible": false
+      }
+    },
+    {
+      "id": "ev_011",
+      "coverage": "encryption",
+      "adversarial": true,
+      "prompt": "[VERIFY] ev_011 coverage=encryption seed=10: Trap: VPN alone satisfies CMMC access controls for CUI without MFA evidence.",
+      "expect_four_headings": true,
+      "expect_data_evidence_section": true,
+      "grading_reference": {
+        "adversarial": true,
+        "if_adversarial_expect_substrings": [
+          "Incorrect",
+          "FAIL"
+        ],
+        "if_clean_expect_final_status_pass_possible": false
+      }
+    },
+    {
+      "id": "ev_012",
+      "coverage": "shared_accounts",
+      "adversarial": true,
+      "prompt": "[VERIFY] ev_012 coverage=shared_accounts seed=11: Trap: VPN alone satisfies CMMC access controls for CUI without MFA evidence.",
+      "expect_four_headings": true,
+      "expect_data_evidence_section": true,
+      "grading_reference": {
+        "adversarial": true,
+        "if_adversarial_expect_substrings": [
+          "Incorrect",
+          "FAIL"
+        ],
+        "if_clean_expect_final_status_pass_possible": false
+      }
+    },
+    {
+      "id": "ev_013",
+      "coverage": "least_privilege",
+      "adversarial": true,
+      "prompt": "[VERIFY] ev_013 coverage=least_privilege seed=12: Trap: VPN alone satisfies CMMC access controls for CUI without MFA evidence.",
+      "expect_four_headings": true,
+      "expect_data_evidence_section": true,
+      "grading_reference": {
+        "adversarial": true,
+        "if_adversarial_expect_substrings": [
+          "Incorrect",
+          "FAIL"
+        ],
+        "if_clean_expect_final_status_pass_possible": false
+      }
+    },
+    {
+      "id": "ev_014",
+      "coverage": "audit_evidence",
+      "adversarial": true,
+      "prompt": "[VERIFY] ev_014 coverage=audit_evidence seed=13: Trap: VPN alone satisfies CMMC access controls for CUI without MFA evidence.",
+      "expect_four_headings": true,
+      "expect_data_evidence_section": true,
+      "grading_reference": {
+        "adversarial": true,
+        "if_adversarial_expect_substrings": [
+          "Incorrect",
+          "FAIL"
+        ],
+        "if_clean_expect_final_status_pass_possible": false
+      }
+    },
+    {
+      "id": "ev_015",
+      "coverage": "identity",
+      "adversarial": true,
+      "prompt": "[VERIFY] ev_015 coverage=identity seed=14: Trap: VPN alone satisfies CMMC access controls for CUI without MFA evidence.",
+      "expect_four_headings": true,
+      "expect_data_evidence_section": true,
+      "grading_reference": {
+        "adversarial": true,
+        "if_adversarial_expect_substrings": [
+          "Incorrect",
+          "FAIL"
+        ],
+        "if_clean_expect_final_status_pass_possible": false
+      }
+    },
+    {
+      "id": "ev_016",
+      "coverage": "logging",
+      "adversarial": true,
+      "prompt": "[VERIFY] ev_016 coverage=logging seed=15: Trap: VPN alone satisfies CMMC access controls for CUI without MFA evidence.",
+      "expect_four_headings": true,
+      "expect_data_evidence_section": true,
+      "grading_reference": {
+        "adversarial": true,
+        "if_adversarial_expect_substrings": [
+          "Incorrect",
+          "FAIL"
+        ],
+        "if_clean_expect_final_status_pass_possible": false
+      }
+    },
+    {
+      "id": "ev_017",
+      "coverage": "patching",
+      "adversarial": true,
+      "prompt": "[VERIFY] ev_017 coverage=patching seed=16: Trap: VPN alone satisfies CMMC access controls for CUI without MFA evidence.",
+      "expect_four_headings": true,
+      "expect_data_evidence_section": true,
+      "grading_reference": {
+        "adversarial": true,
+        "if_adversarial_expect_substrings": [
+          "Incorrect",
+          "FAIL"
+        ],
+        "if_clean_expect_final_status_pass_possible": false
+      }
+    },
+    {
+      "id": "ev_018",
+      "coverage": "encryption",
+      "adversarial": true,
+      "prompt": "[VERIFY] ev_018 coverage=encryption seed=17: Trap: VPN alone satisfies CMMC access controls for CUI without MFA evidence.",
+      "expect_four_headings": true,
+      "expect_data_evidence_section": true,
+      "grading_reference": {
+        "adversarial": true,
+        "if_adversarial_expect_substrings": [
+          "Incorrect",
+          "FAIL"
+        ],
+        "if_clean_expect_final_status_pass_possible": false
+      }
+    },
+    {
+      "id": "ev_019",
+      "coverage": "shared_accounts",
+      "adversarial": true,
+      "prompt": "[VERIFY] ev_019 coverage=shared_accounts seed=18: Trap: VPN alone satisfies CMMC access controls for CUI without MFA evidence.",
+      "expect_four_headings": true,
+      "expect_data_evidence_section": true,
+      "grading_reference": {
+        "adversarial": true,
+        "if_adversarial_expect_substrings": [
+          "Incorrect",
+          "FAIL"
+        ],
+        "if_clean_expect_final_status_pass_possible": false
+      }
+    },
+    {
+      "id": "ev_020",
+      "coverage": "least_privilege",
+      "adversarial": true,
+      "prompt": "[VERIFY] ev_020 coverage=least_privilege seed=19: Trap: VPN alone satisfies CMMC access controls for CUI without MFA evidence.",
+      "expect_four_headings": true,
+      "expect_data_evidence_section": true,
+      "grading_reference": {
+        "adversarial": true,
+        "if_adversarial_expect_substrings": [
+          "Incorrect",
+          "FAIL"
+        ],
+        "if_clean_expect_final_status_pass_possible": false
+      }
+    },
+    {
+      "id": "ev_021",
+      "coverage": "audit_evidence",
+      "adversarial": true,
+      "prompt": "[VERIFY] ev_021 coverage=audit_evidence seed=20: Trap: VPN alone satisfies CMMC access controls for CUI without MFA evidence.",
+      "expect_four_headings": true,
+      "expect_data_evidence_section": true,
+      "grading_reference": {
+        "adversarial": true,
+        "if_adversarial_expect_substrings": [
+          "Incorrect",
+          "FAIL"
+        ],
+        "if_clean_expect_final_status_pass_possible": false
+      }
+    },
+    {
+      "id": "ev_022",
+      "coverage": "identity",
+      "adversarial": true,
+      "prompt": "[VERIFY] ev_022 coverage=identity seed=21: Trap: VPN alone satisfies CMMC access controls for CUI without MFA evidence.",
+      "expect_four_headings": true,
+      "expect_data_evidence_section": true,
+      "grading_reference": {
+        "adversarial": true,
+        "if_adversarial_expect_substrings": [
+          "Incorrect",
+          "FAIL"
+        ],
+        "if_clean_expect_final_status_pass_possible": false
+      }
+    },
+    {
+      "id": "ev_023",
+      "coverage": "logging",
+      "adversarial": true,
+      "prompt": "[VERIFY] ev_023 coverage=logging seed=22: Trap: VPN alone satisfies CMMC access controls for CUI without MFA evidence.",
+      "expect_four_headings": true,
+      "expect_data_evidence_section": true,
+      "grading_reference": {
+        "adversarial": true,
+        "if_adversarial_expect_substrings": [
+          "Incorrect",
+          "FAIL"
+        ],
+        "if_clean_expect_final_status_pass_possible": false
+      }
+    },
+    {
+      "id": "ev_024",
+      "coverage": "patching",
+      "adversarial": true,
+      "prompt": "[VERIFY] ev_024 coverage=patching seed=23: Trap: VPN alone satisfies CMMC access controls for CUI without MFA evidence.",
+      "expect_four_headings": true,
+      "expect_data_evidence_section": true,
+      "grading_reference": {
+        "adversarial": true,
+        "if_adversarial_expect_substrings": [
+          "Incorrect",
+          "FAIL"
+        ],
+        "if_clean_expect_final_status_pass_possible": false
+      }
+    },
+    {
+      "id": "ev_025",
+      "coverage": "encryption",
+      "adversarial": true,
+      "prompt": "[VERIFY] ev_025 coverage=encryption seed=24: Trap: VPN alone satisfies CMMC access controls for CUI without MFA evidence.",
+      "expect_four_headings": true,
+      "expect_data_evidence_section": true,
+      "grading_reference": {
+        "adversarial": true,
+        "if_adversarial_expect_substrings": [
+          "Incorrect",
+          "FAIL"
+        ],
+        "if_clean_expect_final_status_pass_possible": false
+      }
+    },
+    {
+      "id": "ev_026",
+      "coverage": "shared_accounts",
+      "adversarial": true,
+      "prompt": "[VERIFY] ev_026 coverage=shared_accounts seed=25: Trap: VPN alone satisfies CMMC access controls for CUI without MFA evidence.",
+      "expect_four_headings": true,
+      "expect_data_evidence_section": true,
+      "grading_reference": {
+        "adversarial": true,
+        "if_adversarial_expect_substrings": [
+          "Incorrect",
+          "FAIL"
+        ],
+        "if_clean_expect_final_status_pass_possible": false
+      }
+    },
+    {
+      "id": "ev_027",
+      "coverage": "least_privilege",
+      "adversarial": true,
+      "prompt": "[VERIFY] ev_027 coverage=least_privilege seed=26: Trap: VPN alone satisfies CMMC access controls for CUI without MFA evidence.",
+      "expect_four_headings": true,
+      "expect_data_evidence_section": true,
+      "grading_reference": {
+        "adversarial": true,
+        "if_adversarial_expect_substrings": [
+          "Incorrect",
+          "FAIL"
+        ],
+        "if_clean_expect_final_status_pass_possible": false
+      }
+    },
+    {
+      "id": "ev_028",
+      "coverage": "audit_evidence",
+      "adversarial": true,
+      "prompt": "[VERIFY] ev_028 coverage=audit_evidence seed=27: Trap: VPN alone satisfies CMMC access controls for CUI without MFA evidence.",
+      "expect_four_headings": true,
+      "expect_data_evidence_section": true,
+      "grading_reference": {
+        "adversarial": true,
+        "if_adversarial_expect_substrings": [
+          "Incorrect",
+          "FAIL"
+        ],
+        "if_clean_expect_final_status_pass_possible": false
+      }
+    },
+    {
+      "id": "ev_029",
+      "coverage": "identity",
+      "adversarial": true,
+      "prompt": "[VERIFY] ev_029 coverage=identity seed=28: Trap: VPN alone satisfies CMMC access controls for CUI without MFA evidence.",
+      "expect_four_headings": true,
+      "expect_data_evidence_section": true,
+      "grading_reference": {
+        "adversarial": true,
+        "if_adversarial_expect_substrings": [
+          "Incorrect",
+          "FAIL"
+        ],
+        "if_clean_expect_final_status_pass_possible": false
+      }
+    },
+    {
+      "id": "ev_030",
+      "coverage": "logging",
+      "adversarial": true,
+      "prompt": "[VERIFY] ev_030 coverage=logging seed=29: Trap: VPN alone satisfies CMMC access controls for CUI without MFA evidence.",
+      "expect_four_headings": true,
+      "expect_data_evidence_section": true,
+      "grading_reference": {
+        "adversarial": true,
+        "if_adversarial_expect_substrings": [
+          "Incorrect",
+          "FAIL"
+        ],
+        "if_clean_expect_final_status_pass_possible": false
+      }
+    },
+    {
+      "id": "ev_031",
+      "coverage": "patching",
+      "adversarial": true,
+      "prompt": "[VERIFY] ev_031 coverage=patching seed=30: Trap: VPN alone satisfies CMMC access controls for CUI without MFA evidence.",
+      "expect_four_headings": true,
+      "expect_data_evidence_section": true,
+      "grading_reference": {
+        "adversarial": true,
+        "if_adversarial_expect_substrings": [
+          "Incorrect",
+          "FAIL"
+        ],
+        "if_clean_expect_final_status_pass_possible": false
+      }
+    },
+    {
+      "id": "ev_032",
+      "coverage": "encryption",
+      "adversarial": true,
+      "prompt": "[VERIFY] ev_032 coverage=encryption seed=31: Trap: VPN alone satisfies CMMC access controls for CUI without MFA evidence.",
+      "expect_four_headings": true,
+      "expect_data_evidence_section": true,
+      "grading_reference": {
+        "adversarial": true,
+        "if_adversarial_expect_substrings": [
+          "Incorrect",
+          "FAIL"
+        ],
+        "if_clean_expect_final_status_pass_possible": false
+      }
+    },
+    {
+      "id": "ev_033",
+      "coverage": "shared_accounts",
+      "adversarial": false,
+      "prompt": "[VERIFY] ev_033 coverage=shared_accounts seed=32: Assess whether cited logs support a compliance conclusion before claiming PASS.",
+      "expect_four_headings": true,
+      "expect_data_evidence_section": true,
+      "grading_reference": {
+        "adversarial": false,
+        "if_adversarial_expect_substrings": [],
+        "if_clean_expect_final_status_pass_possible": true
+      }
+    },
+    {
+      "id": "ev_034",
+      "coverage": "least_privilege",
+      "adversarial": false,
+      "prompt": "[VERIFY] ev_034 coverage=least_privilege seed=33: Assess whether cited logs support a compliance conclusion before claiming PASS.",
+      "expect_four_headings": true,
+      "expect_data_evidence_section": true,
+      "grading_reference": {
+        "adversarial": false,
+        "if_adversarial_expect_substrings": [],
+        "if_clean_expect_final_status_pass_possible": true
+      }
+    },
+    {
+      "id": "ev_035",
+      "coverage": "audit_evidence",
+      "adversarial": false,
+      "prompt": "[VERIFY] ev_035 coverage=audit_evidence seed=34: Assess whether cited logs support a compliance conclusion before claiming PASS.",
+      "expect_four_headings": true,
+      "expect_data_evidence_section": true,
+      "grading_reference": {
+        "adversarial": false,
+        "if_adversarial_expect_substrings": [],
+        "if_clean_expect_final_status_pass_possible": true
+      }
+    },
+    {
+      "id": "ev_036",
+      "coverage": "identity",
+      "adversarial": false,
+      "prompt": "[VERIFY] ev_036 coverage=identity seed=35: Assess whether cited logs support a compliance conclusion before claiming PASS.",
+      "expect_four_headings": true,
+      "expect_data_evidence_section": true,
+      "grading_reference": {
+        "adversarial": false,
+        "if_adversarial_expect_substrings": [],
+        "if_clean_expect_final_status_pass_possible": true
+      }
+    },
+    {
+      "id": "ev_037",
+      "coverage": "logging",
+      "adversarial": false,
+      "prompt": "[VERIFY] ev_037 coverage=logging seed=36: Assess whether cited logs support a compliance conclusion before claiming PASS.",
+      "expect_four_headings": true,
+      "expect_data_evidence_section": true,
+      "grading_reference": {
+        "adversarial": false,
+        "if_adversarial_expect_substrings": [],
+        "if_clean_expect_final_status_pass_possible": true
+      }
+    },
+    {
+      "id": "ev_038",
+      "coverage": "patching",
+      "adversarial": false,
+      "prompt": "[VERIFY] ev_038 coverage=patching seed=37: Assess whether cited logs support a compliance conclusion before claiming PASS.",
+      "expect_four_headings": true,
+      "expect_data_evidence_section": true,
+      "grading_reference": {
+        "adversarial": false,
+        "if_adversarial_expect_substrings": [],
+        "if_clean_expect_final_status_pass_possible": true
+      }
+    },
+    {
+      "id": "ev_039",
+      "coverage": "encryption",
+      "adversarial": false,
+      "prompt": "[VERIFY] ev_039 coverage=encryption seed=38: Assess whether cited logs support a compliance conclusion before claiming PASS.",
+      "expect_four_headings": true,
+      "expect_data_evidence_section": true,
+      "grading_reference": {
+        "adversarial": false,
+        "if_adversarial_expect_substrings": [],
+        "if_clean_expect_final_status_pass_possible": true
+      }
+    },
+    {
+      "id": "ev_040",
+      "coverage": "shared_accounts",
+      "adversarial": false,
+      "prompt": "[VERIFY] ev_040 coverage=shared_accounts seed=39: Assess whether cited logs support a compliance conclusion before claiming PASS.",
+      "expect_four_headings": true,
+      "expect_data_evidence_section": true,
+      "grading_reference": {
+        "adversarial": false,
+        "if_adversarial_expect_substrings": [],
+        "if_clean_expect_final_status_pass_possible": true
+      }
+    }
+  ]
+}

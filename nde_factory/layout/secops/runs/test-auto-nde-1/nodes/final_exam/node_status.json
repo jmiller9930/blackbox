@@ -1,0 +1,38 @@
+{
+  "node": "final_exam",
+  "status": "PASS",
+  "inputs": [
+    {
+      "eval_json": "/Users/bigmac/Documents/code_projects/blackbox/nde_factory/layout/secops/eval/eval_v1.json"
+    }
+  ],
+  "outputs": [
+    {
+      "gate_passed": true,
+      "train_ok": true,
+      "dataset_ok": true,
+      "final_exam_json_ok": true,
+      "final_exam_detail": {
+        "case_count": 40,
+        "adversarial_count": 32,
+        "adversarial_ratio": 0.8,
+        "duplicate_prompts_with_eval": 0,
+        "pass_criteria_encoded": true
+      },
+      "final_exam_errors": [],
+      "final_exam_passed": true,
+      "final_exam_score": 1.0,
+      "final_exam_json": "/Users/bigmac/Documents/code_projects/blackbox/nde_factory/layout/secops/eval/final_exam_v1.json"
+    }
+  ],
+  "errors": [],
+  "next_node": "certify",
+  "updated_at": "2026-04-29T20:36:05Z",
+  "artifacts": {
+    "eval_json": "/Users/bigmac/Documents/code_projects/blackbox/nde_factory/layout/secops/eval/eval_v1.json",
+    "final_exam_json": "/Users/bigmac/Documents/code_projects/blackbox/nde_factory/layout/secops/eval/final_exam_v1.json",
+    "structural_ok": true,
+    "final_exam_score": 1.0
+  },
+  "failure_reason": null
+}
