@@ -10,10 +10,19 @@ from renaissance_v4.game_theory.student_behavior_probe_v1 import (
     evaluate_student_behavior_probe_gates_v1,
     evaluate_full_student_run_contract_v1,
     execute_student_behavior_probe_v1,
+    skip_student_behavior_probe_requested_v1,
 )
 from renaissance_v4.game_theory.student_proctor.student_ollama_student_output_v1 import (
     _apply_canonical_student_action_v1,
 )
+
+
+def test_skip_student_behavior_probe_requested_v1() -> None:
+    assert skip_student_behavior_probe_requested_v1(None) is False
+    assert skip_student_behavior_probe_requested_v1({}) is False
+    assert skip_student_behavior_probe_requested_v1({"skip_student_probe_v1": True}) is True
+    assert skip_student_behavior_probe_requested_v1({"skip_student_probe_v1": "yes"}) is True
+    assert skip_student_behavior_probe_requested_v1({"skip_student_behavior_probe_v1": 1}) is True
 
 
 def test_probe_gates_pass_v1() -> None:

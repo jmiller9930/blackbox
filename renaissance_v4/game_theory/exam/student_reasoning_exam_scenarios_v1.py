@@ -22,8 +22,8 @@ from renaissance_v4.game_theory.exam.student_reasoning_exam_gt041_v1 import (
     GT041_STYLE_EXAM_IDS_V1,
 )
 
-# GT060 — single-scenario debug (fixture-sized DBs); forces 5m rollup so rolled bar count stays usable.
-DEBUG_MINIMAL_EXAM_IDS_V1 = frozenset({"d15-debug-001"})
+# GT060 / GT062 — single-scenario debug (fixture-sized DBs); forces 5m rollup so rolled bar count stays usable.
+DEBUG_MINIMAL_EXAM_IDS_V1 = frozenset({"d15-debug-001", "d16-student-exam-001"})
 from renaissance_v4.game_theory.student_proctor.student_context_builder_v1 import (
     fetch_all_5m_for_symbol_asc,
 )

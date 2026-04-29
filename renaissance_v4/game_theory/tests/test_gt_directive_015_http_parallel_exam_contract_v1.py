@@ -221,6 +221,105 @@ def test_post_run_parallel_blocking_writes_lane_metadata(
     assert last_meta.get("student_llm_execution_v1", {}).get("ollama_trades_succeeded") == 1
 
 
+def test_post_run_parallel_skips_student_behavior_probe_when_flag_v1(
+    flask_client, tmp_path: Path
+) -> None:
+    """GT062 — skip_student_probe_v1 bypasses execute_student_behavior_probe_v1 (parallel workers still run)."""
+    import renaissance_v4.game_theory.web_app as web_app_mod
+
+    def _probe_must_not_run(*_a: object, **_kw: object) -> tuple[None, dict]:
+        raise AssertionError("execute_student_behavior_probe_v1 must not run when skip_student_probe_v1")
+
+    last_meta: dict = {}
+
+    def fake_record(*, exam_run_line_meta_v1=None, path=None, **kwargs):
+        if exam_run_line_meta_v1 is not None:
+            last_meta.clear()
+            last_meta.update(exam_run_line_meta_v1)
+        from renaissance_v4.game_theory.batch_scorecard import record_parallel_batch_finished as real
+
+        return real(**{**kwargs, "path": tmp_path / "sc_skip_probe.jsonl", "exam_run_line_meta_v1": exam_run_line_meta_v1})
+
+    fake_seam = {
+        "schema": "student_loop_seam_audit_v1",
+        "student_seam_stop_reason_v1": "completed_all_trades_v1",
+        "student_decision_authority_mandate_enforced_v1": True,
+        "student_learning_rows_appended": 0,
+        "student_retrieval_matches": 0,
+        "student_output_fingerprint": None,
+        "shadow_student_enabled": False,
+        "student_llm_execution_v1": {
+            "schema": "student_llm_execution_v1",
+            "student_brain_profile_echo_v1": STUDENT_BRAIN_PROFILE_MEMORY_CONTEXT_LLM_STUDENT_V1,
+            "student_reasoning_mode_echo": STUDENT_BRAIN_PROFILE_MEMORY_CONTEXT_LLM_STUDENT_V1,
+            "model_resolved": "qwen2.5:7b",
+            "base_url_resolved": "http://172.20.2.230:11434",
+            "resolved_model": "qwen2.5:7b",
+            "ollama_base_url_used": "http://172.20.2.230:11434",
+            "ollama_any_attempt": True,
+            "ollama_trades_attempted": 1,
+            "ollama_trades_succeeded": 1,
+            "prompt_version_resolved": "gt062_skip_probe_v1",
+        },
+    }
+
+    with patch.object(web_app_mod, "record_parallel_batch_finished", side_effect=fake_record):
+        with patch(
+            "renaissance_v4.game_theory.rm_preflight_wiring_v1.run_rm_preflight_wiring_v1",
+            return_value=_fake_rm_preflight_pass_v1(),
+        ):
+            with patch(
+                "renaissance_v4.game_theory.web_app.run_scenarios_parallel",
+                return_value=[_fake_parallel_row()],
+            ):
+                with patch(
+                    "renaissance_v4.game_theory.web_app.student_loop_seam_after_parallel_batch_v1",
+                    return_value=fake_seam,
+                ):
+                    with patch(
+                        "renaissance_v4.game_theory.web_app.promote_groundhog_bundle_from_parallel_scenarios_v1",
+                        return_value={},
+                    ):
+                        with patch(
+                            "renaissance_v4.game_theory.web_app.validate_reference_comparison_batch_results",
+                            return_value=None,
+                        ):
+                            with patch(
+                                "renaissance_v4.game_theory.web_app.prune_pml_runtime_batch_dirs",
+                                return_value=None,
+                            ):
+                                with patch(
+                                    "renaissance_v4.game_theory.tools.student_reasoning_model_trace_proof_v1.validate_student_reasoning_model_trace_for_job_v1",
+                                    return_value=_fake_student_rm_trace_proof_ok_v1(),
+                                ):
+                                    with patch(
+                                        "renaissance_v4.game_theory.learning_trace_events_v1.count_learning_trace_terminal_integrity_v1",
+                                        return_value=_fake_terminal_integrity_ok_for_job_v1(),
+                                    ):
+                                        with patch(
+                                            "renaissance_v4.game_theory.student_behavior_probe_v1.execute_student_behavior_probe_v1",
+                                            side_effect=_probe_must_not_run,
+                                        ):
+                                            r = flask_client.post(
+                                                "/api/run-parallel",
+                                                json={
+                                                    "operator_recipe_id": "custom",
+                                                    "scenarios_json": '[{"scenario_id":"s_gt062_skip","manifest_path":"renaissance_v4/configs/manifests/baseline_v1_recipe.json","agent_explanation":{"hypothesis":"GT062 skip probe"}}]',
+                                                    "evaluation_window_mode": "12",
+                                                    "exam_run_contract_v1": {
+                                                        "student_reasoning_mode": STUDENT_REASONING_MODE_LLM_QWEN_V1,
+                                                        "skip_cold_baseline_if_anchor": True,
+                                                        "prompt_version": "gt062_skip_probe_v1",
+                                                        "retrieved_context_ids": [],
+                                                        "skip_student_probe_v1": True,
+                                                    },
+                                                },
+                                            )
+    assert r.status_code == 200, r.get_data(as_text=True)
+    body = r.get_json()
+    assert body.get("ok") is True
+
+
 @patch(
     "renaissance_v4.game_theory.student_behavior_probe_v1.execute_student_behavior_probe_v1",
     new=_fake_execute_student_behavior_probe_pass_v1,

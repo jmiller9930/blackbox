@@ -155,6 +155,19 @@ def test_build_exam_run_line_full_control_authority() -> None:
     assert line.get("student_full_control_v1") == STUDENT_FULL_CONTROL_STATUS_ENABLED_V1
 
 
+def test_parse_skip_student_probe_v1() -> None:
+    out, err = parse_exam_run_contract_request_v1(
+        {
+            "exam_run_contract_v1": {
+                "student_brain_profile_v1": STUDENT_BRAIN_PROFILE_MEMORY_CONTEXT_LLM_STUDENT_V1,
+                "skip_student_probe_v1": True,
+            }
+        }
+    )
+    assert err is None and out is not None
+    assert out.get("skip_student_probe_v1") is True
+
+
 def test_parse_student_decision_authority_mode_v1_valid() -> None:
     out, err = parse_exam_run_contract_request_v1(
         {

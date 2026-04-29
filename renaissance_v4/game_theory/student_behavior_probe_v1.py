@@ -102,6 +102,22 @@ def profile_requires_student_behavior_probe_v1(exam_req: dict[str, Any] | None) 
     return prof == STUDENT_BRAIN_PROFILE_MEMORY_CONTEXT_LLM_STUDENT_V1
 
 
+def skip_student_behavior_probe_requested_v1(exam_req: dict[str, Any] | None) -> bool:
+    """
+    GT062 — temporary bypass: when ``exam_run_contract_request_v1`` sets
+    ``skip_student_probe_v1``, parallel batch must not call ``execute_student_behavior_probe_v1``
+    and should go straight to ``run_scenarios_parallel``.
+    """
+    if not isinstance(exam_req, dict):
+        return False
+    raw = exam_req.get("skip_student_probe_v1")
+    if raw is None:
+        raw = exam_req.get("skip_student_behavior_probe_v1")
+    if isinstance(raw, str):
+        return raw.strip().lower() in ("1", "true", "yes", "on")
+    return bool(raw)
+
+
 def evaluate_full_student_run_contract_v1(
     job_id: str,
     seam_audit: dict[str, Any] | None,
@@ -784,6 +800,7 @@ __all__ = [
     "evaluate_student_behavior_probe_gates_v1",
     "execute_student_behavior_probe_v1",
     "profile_requires_student_behavior_probe_v1",
+    "skip_student_behavior_probe_requested_v1",
     "student_behavior_probe_enabled_v1",
     "student_behavior_probe_max_wall_seconds_v1",
     "student_behavior_probe_subprocess_isolation_enabled_v1",

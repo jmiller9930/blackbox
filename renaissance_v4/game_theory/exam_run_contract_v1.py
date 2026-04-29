@@ -382,6 +382,8 @@ def parse_exam_run_contract_request_v1(data: dict[str, Any]) -> tuple[dict[str, 
         block["student_decision_authority_mode_v1"] = data.get("student_decision_authority_mode_v1")
     if data.get("student_test_mode_v1") is not None:
         block["student_test_mode_v1"] = data.get("student_test_mode_v1")
+    if data.get("skip_student_probe_v1") is not None:
+        block["skip_student_probe_v1"] = data.get("skip_student_probe_v1")
 
     raw_profile = block.get("student_brain_profile_v1")
     raw_mode = block.get("student_reasoning_mode")
@@ -530,6 +532,14 @@ def parse_exam_run_contract_request_v1(data: dict[str, Any]) -> tuple[dict[str, 
         stm_ok = bool(raw_stm)
     if stm_ok:
         out["student_test_mode_v1"] = True
+
+    raw_ssp = block.get("skip_student_probe_v1")
+    if isinstance(raw_ssp, str):
+        ssp_ok = raw_ssp.strip().lower() in ("1", "true", "yes", "on")
+    else:
+        ssp_ok = bool(raw_ssp)
+    if ssp_ok:
+        out["skip_student_probe_v1"] = True
     return out, None
 
 

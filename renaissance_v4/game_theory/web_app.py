@@ -1885,6 +1885,7 @@ def create_app() -> Flask:
                 execute_student_behavior_probe_v1,
                 finalize_seam_audit_authority_seal_contract_v1,
                 profile_requires_student_behavior_probe_v1,
+                skip_student_behavior_probe_requested_v1,
                 student_behavior_probe_enabled_v1,
             )
 
@@ -2187,10 +2188,22 @@ def create_app() -> Flask:
                             )
                     return
 
-                _run_probe = student_behavior_probe_enabled_v1() and profile_requires_student_behavior_probe_v1(
+                _skip_probe_rq = skip_student_behavior_probe_requested_v1(
                     exam_req if isinstance(exam_req, dict) else None
                 )
-                if _run_probe:
+                _run_probe = (
+                    student_behavior_probe_enabled_v1()
+                    and profile_requires_student_behavior_probe_v1(
+                        exam_req if isinstance(exam_req, dict) else None
+                    )
+                    and not _skip_probe_rq
+                )
+                if _skip_probe_rq:
+                    _parallel_job_append_rm_preflight_line_v1(
+                        job_id,
+                        "GATE: Student behavior probe = SKIP (skip_student_probe_v1)",
+                    )
+                elif _run_probe:
                     _parallel_job_append_rm_preflight_line_v1(job_id, "GATE: Student behavior probe = START")
                     op_rid_pf = str(operator_batch_audit.get("operator_recipe_id") or "").strip() or None
                     sb_fail, probe_sum = execute_student_behavior_probe_v1(
@@ -3258,6 +3271,7 @@ def create_app() -> Flask:
                 execute_student_behavior_probe_v1,
                 finalize_seam_audit_authority_seal_contract_v1,
                 profile_requires_student_behavior_probe_v1,
+                skip_student_behavior_probe_requested_v1,
                 student_behavior_probe_enabled_v1,
             )
 
@@ -3387,10 +3401,22 @@ def create_app() -> Flask:
             print(f"[pattern_game_parallel] job_id={job_id} {_bp_pass}", file=sys.stderr, flush=True)
             cb_block = _parallel_job_progress_row_callback_v1(job_id)
 
-            _run_probe_b = student_behavior_probe_enabled_v1() and profile_requires_student_behavior_probe_v1(
+            _skip_probe_rq_b = skip_student_behavior_probe_requested_v1(
                 exam_req_block if isinstance(exam_req_block, dict) else None
             )
-            if _run_probe_b:
+            _run_probe_b = (
+                student_behavior_probe_enabled_v1()
+                and profile_requires_student_behavior_probe_v1(
+                    exam_req_block if isinstance(exam_req_block, dict) else None
+                )
+                and not _skip_probe_rq_b
+            )
+            if _skip_probe_rq_b:
+                _parallel_job_append_rm_preflight_line_v1(
+                    job_id,
+                    "GATE: Student behavior probe = SKIP (skip_student_probe_v1)",
+                )
+            elif _run_probe_b:
                 _parallel_job_append_rm_preflight_line_v1(job_id, "GATE: Student behavior probe = START")
                 op_rid_pf_b = str(operator_batch_audit.get("operator_recipe_id") or "").strip() or None
                 sb_fail_b, probe_sum_b = execute_student_behavior_probe_v1(
