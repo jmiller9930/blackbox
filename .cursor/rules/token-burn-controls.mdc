@@ -1,0 +1,27 @@
+---
+description: Reduce Cursor/agent token burn — concise answers and scoped reads
+alwaysApply: true
+---
+
+# Token burn controls (Cursor + repo)
+
+## Agent behavior (Cursor chat)
+
+- Prefer **short** answers; avoid repeating long rules or prior turns unless the user asked for a recap.
+- **Do not** paste multi-hundred-line files or full JSON dumps unless requested; use **summaries**, **line ranges**, or **grep**.
+- Batch tool reads; avoid redundant searches.
+
+## Repo controls (Student Ollama — lab hosts)
+
+Optional caps are implemented in **`renaissance_v4/game_theory/token_burn_guards_v1.py`** and wired into **`student_ollama_student_output_v1`**.
+
+Enable on the host when conserving Ollama/compute tokens::
+
+```bash
+export BLACKBOX_TOKEN_BURN_GUARD=1
+# optional:
+# export BLACKBOX_STUDENT_PROMPT_JSON_MAX_CEILING=32000
+# export BLACKBOX_OLLAMA_NUM_PREDICT_MAX=1536
+```
+
+Default remains **guard off** so existing behavior is unchanged unless this env is set.
