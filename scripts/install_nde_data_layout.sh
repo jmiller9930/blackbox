@@ -18,16 +18,28 @@ mkdir -p "${DEST}"
 # Portable copy (no rsync dependency on minimal hosts).
 cp -a "${LAYOUT}/." "${DEST}/"
 
+# Canonical runtime dirs (layout already provides secops/ + finquant/; tools/ always comes from repo).
+mkdir -p "${DEST}/tools" "${DEST}/secops" "${DEST}/finquant"
+
 TOOLS="${REPO_ROOT}/nde/tools"
-if [[ -d "${TOOLS}" ]]; then
-  mkdir -p "${DEST}/tools"
-  cp -f "${TOOLS}/nde_source_processor.py" "${DEST}/tools/"
-  [[ -f "${TOOLS}/nde_graph_runner.py" ]] && cp -f "${TOOLS}/nde_graph_runner.py" "${DEST}/tools/"
+if [[ ! -d "${TOOLS}" ]]; then
+  echo "warning: repo nde/tools missing at ${TOOLS}; ${DEST}/tools left empty except mkdir" >&2
+else
+  # Python entrypoints and SecOps proof libs (nde_graph_runner imports secops_proof_lib from cwd).
+  for _py in nde_source_processor.py nde_graph_runner.py secops_proof_lib.py secops_nde_proof_runner.py check_langgraph_enforcement.py; do
+    [[ -f "${TOOLS}/${_py}" ]] && cp -f "${TOOLS}/${_py}" "${DEST}/tools/"
+  done
   [[ -f "${TOOLS}/requirements.txt" ]] && cp -f "${TOOLS}/requirements.txt" "${DEST}/tools/"
   for _helper in setup_env.sh run_processor.sh run_graph.sh; do
     [[ -f "${TOOLS}/${_helper}" ]] && cp -f "${TOOLS}/${_helper}" "${DEST}/tools/" && chmod +x "${DEST}/tools/${_helper}"
   done
-  echo "Installed tools: ${DEST}/tools/nde_source_processor.py, nde_graph_runner.py, shell helpers"
+  [[ -f "${TOOLS}/langgraph_enforcement_allowlist.json" ]] && cp -f "${TOOLS}/langgraph_enforcement_allowlist.json" "${DEST}/tools/"
+  # Operator docs (single source of truth with installer, not ad-hoc cp on host).
+  for _doc in HOWTO_SECOPS_NDE.md README.md; do
+    [[ -f "${TOOLS}/${_doc}" ]] && cp -f "${TOOLS}/${_doc}" "${DEST}/tools/"
+  done
+  echo "Installed tools under ${DEST}/tools/ (Python, shell helpers, HOWTO_SECOPS_NDE.md)"
 fi
 
 echo "Done. Top-level README: ${DEST}/README.md"
+echo "Verify: ls -ld ${DEST}/tools ${DEST}/secops ${DEST}/finquant"
