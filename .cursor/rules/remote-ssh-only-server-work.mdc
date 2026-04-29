@@ -7,6 +7,10 @@ alwaysApply: false
 
 **Authoritative workflow:** [`docs/architect/local_remote_development_workflow.md`](docs/architect/local_remote_development_workflow.md) — read it before arguing about “can’t touch clawbot.”
 
+## Remote verification — mandatory
+
+When proof standards, directives, or deployment docs require the **canonical host** (clawbot, lab NDE machine, etc.), **SSH pull + restart + verification are mandatory closure**, not an extra step if the user remembers to ask. If the agent cannot reach the host, **say so with evidence** (error output) and the exact commands still needed — **do not** imply the remote matches **origin** or that acceptance criteria are met.
+
 ## Concepts
 
 - **Remote SSH workspace** (`/home/jmiller/blackbox` on clawbot): sustained server editing and git in one place — **preferred** when most work is on the canonical server tree.

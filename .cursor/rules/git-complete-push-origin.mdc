@@ -5,6 +5,8 @@ alwaysApply: false
 
 # Git: complete work on the remote
 
+**Remote parity is mandatory, not optional.** When the task touches hosts or services that must reflect the change (clawbot, lab UI, Flask, docker stacks named in workflow docs), **you must run push + remote pull/restart/verify** before closing the task or saying “done.” Deferring sync to the operator is **failed delivery**, not efficiency. Exception only when the user **explicitly** asked for local-only or no remote.
+
 **Problem:** Uncommitted or unpushed work is invisible on other machines, forces rework, and risks divergent copies.
 
 ## Default (substantive work)

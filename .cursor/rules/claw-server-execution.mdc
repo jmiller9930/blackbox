@@ -11,9 +11,11 @@ alwaysApply: false
 
 **Proof / phase requirements:** [`docs/runtime/execution_context.md`](docs/runtime/execution_context.md) — verification on **`primary_host`** when required; local-only is not sufficient for phase closure.
 
+**Remote sync is mandatory** for lab-visible work: do not treat SSH/pull/restart as optional follow-up ([`git-complete-push-origin.mdc`](git-complete-push-origin.mdc)).
+
 When the workspace is **Remote SSH** to `~/blackbox` on clawbot, run commands and edit files there as usual.
 
-When the workspace is **local**, implement in the clone; **sync and verify on clawbot** per the workflow doc and user/plan direction.
+When the workspace is **local**, implement in the clone; **sync and verify on clawbot** per the workflow doc and user/plan direction — **do not wait for the operator to request pull** unless they explicitly scoped the task local-only.
 
 **Black Box deploy loop:** After updates that should be on the lab host with **UIUX.Web** restarted, run **`python3 scripts/sync.py`** from repo root (push → remote `git pull` → compose). See **`docs/architect/local_remote_development_workflow.md`** §4.1. Not a substitute for OpenClaw **`workspace_sync.md`** steps when agents/skills/registry changed.
 
