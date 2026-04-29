@@ -39,11 +39,11 @@ try:
     from nde_validation_lib import (
         resolve_staging_jsonl,
         sha256_file,
-        validate_domain_contract,
+        validate_domain_contract as validate_domain_contract_lib,
         validate_training_dataset_for_domain,
     )
 except ImportError:  # pragma: no cover
-    validate_domain_contract = None  # type: ignore
+    validate_domain_contract_lib = None  # type: ignore
     validate_training_dataset_for_domain = None  # type: ignore
     resolve_staging_jsonl = None  # type: ignore
     sha256_file = None  # type: ignore
@@ -67,7 +67,7 @@ except ImportError as e:  # pragma: no cover
     ) from e
 
 
-Mode = Literal["smoke", "full"]
+Mode = Literal["smoke", "full", "simulate"]
 
 
 class NDEState(TypedDict, total=False):
@@ -80,6 +80,7 @@ class NDEState(TypedDict, total=False):
     require_approval: bool
     dry_run: bool
     skip_train: bool
+    simulate_result: str
     contract_ok: bool
     dataset_ok: bool
     train_ok: bool
@@ -222,18 +223,49 @@ def _training_config_path(nde: Path, domain: str) -> Path:
     return cand
 
 
+def _simulation_model_name(nde: Path, domain: str) -> str:
+    p = _training_config_path(nde, domain)
+    if yaml and p.is_file():
+        try:
+            cfg = yaml.safe_load(p.read_text(encoding="utf-8")) or {}
+            return str(cfg.get("model_name_or_path") or "")
+        except Exception:
+            pass
+    return ""
+
+
+def _simulated_adapter_bundle_path(nde: Path, domain: str) -> Path:
+    return nde / domain / "adapters" / f"{domain}-simulated-adapter"
+
+
+def _write_simulated_adapter_manifest(nde: Path, domain: str) -> Path:
+    """Create adapters/<domain>-simulated-adapter/ with manifest JSON (no GPU/train subprocess)."""
+    d = _simulated_adapter_bundle_path(nde, domain)
+    d.mkdir(parents=True, exist_ok=True)
+    model = _simulation_model_name(nde, domain) or "unknown"
+    body = {
+        "simulated": True,
+        "status": "COMPLETE",
+        "domain": domain,
+        "model": model,
+    }
+    out = d / "simulated_adapter.json"
+    out.write_text(json.dumps(body, indent=2), encoding="utf-8")
+    return out
+
+
 def validate_domain_contract(state: NDEState) -> dict[str, Any]:
     nde = Path(state["nde_root"])
     domain = state["domain"]
     run_root = _run_dir(nde, domain, state["run_id"])
     inputs: list[Any] = [{"nde_root": str(nde), "domain": domain}]
     errors: list[str] = []
-    if validate_domain_contract is None:
+    if validate_domain_contract_lib is None:
         errors.append("nde_validation_lib unavailable")
         ok = False
         detail: dict[str, Any] = {}
     else:
-        ok, errs, detail = validate_domain_contract(nde, domain)
+        ok, errs, detail = validate_domain_contract_lib(nde, domain)
         errors.extend(errs)
     outs = [detail]
     next_n = "validate_training_dataset" if ok else "END"
@@ -351,6 +383,28 @@ def smoke_train(state: NDEState) -> dict[str, Any]:
         )
         return {"train_ok": True}
 
+    if mode == "simulate":
+        manifest_path = _write_simulated_adapter_manifest(nde, domain)
+        cfg_path = _training_config_path(nde, domain)
+        _write_node_proof(
+            run_root,
+            "smoke_train",
+            status="ok",
+            inputs=inputs,
+            outputs=[{"simulated": True, "manifest": str(manifest_path)}],
+            errors=[],
+            next_node="smoke_eval",
+            stdout="simulate: no training subprocess; adapter manifest written\n",
+            artifacts={
+                "train_mode": "simulate",
+                "simulated_train": True,
+                "training_subprocess_invoked": False,
+                "simulated_adapter_manifest": str(manifest_path),
+                "training_config": str(cfg_path),
+            },
+        )
+        return {"train_ok": True}
+
     if mode == "full":
         if state.get("require_approval") and not _approval_file(run_root).is_file():
             msg = "Full training blocked: create APPROVED file or pass --require-approval workflow"
@@ -451,6 +505,7 @@ def smoke_eval(state: NDEState) -> dict[str, Any]:
     domain = state["domain"]
     run_root = _run_dir(nde, domain, state["run_id"])
     inputs = [{"domain": domain}]
+    mode = state.get("mode", "smoke")
     if not state.get("train_ok"):
         _write_node_proof(
             run_root,
@@ -463,6 +518,40 @@ def smoke_eval(state: NDEState) -> dict[str, Any]:
             failure_reason="train not ok",
         )
         return {"eval_passed": False, "eval_score": 0.0}
+
+    if mode == "simulate":
+        sr_raw = state.get("simulate_result") or "pass"
+        sr = str(sr_raw).lower().replace("-", "_")
+        if sr == "fail_eval":
+            passed = False
+        elif sr in ("pass", "fail_final"):
+            passed = True
+        else:
+            passed = True
+        score = 1.0 if passed else 0.0
+        lines = [
+            "simulate: smoke_eval short-circuit (no harness inference)",
+            f"simulate_result={sr_raw}",
+            f"eval_passed={passed}",
+        ]
+        _write_node_proof(
+            run_root,
+            "smoke_eval",
+            status="ok" if passed else "failed",
+            inputs=inputs + [{"simulate_result": sr_raw}],
+            outputs=[{"eval_score": score, "simulated_eval": True}],
+            errors=[] if passed else ["simulated fail_eval"],
+            next_node="evaluate_gate",
+            failure_reason=None if passed else "simulated eval gate failure",
+            stdout="\n".join(lines),
+            artifacts={
+                "simulated_eval": True,
+                "eval_inference_invoked": False,
+                "simulate_result": sr_raw,
+                "eval_score": score,
+            },
+        )
+        return {"eval_passed": passed, "eval_score": score, "last_error": "" if passed else "simulated fail_eval"}
 
     staging = _staging_path_resolved(nde, domain)
     score = 0.0
@@ -647,6 +736,45 @@ def final_exam(state: NDEState) -> dict[str, Any]:
     )
     fe_score = 0.0
 
+    if state.get("mode") == "simulate":
+        sr_raw = state.get("simulate_result") or "pass"
+        sr = str(sr_raw).lower().replace("-", "_")
+        ok = base_ok and sr != "fail_final"
+        fe_score = 1.0 if ok else 0.0
+        if domain == "secops":
+            eval_path, final_path = _secops_eval_paths(nde)
+        else:
+            eval_path = nde / domain / "eval" / "eval_v1.json"
+            final_path = nde / domain / "eval" / "final_exam_v1.json"
+        stdout_obj = {
+            "simulated_final_exam": True,
+            "simulate_result": sr_raw,
+            "gate_passed": state.get("gate_passed"),
+            "train_ok": state.get("train_ok"),
+            "dataset_ok": state.get("dataset_ok"),
+            "final_exam_passed": ok,
+            "final_exam_score": fe_score,
+            "final_exam_inference_invoked": False,
+        }
+        _write_node_proof(
+            run_root,
+            "final_exam",
+            status="ok" if ok else "failed",
+            inputs=[{"simulate_result": sr_raw}],
+            outputs=[stdout_obj],
+            errors=[] if ok else ["simulated fail_final"],
+            next_node="certify" if ok else "END",
+            failure_reason=None if ok else "simulated fail_final",
+            stdout=json.dumps(stdout_obj, indent=2),
+            artifacts={
+                "eval_json": str(eval_path),
+                "final_exam_json": str(final_path),
+                "simulated_final_exam": True,
+                "final_exam_score": fe_score,
+            },
+        )
+        return {"final_exam_passed": ok, "final_exam_score": fe_score}
+
     if domain == "secops":
         eval_path, final_path = _secops_eval_paths(nde)
         fe_ok = False
@@ -775,6 +903,8 @@ def certify(state: NDEState) -> dict[str, Any]:
         "training_config": str(cfg_path),
         "note": "Structural certification via LangGraph; operational sign-off is separate.",
     }
+    if state.get("mode") == "simulate":
+        body["simulation_mode"] = True
     (run_root / "CERTIFICATE.json").write_text(json.dumps(body, indent=2), encoding="utf-8")
     _write_node_proof(
         run_root,
@@ -829,7 +959,13 @@ def route_after_final_exam(state: NDEState) -> str:
 def main() -> None:
     ap = argparse.ArgumentParser(description="NDE LangGraph runner")
     ap.add_argument("--domain", required=True)
-    ap.add_argument("--mode", default="smoke", choices=("smoke", "full"))
+    ap.add_argument("--mode", default="smoke", choices=("smoke", "full", "simulate"))
+    ap.add_argument(
+        "--simulate-result",
+        choices=("pass", "fail_eval", "fail_final"),
+        default=None,
+        help="With --mode simulate: pass | fail_eval | fail_final (no GPU/train/eval inference)",
+    )
     ap.add_argument("--require-approval", action="store_true", help="Require APPROVED file before full training")
     ap.add_argument("--nde-root", type=Path, default=None)
     ap.add_argument("--run-id", default=None)
@@ -852,6 +988,17 @@ def main() -> None:
             "error: --mode full requires --require-approval (and APPROVED file before training executes)",
             file=sys.stderr,
         )
+        sys.exit(2)
+
+    if mode == "simulate":
+        if not args.simulate_result:
+            print(
+                "error: --mode simulate requires --simulate-result {pass|fail_eval|fail_final}",
+                file=sys.stderr,
+            )
+            sys.exit(2)
+    elif args.simulate_result:
+        print("error: --simulate-result is only valid with --mode simulate", file=sys.stderr)
         sys.exit(2)
 
     run_root = _run_dir(nde, args.domain, run_id)
@@ -908,6 +1055,7 @@ def main() -> None:
         "require_approval": bool(args.require_approval),
         "dry_run": bool(args.dry_run),
         "skip_train": bool(args.skip_train),
+        "simulate_result": args.simulate_result if mode == "simulate" else "",
         "messages": [],
     }
 

@@ -26,6 +26,17 @@ Run on the NDE host:
 /data/NDE/tools/run_graph.sh --domain secops --mode smoke
 ```
 
+## Simulation (no GPU / no training or eval inference)
+
+Exercises the same LangGraph with **simulated** train/eval/final exam. Requires `--simulate-result`:
+
+```bash
+/data/NDE/tools/run_graph.sh --domain secops --mode simulate --simulate-result pass
+# or: fail_eval | fail_final
+```
+
+Writes a stub adapter under `secops/adapters/secops-simulated-adapter/` and does **not** invoke `train_qlora.py`.
+
 ## What the system does (LangGraph)
 
 * validate_domain_contract
