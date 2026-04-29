@@ -1,0 +1,16 @@
+# NDE Studio — Control Plane UI
+# Run: cd nde_control_plane && docker compose up -d --build
+# URL: http://127.0.0.1:3999
+services:
+  nde-studio:
+    build: .
+    image: nde-studio:local
+    ports:
+      - "3999:3999"
+    environment:
+      PORT: "3999"
+      NDE_DATA_ROOT: /data/NDE
+      REPO_MOUNT: /repo
+    volumes:
+      - /data/NDE:/data/NDE
+      - ${HOME}/blackbox:/repo:ro
