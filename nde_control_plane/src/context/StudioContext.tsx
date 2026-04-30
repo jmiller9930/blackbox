@@ -10,9 +10,10 @@ import {
 
 export type LegacyFinquantPayload = {
   active_run_label: string;
+  finquant_status: "complete" | "training" | "failed" | "no_runs";
   legacy_progress_percent: number;
+  progress_label: string | null;
   current_step: string | null;
-  legacy_status: "idle" | "training" | "complete";
   legacy_log_tail: string;
   finquant_legacy_root: string;
   paths_checked: Record<string, string>;
@@ -24,6 +25,8 @@ export type DashboardPayload = {
   domain: string;
   active_run_id: string | null;
   progress_percent: number;
+  /** FinQuant v0.2 step label e.g. 2726/3000 — present when legacy logs parsed */
+  progress_label?: string | null;
   current_status: string;
   latest_error: string | null;
   certification_status: string;

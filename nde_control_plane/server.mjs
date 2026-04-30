@@ -143,20 +143,74 @@ function trainingLogTail(domain, runId) {
   return parts.join("\n\n").trim();
 }
 
-/** Parse last N/N step pair from FinQuant legacy logs (e.g. 2726/3000) */
+const FINQUANT_V02_STEPS = 3000;
+
+function readUtf8Safe(p) {
+  try {
+    if (!fs.existsSync(p)) return "";
+    return fs.readFileSync(p, "utf8");
+  } catch {
+    return "";
+  }
+}
+
+/** Last window used for step regexes (last progress lines matter). */
+function tailForParse(text) {
+  if (!text) return "";
+  return text.length > 4 * 1024 * 1024
+    ? text.slice(-4 * 1024 * 1024)
+    : text;
+}
+
+/** Prefer last `NNN/3000` — avoids unrelated trailing ratios (e.g. 1/5) wiping real progress. */
+function parseLastThreeThousandStep(text) {
+  const chunk = tailForParse(text);
+  const re = /(\d+)\s*\/\s*3000\b/g;
+  let m;
+  let last = null;
+  while ((m = re.exec(chunk)) !== null) {
+    const cur = parseInt(m[1], 10);
+    last = { cur, tot: FINQUANT_V02_STEPS };
+  }
+  return last;
+}
+
+/** Fallback: last N/N only when denominator is 3000 (same training scale). */
 function parseLastProgressFraction(text) {
   if (!text) return null;
-  const chunk =
-    text.length > 4 * 1024 * 1024 ? text.slice(-4 * 1024 * 1024) : text;
+  const chunk = tailForParse(text);
   const re = /(\d+)\s*\/\s*(\d+)/g;
   let m;
   let last = null;
   while ((m = re.exec(chunk)) !== null) {
     const cur = parseInt(m[1], 10);
     const tot = parseInt(m[2], 10);
-    if (tot > 0 && cur >= 0) last = { cur, tot };
+    if (tot === FINQUANT_V02_STEPS && cur >= 0) last = { cur, tot };
   }
   return last;
+}
+
+function legacyTrainingComplete(parseBlob, step3000) {
+  if (!parseBlob) return false;
+  if (/\btrain_runtime\b/i.test(parseBlob)) return true;
+  if (/\b3000\s*\/\s*3000\b/.test(parseBlob)) return true;
+  if (
+    step3000 &&
+    step3000.tot === FINQUANT_V02_STEPS &&
+    step3000.cur >= FINQUANT_V02_STEPS
+  ) {
+    return true;
+  }
+  return false;
+}
+
+function legacyTrainingFailed(parseBlob, complete) {
+  if (complete || !parseBlob) return false;
+  const tail =
+    parseBlob.length > 200000 ? parseBlob.slice(-200000) : parseBlob;
+  return /traceback|out of memory|\boom\b|cuda.*out of memory|runtimeerror|segmentation fault|\bkilled\b|nan loss|error: exception|child process.*non-zero exit/i.test(
+    tail
+  );
 }
 
 function buildFinquantLegacySection() {
@@ -174,47 +228,44 @@ function buildFinquantLegacySection() {
     adapters_dir: path.join(FINQUANT_LEGACY_ROOT, "adapters"),
   };
 
-  let parseBlob = "";
-  if (fs.existsSync(paths.full_train_log)) {
-    try {
-      parseBlob = fs.readFileSync(paths.full_train_log, "utf8");
-    } catch {
-      parseBlob = "";
-    }
-  }
-  if (!parseBlob && fs.existsSync(paths.full_stdout_log)) {
-    try {
-      parseBlob = fs.readFileSync(paths.full_stdout_log, "utf8");
-    } catch {
-      parseBlob = "";
-    }
-  }
+  const fullTrain = readUtf8Safe(paths.full_train_log);
+  const fullOut = readUtf8Safe(paths.full_stdout_log);
+  const parseBlob = [fullTrain, fullOut].filter(Boolean).join("\n");
+  const hasAnyLogFile =
+    fs.existsSync(paths.full_train_log) ||
+    fs.existsSync(paths.full_stdout_log);
 
-  const lastFrac = parseLastProgressFraction(parseBlob);
+  let step3000 = parseLastThreeThousandStep(parseBlob);
+  if (!step3000) step3000 = parseLastProgressFraction(parseBlob);
+
+  const complete = legacyTrainingComplete(parseBlob, step3000);
+  const failed = legacyTrainingFailed(parseBlob, complete);
+
   let legacy_progress_percent = 0;
-  let current_step = null;
-  if (lastFrac && lastFrac.tot > 0) {
+  let progress_label = null;
+  if (step3000 && step3000.tot > 0) {
     legacy_progress_percent = Math.min(
       100,
-      Math.round((lastFrac.cur / lastFrac.tot) * 100)
+      Math.round((step3000.cur / step3000.tot) * 100)
     );
-    current_step = `${lastFrac.cur}/${lastFrac.tot}`;
+    progress_label = `${step3000.cur}/${step3000.tot}`;
+  }
+  if (complete) {
+    legacy_progress_percent = 100;
+    progress_label = `${FINQUANT_V02_STEPS}/${FINQUANT_V02_STEPS}`;
   }
 
-  const hasTrainRuntime = /\btrain_runtime\b/i.test(parseBlob);
-  const explicit3000 =
-    /\b3000\s*\/\s*3000\b/.test(parseBlob) || current_step === "3000/3000";
-  const epochDone =
-    lastFrac &&
-    lastFrac.tot > 0 &&
-    lastFrac.cur >= lastFrac.tot &&
-    (lastFrac.tot >= 100 || lastFrac.tot === 3000);
-
-  let legacy_status = "idle";
-  if (hasTrainRuntime || explicit3000 || epochDone) {
-    legacy_status = "complete";
-  } else if (lastFrac && lastFrac.cur < lastFrac.tot) {
-    legacy_status = "training";
+  let finquant_status = "no_runs";
+  if (!hasAnyLogFile && !parseBlob.trim()) {
+    finquant_status = "no_runs";
+  } else if (complete) {
+    finquant_status = "complete";
+  } else if (failed) {
+    finquant_status = "failed";
+  } else if (step3000 && step3000.cur < FINQUANT_V02_STEPS) {
+    finquant_status = "training";
+  } else if (parseBlob.trim()) {
+    finquant_status = "no_runs";
   }
 
   const legacy_log_tail =
@@ -238,9 +289,10 @@ function buildFinquantLegacySection() {
 
   return {
     active_run_label: LEGACY_FINQUANT_RUN_LABEL,
+    finquant_status,
     legacy_progress_percent,
-    current_step,
-    legacy_status,
+    progress_label,
+    current_step: progress_label,
     legacy_log_tail,
     finquant_legacy_root: FINQUANT_LEGACY_ROOT,
     paths_checked: paths,
@@ -252,40 +304,46 @@ function buildFinquantLegacySection() {
 }
 
 function mergeFinquantDashboard(base, legacyFin) {
-  const out = { ...base, legacy_finquant: legacyFin };
+  const legacyHeader = legacyFin.legacy_log_tail
+    ? `=== FinQuant v0.2 (${FINQUANT_LEGACY_ROOT}/reports) ===\n${legacyFin.legacy_log_tail}\n`
+    : "";
+  const out = {
+    ...base,
+    legacy_finquant: legacyFin,
+    progress_label: legacyFin.progress_label ?? null,
+    training_log_tail: [legacyHeader, base.training_log_tail || ""]
+      .filter(Boolean)
+      .join("\n"),
+  };
 
-  const ndeEmpty = !base.latest_run_id;
-  const legacyActive =
-    legacyFin.legacy_status === "training" ||
-    legacyFin.legacy_status === "complete";
+  const fs = legacyFin.finquant_status;
 
-  if (ndeEmpty && (legacyActive || legacyFin.current_step)) {
+  if (fs === "complete") {
     out.active_run_id = legacyFin.active_run_label;
+    out.progress_percent = 100;
+    out.current_status = "complete";
+    out.finquant_legacy_complete = true;
+    out.finquant_legacy_training = false;
+    return out;
   }
-
-  if (legacyFin.legacy_status === "training") {
+  if (fs === "training") {
+    out.active_run_id = legacyFin.active_run_label;
     out.progress_percent = legacyFin.legacy_progress_percent;
     out.current_status = "training";
     out.finquant_legacy_training = true;
-  } else if (legacyFin.legacy_status === "complete" && ndeEmpty) {
-    out.progress_percent = legacyFin.legacy_progress_percent;
-    out.current_status = "complete";
-    out.finquant_legacy_complete = true;
-  } else if (legacyFin.legacy_status === "training" && base.latest_run_id) {
-    out.progress_percent = Math.max(
-      base.progress_percent ?? 0,
-      legacyFin.legacy_progress_percent
-    );
-    out.finquant_legacy_training = true;
+    return out;
   }
-
-  const legacyHeader = legacyFin.legacy_log_tail
-    ? `=== Legacy FinQuant (${FINQUANT_LEGACY_ROOT}/reports) ===\n${legacyFin.legacy_log_tail}\n`
-    : "";
-  out.training_log_tail = [legacyHeader, base.training_log_tail || ""]
-    .filter(Boolean)
-    .join("\n");
-
+  if (fs === "failed") {
+    out.active_run_id = legacyFin.active_run_label;
+    out.progress_percent = legacyFin.legacy_progress_percent;
+    out.current_status = "failed";
+    return out;
+  }
+  if (!base.latest_run_id) {
+    out.active_run_id = null;
+    out.current_status = "no_runs";
+    out.progress_percent = 0;
+  }
   return out;
 }
 

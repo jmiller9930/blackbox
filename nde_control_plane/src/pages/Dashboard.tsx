@@ -1,11 +1,27 @@
 import { useStudio } from "../context/StudioContext";
 
+function finquantTrainingStatusLabel(status: string | undefined): string {
+  switch (status) {
+    case "complete":
+      return "COMPLETE";
+    case "training":
+      return "TRAINING";
+    case "failed":
+      return "FAILED";
+    case "no_runs":
+      return "NO RUNS";
+    default:
+      return status ? status.toUpperCase() : "—";
+  }
+}
+
 export default function Dashboard() {
   const { domain, dashboard, dashboardErr, polling } = useStudio();
   const st = dashboard?.state_snapshot as Record<string, unknown> | undefined;
   const lf = dashboard?.legacy_finquant;
   const pct = dashboard?.progress_percent ?? 0;
-  const stepLabel = lf?.current_step;
+  const stepLabel =
+    dashboard?.progress_label ?? lf?.progress_label ?? lf?.current_step;
 
   return (
     <div className="page">
@@ -23,14 +39,17 @@ export default function Dashboard() {
               <span className="muted">No active run</span>
             )}
           </p>
-          {domain === "finquant" && lf?.active_run_label && (
-            <p className="small muted">
-              Legacy label: {lf.active_run_label}
-            </p>
-          )}
         </section>
         <section className="card wide">
           <h3>Live progress</h3>
+          {domain === "finquant" ? (
+            <p className="small mono accent" style={{ marginBottom: "0.35rem" }}>
+              Training status:{" "}
+              <strong>
+                {finquantTrainingStatusLabel(dashboard?.current_status)}
+              </strong>
+            </p>
+          ) : null}
           <div className="progress-bar">
             <div className="progress-fill" style={{ width: `${pct}%` }} />
           </div>
@@ -38,19 +57,20 @@ export default function Dashboard() {
             {pct}% ·{" "}
             {domain === "finquant" && stepLabel ? (
               <>
-                step <strong className="accent">{stepLabel}</strong> ·{" "}
+                step <strong className="accent">{stepLabel}</strong>
+                {polling ? " · syncing…" : ""}
               </>
-            ) : null}
-            {polling ? "syncing…" : "idle"}
+            ) : polling ? (
+              "syncing…"
+            ) : (
+              "idle"
+            )}
           </p>
-          {domain === "finquant" && lf && (
+          {domain === "finquant" && lf?.log_mtime_full_train ? (
             <p className="small muted">
-              Legacy status: <strong>{lf.legacy_status}</strong>
-              {lf.log_mtime_full_train
-                ? ` · log mtime ${lf.log_mtime_full_train}`
-                : ""}
+              Log mtime {lf.log_mtime_full_train}
             </p>
-          )}
+          ) : null}
         </section>
         <section className="card">
           <h3>Current status</h3>
@@ -81,7 +101,7 @@ export default function Dashboard() {
 
       {domain === "finquant" && lf?.adapters_hint != null && (
         <section className="card mt">
-          <h3>Legacy adapters</h3>
+          <h3>Adapters</h3>
           <p className="mono small">
             {lf.adapters_hint.path} — {lf.adapters_hint.count}{" "}
             {lf.adapters_hint.count === 1 ? "entry" : "entries"}
