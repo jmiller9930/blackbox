@@ -561,7 +561,81 @@ export default function Dashboard() {
             ) : null}
 
             <p className="small muted wrap mono">{tc.graph_entrypoint}</p>
-            <div className="row-actions" style={{ gap: "0.75rem", flexWrap: "wrap" }}>
+
+            <div className="advance-gates-panel card-inner-muted mt">
+              <h4 className="small muted" style={{ margin: "0 0 0.5rem" }}>
+                Advance gates (operator)
+              </h4>
+              <ul className="small mono validate-list" style={{ marginBottom: "0.65rem" }}>
+                <li>
+                  <span className="muted">can_advance:</span>{" "}
+                  <strong>{tc.can_advance ? "true" : "false"}</strong>
+                </li>
+                <li>
+                  <span className="muted">admin approved (full):</span>{" "}
+                  <strong>{fullAdminOk ? "true" : "false"}</strong>
+                </li>
+                <li>
+                  <span className="muted">advancing:</span>{" "}
+                  <strong>{advancing ? "true" : "false"}</strong>
+                </li>
+              </ul>
+
+              <div className="advance-disable-explain">
+                <p className="small mono" style={{ margin: "0 0 0.35rem" }}>
+                  <strong className="muted">Smoke</strong>{" "}
+                  {advancing || !tc.can_advance ? (
+                    <span className="muted">— disabled</span>
+                  ) : (
+                    <span className="ok">— enabled</span>
+                  )}
+                </p>
+                {advancing || !tc.can_advance ? (
+                  <ul className="small mono validate-list advance-reason-list">
+                    {advancing ? (
+                      <li>advancing request in flight</li>
+                    ) : null}
+                    {!tc.can_advance ? (
+                      <li>
+                        can_advance=false
+                        {tc.advance_disabled_reason != null &&
+                        String(tc.advance_disabled_reason).length > 0
+                          ? `: ${tc.advance_disabled_reason}`
+                          : ": (no reason code)"}
+                      </li>
+                    ) : null}
+                  </ul>
+                ) : null}
+
+                <p className="small mono" style={{ margin: "0.55rem 0 0.35rem" }}>
+                  <strong className="muted">Full</strong>{" "}
+                  {advancing || !tc.can_advance || !fullAdminOk ? (
+                    <span className="muted">— disabled</span>
+                  ) : (
+                    <span className="ok">— enabled</span>
+                  )}
+                </p>
+                {advancing || !tc.can_advance || !fullAdminOk ? (
+                  <ul className="small mono validate-list advance-reason-list">
+                    {!fullAdminOk ? <li>admin approval unchecked</li> : null}
+                    {advancing ? (
+                      <li>advancing request in flight</li>
+                    ) : null}
+                    {!tc.can_advance ? (
+                      <li>
+                        can_advance=false
+                        {tc.advance_disabled_reason != null &&
+                        String(tc.advance_disabled_reason).length > 0
+                          ? `: ${tc.advance_disabled_reason}`
+                          : ": (no reason code)"}
+                      </li>
+                    ) : null}
+                  </ul>
+                ) : null}
+              </div>
+            </div>
+
+            <div className="row-actions mt" style={{ gap: "0.75rem", flexWrap: "wrap" }}>
               <button
                 type="button"
                 className="btn-primary"
