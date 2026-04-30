@@ -21,6 +21,18 @@ export type LegacyFinquantPayload = {
   log_mtime_full_train?: string | null;
 };
 
+export type FinquantV02Dashboard = {
+  state_path: string;
+  train_complete: boolean;
+  eval_passed: boolean;
+  certified: boolean;
+  score_label: string | null;
+  eval_report_path: string | null;
+  adapter_path: string | null;
+  validated_at: string | null;
+  last_error: string | null;
+};
+
 export type DashboardPayload = {
   domain: string;
   active_run_id: string | null;
@@ -37,6 +49,7 @@ export type DashboardPayload = {
   legacy_finquant?: LegacyFinquantPayload;
   finquant_legacy_training?: boolean;
   finquant_legacy_complete?: boolean;
+  finquant_v02?: FinquantV02Dashboard | null;
 };
 
 type StudioCtx = {

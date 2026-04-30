@@ -304,17 +304,42 @@ function buildFinquantLegacySection() {
 }
 
 function mergeFinquantDashboard(base, legacyFin) {
+  const ss = base.state_snapshot;
+  const v02 = ss && ss.version === "v0.2";
+
   const legacyHeader = legacyFin.legacy_log_tail
     ? `=== FinQuant v0.2 (${FINQUANT_LEGACY_ROOT}/reports) ===\n${legacyFin.legacy_log_tail}\n`
     : "";
   const out = {
     ...base,
     legacy_finquant: legacyFin,
-    progress_label: legacyFin.progress_label ?? null,
+    progress_label: base.progress_label ?? legacyFin.progress_label ?? null,
     training_log_tail: [legacyHeader, base.training_log_tail || ""]
       .filter(Boolean)
       .join("\n"),
   };
+
+  if (v02 && ss.train_ok === true) {
+    out.active_run_id = LEGACY_FINQUANT_RUN_LABEL;
+    out.progress_percent = 100;
+    out.progress_label = legacyFin.progress_label ?? "3000/3000";
+    out.finquant_legacy_complete = true;
+    out.finquant_legacy_training = false;
+    if (ss.eval_passed === false) {
+      out.current_status = "eval_failed";
+    } else if (ss.certified === true) {
+      out.current_status = "certified";
+    } else {
+      out.current_status = "complete";
+    }
+    return out;
+  }
+  if (v02 && ss.train_ok === false) {
+    out.active_run_id = LEGACY_FINQUANT_RUN_LABEL;
+    out.progress_percent = legacyFin.legacy_progress_percent ?? 0;
+    out.current_status = "validation_failed";
+    return out;
+  }
 
   const fs = legacyFin.finquant_status;
 
@@ -345,6 +370,97 @@ function mergeFinquantDashboard(base, legacyFin) {
     out.progress_percent = 0;
   }
   return out;
+}
+
+function resolveFinquantLatestRunAndState(sorted) {
+  const v02RunId = LEGACY_FINQUANT_RUN_LABEL;
+  const v02StatePath = path.join(runRoot("finquant", v02RunId), "state.json");
+  if (fs.existsSync(v02StatePath)) {
+    return {
+      latest: v02RunId,
+      state: readJsonSafe(v02StatePath),
+    };
+  }
+  const latest = sorted[0]?.run_id ?? null;
+  if (!latest) return { latest: null, state: null };
+  return {
+    latest,
+    state: readJsonSafe(path.join(runRoot("finquant", latest), "state.json")),
+  };
+}
+
+function buildFinquantV02DashboardBlock(state) {
+  if (!state || state.version !== "v0.2") return null;
+  const casesPass = state.eval_summary?.cases_pass ?? null;
+  const casesTotal = state.eval_summary?.cases_total ?? null;
+  return {
+    state_path: path.join(runRoot("finquant", LEGACY_FINQUANT_RUN_LABEL), "state.json"),
+    train_complete: state.train_ok === true,
+    eval_passed: state.eval_passed === true,
+    certified: state.certified === true,
+    score_label:
+      casesPass != null && casesTotal != null
+        ? `${casesPass} / ${casesTotal} cases`
+        : null,
+    eval_report_path: state.eval_report ?? null,
+    adapter_path: state.adapter_path ?? null,
+    validated_at: state.validated_at ?? null,
+    last_error: state.last_error ?? null,
+  };
+}
+
+function parseEvalFinquantStdout(stdout) {
+  if (!stdout || typeof stdout !== "string") return null;
+  const start = stdout.indexOf("{");
+  if (start < 0) return null;
+  let depth = 0;
+  for (let i = start; i < stdout.length; i++) {
+    const c = stdout[i];
+    if (c === "{") depth++;
+    else if (c === "}") {
+      depth--;
+      if (depth === 0) {
+        try {
+          return JSON.parse(stdout.slice(start, i + 1));
+        } catch {
+          return null;
+        }
+      }
+    }
+  }
+  return null;
+}
+
+function finquantV02Paths() {
+  const adapterPath = path.join(
+    FINQUANT_LEGACY_ROOT,
+    "adapters",
+    FINQUANT_V02_ADAPTER_NAME
+  );
+  const trainLog = path.join(FINQUANT_LEGACY_ROOT, "reports", "v0.2_full_train.log");
+  const evalReport = path.join(FINQUANT_LEGACY_ROOT, "reports", "v0.2_eval_report.md");
+  const runDir = path.join(runRoot("finquant", LEGACY_FINQUANT_RUN_LABEL));
+  const statePath = path.join(runDir, "state.json");
+  return { adapterPath, trainLog, evalReport, runDir, statePath };
+}
+
+function writeFinquantV02State(payload) {
+  const { runDir, statePath, adapterPath, evalReport } = finquantV02Paths();
+  fs.mkdirSync(runDir, { recursive: true });
+  const doc = {
+    domain: "finquant",
+    version: "v0.2",
+    train_ok: payload.train_ok,
+    eval_passed: payload.eval_passed,
+    certified: !!(payload.train_ok && payload.eval_passed),
+    adapter_path: adapterPath,
+    eval_report: evalReport,
+  };
+  if (payload.eval_summary) doc.eval_summary = payload.eval_summary;
+  if (payload.last_error) doc.last_error = payload.last_error;
+  doc.validated_at = new Date().toISOString();
+  fs.writeFileSync(statePath, JSON.stringify(doc, null, 2));
+  return doc;
 }
 
 // --- Upload storage: <nde>/<domain>/sources/raw ---
@@ -394,6 +510,161 @@ app.get("/api/studio-version", (_req, res) => {
   });
 });
 
+/**
+ * FinQuant v0.2 — validate adapter + training proof, run eval_finquant.py, write NDE state.json.
+ * Requires GPU + Python training stack where this Node process runs (e.g. trx40 host with deps installed).
+ */
+app.post("/api/finquant/validate-v02", async (_req, res) => {
+  const { adapterPath, trainLog, evalReport, statePath } = finquantV02Paths();
+  const evalScript = path.join(REPO, "finquant", "evals", "eval_finquant.py");
+
+  try {
+    if (!fs.existsSync(adapterPath) || !fs.statSync(adapterPath).isDirectory()) {
+      writeFinquantV02State({
+        train_ok: false,
+        eval_passed: false,
+        last_error: `adapter_missing:${adapterPath}`,
+      });
+      return res.status(400).json({
+        ok: false,
+        step: "adapter",
+        error: "adapter_missing",
+        adapter_path: adapterPath,
+        state_path: statePath,
+      });
+    }
+
+    let trainBlob = "";
+    try {
+      trainBlob = fs.readFileSync(trainLog, "utf8");
+    } catch {
+      writeFinquantV02State({
+        train_ok: false,
+        eval_passed: false,
+        last_error: `train_log_unreadable:${trainLog}`,
+      });
+      return res.status(400).json({
+        ok: false,
+        step: "train_log",
+        error: "train_log_missing",
+        train_log: trainLog,
+        state_path: statePath,
+      });
+    }
+
+    const has3000 = /\b3000\s*\/\s*3000\b/.test(trainBlob);
+    const hasRuntime = /\btrain_runtime\b/i.test(trainBlob);
+    if (!has3000 || !hasRuntime) {
+      writeFinquantV02State({
+        train_ok: false,
+        eval_passed: false,
+        last_error: `training_incomplete:has_3000=${has3000},has_train_runtime=${hasRuntime}`,
+      });
+      return res.status(400).json({
+        ok: false,
+        step: "training_proof",
+        error: "training_not_complete",
+        has3000,
+        has_train_runtime: hasRuntime,
+        train_log: trainLog,
+        state_path: statePath,
+      });
+    }
+
+    if (!fs.existsSync(evalScript)) {
+      writeFinquantV02State({
+        train_ok: true,
+        eval_passed: false,
+        last_error: "eval_script_missing_under_REPO_MOUNT",
+      });
+      return res.status(503).json({
+        ok: false,
+        step: "eval",
+        error: "eval_script_missing",
+        eval_script: evalScript,
+        state_path: statePath,
+      });
+    }
+
+    const { stdout, stderr } = await execFileAsync(
+      "python3",
+      [
+        evalScript,
+        "--adapter",
+        adapterPath,
+        "--write-report",
+        "--report-path",
+        evalReport,
+      ],
+      {
+        cwd: REPO,
+        env: {
+          ...process.env,
+          FINQUANT_BASE: FINQUANT_LEGACY_ROOT,
+        },
+        maxBuffer: 64 * 1024 * 1024,
+        timeout: 3_600_000,
+      }
+    );
+
+    const parsed = parseEvalFinquantStdout(stdout);
+    const summary = parsed?.summary;
+    const casesPass = Number(summary?.cases_pass ?? 0);
+    const casesTotal = Number(summary?.cases_total ?? 0);
+    const evalPassed =
+      Number.isFinite(casesTotal) &&
+      casesTotal > 0 &&
+      casesPass === casesTotal;
+
+    const evalSummary = summary
+      ? {
+          cases_pass: casesPass,
+          cases_total: casesTotal,
+          adapter: summary.adapter,
+        }
+      : undefined;
+
+    const doc = writeFinquantV02State({
+      train_ok: true,
+      eval_passed: evalPassed,
+      eval_summary: evalSummary,
+      last_error: evalPassed
+        ? undefined
+        : `eval_cases:${casesPass}/${casesTotal}`,
+    });
+
+    return res.json({
+      ok: true,
+      certified: doc.certified === true,
+      eval_passed: doc.eval_passed,
+      state_path: statePath,
+      eval_report: evalReport,
+      summary: evalSummary,
+      stderr: stderr ? String(stderr).slice(-4000) : "",
+    });
+  } catch (err) {
+    const msg =
+      (err && err.stderr && String(err.stderr)) ||
+      (err && err.message) ||
+      String(err);
+    try {
+      writeFinquantV02State({
+        train_ok: true,
+        eval_passed: false,
+        last_error: `eval_exec:${msg.slice(0, 1200)}`,
+      });
+    } catch {
+      /* ignore */
+    }
+    return res.status(500).json({
+      ok: false,
+      step: "eval",
+      error: msg.slice(0, 8000),
+      state_path: statePath,
+    });
+  }
+});
+
 app.get("/api/domains", (_req, res) => {
   let discovered = ["secops", "finquant"];
   try {
@@ -425,14 +696,22 @@ app.get("/api/runs/:domain", (req, res) => {
 
 function buildDashboardPayload(domain) {
   const sorted = listRunsSorted(domain);
-  const latest = sorted[0]?.run_id ?? null;
+  let latest = sorted[0]?.run_id ?? null;
   let state = null;
+
+  if (domain === "finquant") {
+    const r = resolveFinquantLatestRunAndState(sorted);
+    latest = r.latest;
+    state = r.state;
+  } else if (sorted.length) {
+    latest = sorted[0].run_id;
+    state = readJsonSafe(path.join(runRoot(domain, latest), "state.json"));
+  }
+
   let cert = false;
   let lastErr = "";
   if (latest) {
-    const rr = runRoot(domain, latest);
-    state = readJsonSafe(path.join(rr, "state.json"));
-    cert = fs.existsSync(path.join(rr, "CERTIFICATE.json"));
+    cert = fs.existsSync(path.join(runRoot(domain, latest), "CERTIFICATE.json"));
     lastErr = state?.last_error != null ? String(state.last_error) : "";
   }
   const stagingPath =
@@ -457,6 +736,8 @@ function buildDashboardPayload(domain) {
     state_snapshot: state,
     staging_path_hint: stagingPath,
     training_log_tail: latest ? trainingLogTail(domain, latest) : "",
+    finquant_v02:
+      domain === "finquant" ? buildFinquantV02DashboardBlock(state) : undefined,
   };
 
   if (domain === "finquant") {
