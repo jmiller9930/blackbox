@@ -256,13 +256,21 @@ export function parseTrainerFromLog(text) {
 
   let trainCur = null;
   let trainTot = null;
-  const stepRe = /(\d+)\s*\/\s*(\d+)\b/g;
-  while ((m = stepRe.exec(chunk)) !== null) {
-    const cur = parseInt(m[1], 10);
-    const tot = parseInt(m[2], 10);
-    if (tot > 0 && tot < 1e9 && cur >= 0 && (tot >= 50 || tot === 3000)) {
-      trainCur = cur;
-      trainTot = tot;
+  /** Prefer explicit `/3000` (FinQuant full) — matches `2097/3000`, tqdm `| 2097/3000 [`, etc. */
+  const step3000Re = /(\d+)\s*\/\s*3000\b/g;
+  while ((m = step3000Re.exec(chunk)) !== null) {
+    trainCur = parseInt(m[1], 10);
+    trainTot = 3000;
+  }
+  if (trainCur == null) {
+    const stepRe = /(\d+)\s*\/\s*(\d+)\b/g;
+    while ((m = stepRe.exec(chunk)) !== null) {
+      const cur = parseInt(m[1], 10);
+      const tot = parseInt(m[2], 10);
+      if (tot > 0 && tot < 1e9 && cur >= 0 && (tot >= 50 || tot === 3000)) {
+        trainCur = cur;
+        trainTot = tot;
+      }
     }
   }
 

@@ -55,7 +55,7 @@ export type ActiveCycleSnapshot = {
 export type ActiveJobPayload = {
   run_id: string;
   status: string;
-  progress_percent: number;
+  progress_percent: number | null;
   progress_label: string | null;
   current_node: string;
   latest_error: string | null;
@@ -64,6 +64,16 @@ export type ActiveJobPayload = {
   elapsed_display: string;
   elapsed_ms: number;
   derived_started_from_folder?: boolean;
+  /** LangGraph stage label e.g. Step 3 / 7 — full_train */
+  pipeline_stage_label?: string | null;
+  /** Trainer-derived detail e.g. waiting for first step log or N / 3000 */
+  training_progress_detail?: string | null;
+  /** Use for progress bar width when training; null when indeterminate */
+  training_progress_bar_percent?: number | null;
+  /** True: no measured trainer steps yet — show indeterminate bar, not a fake % */
+  training_progress_indeterminate?: boolean;
+  /** One-line summary for live progress */
+  training_live_summary?: string | null;
 };
 
 export type SystemPosture = "NO_ACTIVE_JOB" | "RUNNING" | "BLOCKED" | "FAILED";
@@ -115,9 +125,11 @@ export type TrainingTelemetryPayload = {
   dataset_rows: number;
   checkpoint_shards_loaded: number;
   checkpoint_shards_total: number;
-  train_step_current: number;
-  train_step_total: number;
-  progress_percent: number;
+  train_step_current: number | null;
+  train_step_total: number | null;
+  progress_percent: number | null;
+  training_initializing?: boolean;
+  gpu_status_hint?: string | null;
   epoch: number | null;
   loss: number | null;
   learning_rate: number | null;
@@ -160,7 +172,7 @@ export type DashboardPayload = {
   primary_run_is_cycle_candidate?: boolean;
   prior_certified_run_id?: string | null;
   prior_certified_version?: string | null;
-  progress_percent: number;
+  progress_percent: number | null;
   /** FinQuant v0.2 step label e.g. 2726/3000 — present when legacy logs parsed */
   progress_label?: string | null;
   current_status: string;

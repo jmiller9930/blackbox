@@ -820,11 +820,24 @@ function derivePipelineVisual(domain, runId) {
     pipelineStatus,
     currentNode,
     latestError,
-    progressLabel
+    progressLabel,
+    extras = null
   ) {
+    const ex = extras || {};
+    const pipeline_stage_label = ex.pipeline_stage_label ?? null;
+    const training_progress_detail = ex.training_progress_detail ?? null;
+    const training_progress_bar_percent = ex.training_progress_bar_percent ?? null;
+    const training_progress_indeterminate = !!ex.training_progress_indeterminate;
+    const training_live_summary = ex.training_live_summary ?? null;
+
     return {
       progress_percent: progressPercent,
       progress_label: progressLabel ?? null,
+      pipeline_stage_label,
+      training_progress_detail,
+      training_progress_bar_percent,
+      training_progress_indeterminate,
+      training_live_summary,
       pipeline_status: pipelineStatus,
       dashboard_status: dashboardStatus,
       current_node: currentNode,
@@ -841,6 +854,11 @@ function derivePipelineVisual(domain, runId) {
         elapsed_display: formatElapsed(ts.elapsed_ms),
         elapsed_ms: ts.elapsed_ms,
         derived_started_from_folder: ts.derived_started_from_folder,
+        pipeline_stage_label,
+        training_progress_detail,
+        training_progress_bar_percent,
+        training_progress_indeterminate,
+        training_live_summary,
       },
       run_list_badge: runListBadge(dashboardStatus),
     };
@@ -1000,19 +1018,68 @@ function derivePipelineVisual(domain, runId) {
   }
 
   if (!tOk) {
-    const frac = parseLastProgressFractionGeneric(trainLog);
-    let p = 18;
-    if (frac && frac.tot > 0) {
-      p = 15 + Math.min(1, frac.cur / frac.tot) * 45;
+    const displayTrainNode = trainStepDisplayName(state);
+    const pipelineStageStr = `Step 3 / 7 — ${displayTrainNode}`;
+
+    if (state?.mode === "full") {
+      const parsed = parseTrainerFromLog(trainLog);
+      const hasTrainerSteps =
+        parsed.train_step_current != null &&
+        parsed.train_step_total != null &&
+        parsed.train_step_total > 0;
+      const barPct = hasTrainerSteps
+        ? Math.round((parsed.train_step_current / parsed.train_step_total) * 1000) / 10
+        : null;
+      const trainingDetail = hasTrainerSteps
+        ? `${parsed.train_step_current} / ${parsed.train_step_total}`
+        : "waiting for first step log";
+      const liveSummary = hasTrainerSteps
+        ? `${pipelineStageStr} · ${trainingDetail}`
+        : `Step 3 / 7 · ${displayTrainNode} · initializing`;
+      return activeJobBase(
+        barPct,
+        "TRAINING",
+        "training",
+        displayTrainNode,
+        null,
+        hasTrainerSteps ? `${parsed.train_step_current}/${parsed.train_step_total}` : null,
+        {
+          training_progress_bar_percent: barPct,
+          training_progress_indeterminate: !hasTrainerSteps,
+          pipeline_stage_label: pipelineStageStr,
+          training_progress_detail: trainingDetail,
+          training_live_summary: liveSummary,
+        }
+      );
     }
-    const pl = frac && frac.tot > 0 ? `${frac.cur}/${frac.tot}` : null;
+
+    const frac = parseLastProgressFractionGeneric(trainLog);
+    const hasFrac = frac && frac.tot > 0;
+    const p = hasFrac ? Math.round(15 + Math.min(1, frac.cur / frac.tot) * 45) : null;
+    const pl = hasFrac ? `${frac.cur}/${frac.tot}` : null;
+    const barPctSmoke = hasFrac
+      ? Math.round((frac.cur / frac.tot) * 1000) / 10
+      : null;
+    const trainingDetailSmoke = hasFrac
+      ? `${frac.cur} / ${frac.tot}`
+      : "waiting for first step log";
+    const liveSummarySmoke = hasFrac
+      ? `${pipelineStageStr} · ${frac.cur} / ${frac.tot}`
+      : `Step 3 / 7 · smoke_train · initializing`;
     return activeJobBase(
-      Math.round(p),
+      p,
       "TRAINING",
       "training",
-      trainStepDisplayName(state),
+      "smoke_train",
       null,
-      pl
+      pl,
+      {
+        training_progress_bar_percent: barPctSmoke,
+        training_progress_indeterminate: !hasFrac,
+        pipeline_stage_label: pipelineStageStr,
+        training_progress_detail: trainingDetailSmoke,
+        training_live_summary: liveSummarySmoke,
+      }
     );
   }
 
@@ -2198,9 +2265,19 @@ async function buildTrainingTelemetry(domain, runId, state) {
     dataset_rows: rows,
     checkpoint_shards_loaded: parsed.checkpoint_shards_loaded ?? 0,
     checkpoint_shards_total: parsed.checkpoint_shards_total ?? 0,
-    train_step_current: parsed.train_step_current ?? 0,
-    train_step_total: parsed.train_step_total ?? 3000,
-    progress_percent: parsed.progress_percent != null ? parsed.progress_percent : 0,
+    train_step_current: parsed.train_step_current,
+    train_step_total: parsed.train_step_total,
+    progress_percent: parsed.progress_percent,
+    training_initializing: parsed.train_step_current == null,
+    gpu_status_hint:
+      gpu?.gpu_name &&
+      parsed.train_step_current != null &&
+      gpu.gpu_util_pct != null &&
+      gpu.gpu_util_pct >= 5
+        ? "GPU active"
+        : gpu?.gpu_name
+          ? "GPU detected / warmup"
+          : null,
     epoch: parsed.epoch ?? null,
     loss: parsed.loss ?? null,
     learning_rate: parsed.learning_rate ?? null,
@@ -2298,7 +2375,12 @@ async function buildDashboardPayload(domain) {
     primary_run_is_cycle_candidate: primaryIsCycle,
     prior_certified_run_id: primaryIsCycle ? tcSummary.latest_certified_run_id : null,
     prior_certified_version: primaryIsCycle ? tcSummary.latest_certified_version : null,
-    progress_percent: pvProgress?.progress_percent ?? 0,
+    progress_percent:
+      pvProgress == null
+        ? 0
+        : pvProgress.progress_percent != null
+          ? pvProgress.progress_percent
+          : null,
     progress_label: pvProgress?.progress_label ?? null,
     current_status:
       pvProgress?.pipeline_status ??

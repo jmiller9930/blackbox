@@ -52,6 +52,9 @@ function renderTelemetryRows(tt: TrainingTelemetryPayload) {
     "GPU telemetry unavailable";
   const vramLine = tt.vram_used?.trim() || "—";
   const utilLine = tt.gpu_utilization?.trim() || "—";
+  const initializing =
+    tt.training_initializing === true ||
+    (tt.train_step_current == null && tt.train_step_total == null);
 
   return (
     <ul className="small mono validate-list" style={{ marginBottom: 0 }}>
@@ -85,15 +88,34 @@ function renderTelemetryRows(tt: TrainingTelemetryPayload) {
           {tt.checkpoint_shards_loaded} / {tt.checkpoint_shards_total}
         </strong>
       </li>
-      <li>
-        Step:{" "}
-        <strong>
-          {tt.train_step_current} / {tt.train_step_total}
-        </strong>
-      </li>
-      <li>
-        Progress: <strong>{tt.progress_percent}%</strong>
-      </li>
+      {initializing ? (
+        <>
+          <li>
+            <strong className="accent">Training initializing</strong>
+          </li>
+          <li>
+            Step: <strong>waiting for trainer output</strong>
+          </li>
+          <li>
+            Progress: <strong>calculating</strong>
+          </li>
+        </>
+      ) : (
+        <>
+          <li>
+            Step:{" "}
+            <strong>
+              {tt.train_step_current} / {tt.train_step_total}
+            </strong>
+          </li>
+          <li>
+            Progress:{" "}
+            <strong>
+              {tt.progress_percent != null ? `${tt.progress_percent}%` : "calculating"}
+            </strong>
+          </li>
+        </>
+      )}
       <li>
         Epoch: <strong>{formatTelemetryMetric(tt.epoch, 2)}</strong>
       </li>
@@ -107,6 +129,11 @@ function renderTelemetryRows(tt: TrainingTelemetryPayload) {
         Token accuracy:{" "}
         <strong>{formatTelemetryMetric(tt.mean_token_accuracy)}</strong>
       </li>
+      {tt.gpu_status_hint ? (
+        <li className="muted wrap">
+          <strong>{tt.gpu_status_hint}</strong>
+        </li>
+      ) : null}
       <li>
         GPU: <strong>{gpuLine}</strong>
       </li>
@@ -156,13 +183,13 @@ export default function Dashboard() {
   const statusLines = dashboard?.system_status_lines ?? [];
   const pollLive = !!(polling && execId);
 
-  const pct = dashboard?.progress_percent ?? aj?.progress_percent ?? 0;
-  const stepLabel =
-    dashboard?.progress_label ??
-    (aj?.progress_label
-      ? `${aj.current_node} · ${aj.progress_label}`
-      : aj?.current_node) ??
-    null;
+  const isTrainingPhase = dashboard?.dashboard_status_label === "TRAINING";
+  const pctLegacy =
+    dashboard?.progress_percent != null
+      ? dashboard.progress_percent
+      : aj?.progress_percent != null
+        ? aj.progress_percent
+        : 0;
 
   const st = dashboard?.state_snapshot as Record<string, unknown> | undefined;
 
@@ -338,7 +365,24 @@ export default function Dashboard() {
                 <strong>{jobStatusLabel(dashboard.dashboard_status_label || aj.status)}</strong>
               </li>
               <li>
-                Progress: <strong>{aj.progress_percent}%</strong>
+                Pipeline stage:{" "}
+                <strong>{aj.pipeline_stage_label ?? dashboard.pipeline_focus_label ?? "—"}</strong>
+              </li>
+              <li>
+                Training progress:{" "}
+                <strong>{aj.training_progress_detail ?? "—"}</strong>
+              </li>
+              <li>
+                Training bar:{" "}
+                <strong>
+                  {aj.training_progress_indeterminate
+                    ? "initializing (no measured steps yet)"
+                    : aj.training_progress_bar_percent != null
+                      ? `${aj.training_progress_bar_percent}%`
+                      : aj.progress_percent != null
+                        ? `${aj.progress_percent}%`
+                        : "—"}
+                </strong>
                 {aj.progress_label ? (
                   <span className="muted"> · log {aj.progress_label}</span>
                 ) : null}
@@ -348,7 +392,7 @@ export default function Dashboard() {
                 {pollLive ? <span className="muted"> · syncing…</span> : null}
               </li>
               <li>
-                Pipeline step:{" "}
+                Pipeline detail:{" "}
                 <strong>{dashboard.pipeline_focus_label ?? "—"}</strong>
               </li>
               <li>
@@ -536,24 +580,69 @@ export default function Dashboard() {
                 ) : null}
               </p>
               {execId ? (
-                <>
-                  <div className="progress-bar">
-                    <div className="progress-fill" style={{ width: `${pct}%` }} />
-                  </div>
-                  <p className="mono small">
-                    {pct}% ·{" "}
-                    {stepLabel ? (
-                      <>
-                        step <strong className="accent">{stepLabel}</strong>
-                        {pollLive ? " · syncing…" : ""}
-                      </>
-                    ) : pollLive ? (
-                      "syncing…"
+                isTrainingPhase &&
+                aj?.pipeline_stage_label &&
+                aj?.training_progress_detail != null ? (
+                  <>
+                    <p className="mono small" style={{ marginBottom: "0.35rem" }}>
+                      Pipeline stage:{" "}
+                      <strong className="accent">{aj.pipeline_stage_label}</strong>
+                    </p>
+                    <p className="mono small" style={{ marginBottom: "0.5rem" }}>
+                      Training progress:{" "}
+                      <strong className="accent">{aj.training_progress_detail}</strong>
+                    </p>
+                    {aj.training_progress_indeterminate ? (
+                      <div
+                        className="progress-bar progress-bar-indeterminate"
+                        role="progressbar"
+                        aria-valuetext="Training initializing"
+                      />
                     ) : (
-                      "—"
+                      <>
+                        <div className="progress-bar">
+                          <div
+                            className="progress-fill"
+                            style={{
+                              width: `${Math.min(100, aj.training_progress_bar_percent ?? 0)}%`,
+                            }}
+                          />
+                        </div>
+                        {aj.training_progress_bar_percent != null ? (
+                          <p className="mono small muted" style={{ marginTop: "0.35rem" }}>
+                            Percent:{" "}
+                            <strong>{aj.training_progress_bar_percent}%</strong> (from trainer
+                            steps)
+                          </p>
+                        ) : null}
+                      </>
                     )}
-                  </p>
-                </>
+                    <p className="mono small" style={{ marginTop: "0.35rem" }}>
+                      {aj.training_live_summary ?? "—"}
+                      {pollLive ? <span className="muted"> · syncing…</span> : null}
+                    </p>
+                  </>
+                ) : (
+                  <>
+                    <div className="progress-bar">
+                      <div
+                        className="progress-fill"
+                        style={{ width: `${pctLegacy}%` }}
+                      />
+                    </div>
+                    <p className="mono small">
+                      {pctLegacy}% ·{" "}
+                      <strong className="accent">
+                        {dashboard?.progress_label ??
+                          (aj?.progress_label
+                            ? `${aj.current_node} · ${aj.progress_label}`
+                            : aj?.current_node) ??
+                          "—"}
+                      </strong>
+                      {pollLive ? <span className="muted"> · syncing…</span> : null}
+                    </p>
+                  </>
+                )
               ) : (
                 <>
                   <div

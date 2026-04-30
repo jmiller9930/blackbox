@@ -427,6 +427,39 @@ body {
 }
 
 /* No in-flight job: do not use a filled “active” bar (avoids 100% blue + “no job running”). */
+.progress-bar-indeterminate {
+  position: relative;
+  height: 8px;
+  border-radius: 4px;
+  background: rgba(255, 255, 255, 0.08);
+  overflow: hidden;
+}
+
+.progress-bar-indeterminate::after {
+  content: "";
+  position: absolute;
+  top: 0;
+  height: 100%;
+  width: 38%;
+  border-radius: 4px;
+  background: linear-gradient(
+    90deg,
+    transparent,
+    var(--accent, #5eb3ff),
+    transparent
+  );
+  animation: nde-progress-indeterminate 1.15s ease-in-out infinite;
+}
+
+@keyframes nde-progress-indeterminate {
+  0% {
+    left: -40%;
+  }
+  100% {
+    left: 105%;
+  }
+}
+
 .progress-bar-idle {
   display: flex;
   align-items: center;
