@@ -1,4 +1,28 @@
-import { useCallback, useState } from "react";
+import {
+  DndContext,
+  type DragEndEvent,
+  KeyboardSensor,
+  PointerSensor,
+  closestCenter,
+  useSensor,
+  useSensors,
+} from "@dnd-kit/core";
+import {
+  SortableContext,
+  arrayMove,
+  sortableKeyboardCoordinates,
+  verticalListSortingStrategy,
+} from "@dnd-kit/sortable";
+import { useCallback, useEffect, useMemo, useState } from "react";
+import {
+  DASHBOARD_BLOCK_ORDER_DEFAULT,
+  loadDashboardBlockOrder,
+  mergeVisibleBlockOrder,
+  saveDashboardBlockOrder,
+  getVisibleDashboardBlockIds,
+  type DashboardBlockId,
+} from "../dashboardBlockOrder";
+import { SortableDashboardBlock } from "../SortableDashboardBlock";
 import { useStudio, type SystemPosture } from "../context/StudioContext";
 
 function pipelineStatusLabel(status: string | undefined): string {
@@ -30,8 +54,8 @@ export default function Dashboard() {
   const [advancing, setAdvancing] = useState(false);
   const [advanceMsg, setAdvanceMsg] = useState<string | null>(null);
   const [fullAdminOk, setFullAdminOk] = useState(false);
-  /** Operator directive: pipeline trace collapsed by default. */
   const [pipelineDetailOpen, setPipelineDetailOpen] = useState(false);
+  const [orderedBlockIds, setOrderedBlockIds] = useState<DashboardBlockId[]>([]);
 
   const tc = dashboard?.training_cycle;
   const aj = dashboard?.active_job;
@@ -48,6 +72,62 @@ export default function Dashboard() {
       ? `${aj.current_node} · ${aj.progress_label}`
       : aj?.current_node) ??
     null;
+
+  const st = dashboard?.state_snapshot as Record<string, unknown> | undefined;
+
+  const visibleBlockIds = useMemo(
+    () =>
+      getVisibleDashboardBlockIds({
+        dashboard,
+        execId,
+        aj,
+        featuredId,
+        tc,
+        st,
+      }),
+    [
+      dashboard,
+      execId,
+      aj,
+      featuredId,
+      tc,
+      st,
+    ]
+  );
+
+  const visibleSig = visibleBlockIds.join(",");
+
+  useEffect(() => {
+    const saved = loadDashboardBlockOrder(domain);
+    setOrderedBlockIds(
+      mergeVisibleBlockOrder(saved, visibleBlockIds, DASHBOARD_BLOCK_ORDER_DEFAULT)
+    );
+  }, [domain, visibleSig]);
+
+  const sensors = useSensors(
+    useSensor(PointerSensor, {
+      activationConstraint: { distance: 8 },
+    }),
+    useSensor(KeyboardSensor, {
+      coordinateGetter: sortableKeyboardCoordinates,
+    })
+  );
+
+  const onDragEnd = useCallback(
+    (event: DragEndEvent) => {
+      const { active, over } = event;
+      if (!over || active.id === over.id) return;
+      setOrderedBlockIds((items) => {
+        const oldIndex = items.indexOf(active.id as DashboardBlockId);
+        const newIndex = items.indexOf(over.id as DashboardBlockId);
+        if (oldIndex < 0 || newIndex < 0) return items;
+        const next = arrayMove(items, oldIndex, newIndex);
+        saveDashboardBlockOrder(domain, next);
+        return next;
+      });
+    },
+    [domain]
+  );
 
   const runAdvanceCycle = useCallback(
     async (mode: "smoke" | "full") => {
@@ -79,435 +159,491 @@ export default function Dashboard() {
     [domain, refresh]
   );
 
-  const st = dashboard?.state_snapshot as Record<string, unknown> | undefined;
+  const renderBlock = (blockId: DashboardBlockId) => {
+    switch (blockId) {
+      case "system-status":
+        return (
+          <section className="card wide system-status-card">
+            <h3 style={{ marginTop: 0 }}>System status</h3>
+            <p className="mono accent" style={{ marginBottom: "0.5rem" }}>
+              {systemPostureHeading(posture)}
+            </p>
+            {statusLines.length > 0 ? (
+              <ul className="small mono validate-list" style={{ marginBottom: 0 }}>
+                {statusLines.map((line, i) => (
+                  <li key={`${i}-${line.slice(0, 24)}`}>{line}</li>
+                ))}
+              </ul>
+            ) : null}
+          </section>
+        );
 
-  return (
-    <div className="page">
-      <h2 className="page-title">Dashboard</h2>
-      {dashboardErr && <p className="err">{dashboardErr}</p>}
+      case "certified-summary":
+        if (!dashboard?.certified_feature_summary) return null;
+        return (
+          <section className="card wide certified-summary-card">
+            <h3 style={{ marginTop: 0 }}>Latest certified run</h3>
+            <ul className="small mono validate-list" style={{ marginBottom: 0 }}>
+              <li>
+                Run ID:{" "}
+                <strong className="accent">
+                  {dashboard.certified_feature_summary.run_id}
+                </strong>
+              </li>
+              <li>
+                Status: <strong>CERTIFIED</strong>
+              </li>
+              <li>
+                Duration:{" "}
+                <strong>{dashboard.certified_feature_summary.duration_display}</strong>
+              </li>
+              <li>
+                Completed:{" "}
+                <span className="muted">
+                  {dashboard.certified_feature_summary.completed_at ?? "—"}
+                </span>
+              </li>
+            </ul>
+          </section>
+        );
 
-      <section className="card mt wide system-status-card">
-        <h3 style={{ marginTop: 0 }}>System status</h3>
-        <p className="mono accent" style={{ marginBottom: "0.5rem" }}>
-          {systemPostureHeading(posture)}
-        </p>
-        {statusLines.length > 0 ? (
-          <ul className="small mono validate-list" style={{ marginBottom: 0 }}>
-            {statusLines.map((line, i) => (
-              <li key={`${i}-${line.slice(0, 24)}`}>{line}</li>
-            ))}
-          </ul>
-        ) : null}
-      </section>
-
-      {dashboard?.certified_feature_summary ? (
-        <section className="card mt wide certified-summary-card">
-          <h3 style={{ marginTop: 0 }}>Latest certified run</h3>
-          <ul className="small mono validate-list" style={{ marginBottom: 0 }}>
-            <li>
-              Run ID:{" "}
-              <strong className="accent">
-                {dashboard.certified_feature_summary.run_id}
-              </strong>
-            </li>
-            <li>
-              Status: <strong>CERTIFIED</strong>
-            </li>
-            <li>
-              Duration:{" "}
-              <strong>{dashboard.certified_feature_summary.duration_display}</strong>
-            </li>
-            <li>
-              Completed:{" "}
-              <span className="muted">
-                {dashboard.certified_feature_summary.completed_at ?? "—"}
-              </span>
-            </li>
-          </ul>
-        </section>
-      ) : null}
-
-      {execId && aj ? (
-        <section className="card mt wide active-job-card">
-          <h3 style={{ marginTop: 0 }}>Job in progress</h3>
-          <ul className="small mono validate-list" style={{ marginBottom: 0 }}>
-            <li>
-              Run ID: <strong className="accent">{aj.run_id}</strong>
-            </li>
-            <li>
-              Status:{" "}
-              <strong>{jobStatusLabel(dashboard.dashboard_status_label || aj.status)}</strong>
-            </li>
-            <li>
-              Progress: <strong>{aj.progress_percent}%</strong>
-              {aj.progress_label ? (
-                <span className="muted"> · log {aj.progress_label}</span>
-              ) : null}
-            </li>
-            <li>
-              Elapsed: <strong>{aj.elapsed_display}</strong>
-              {pollLive ? <span className="muted"> · syncing…</span> : null}
-            </li>
-            <li>
-              Pipeline step:{" "}
-              <strong>{dashboard.pipeline_focus_label ?? "—"}</strong>
-            </li>
-            <li>
-              Current node: <strong>{aj.current_node}</strong>
-            </li>
-            <li>
-              Started at:{" "}
-              <span className="muted">{aj.started_at ?? "—"}</span>
-              {aj.derived_started_from_folder ? (
-                <span className="muted"> (derived)</span>
-              ) : null}
-            </li>
-            <li>
-              Last updated: <span className="muted">{aj.last_updated ?? "—"}</span>
-            </li>
-            <li>
-              Latest error:{" "}
-              <span className={aj.latest_error ? "err-inline" : "muted"}>
-                {aj.latest_error ?? "None"}
-              </span>
-            </li>
-          </ul>
-        </section>
-      ) : null}
-
-      {featuredId &&
-      dashboard &&
-      (dashboard.pipeline_steps?.length ?? 0) > 0 ? (
-        <section className="card mt wide pipeline-detail-card">
-          <button
-            type="button"
-            className="collapse-panel-header"
-            aria-expanded={pipelineDetailOpen}
-            onClick={() => setPipelineDetailOpen((o) => !o)}
-          >
-            <span className="collapse-caret" aria-hidden>
-              {pipelineDetailOpen ? "▼" : "▶"}
-            </span>
-            Pipeline detail
-          </button>
-          {pipelineDetailOpen ? (
-            <div className="collapse-panel-body">
-              {dashboard.version_flow ? (
-                <p
-                  className="small mono accent wrap"
-                  style={{ marginBottom: "0.75rem", marginTop: 0 }}
-                >
-                  {dashboard.version_flow}
-                </p>
-              ) : null}
-              <p className="mono small" style={{ marginBottom: "0.75rem" }}>
+      case "job-in-progress":
+        if (!execId || !aj || !dashboard) return null;
+        return (
+          <section className="card wide active-job-card">
+            <h3 style={{ marginTop: 0 }}>Job in progress</h3>
+            <ul className="small mono validate-list" style={{ marginBottom: 0 }}>
+              <li>
+                Run ID: <strong className="accent">{aj.run_id}</strong>
+              </li>
+              <li>
+                Status:{" "}
+                <strong>{jobStatusLabel(dashboard.dashboard_status_label || aj.status)}</strong>
+              </li>
+              <li>
+                Progress: <strong>{aj.progress_percent}%</strong>
+                {aj.progress_label ? (
+                  <span className="muted"> · log {aj.progress_label}</span>
+                ) : null}
+              </li>
+              <li>
+                Elapsed: <strong>{aj.elapsed_display}</strong>
+                {pollLive ? <span className="muted"> · syncing…</span> : null}
+              </li>
+              <li>
+                Pipeline step:{" "}
                 <strong>{dashboard.pipeline_focus_label ?? "—"}</strong>
-              </p>
+              </li>
+              <li>
+                Current node: <strong>{aj.current_node}</strong>
+              </li>
+              <li>
+                Started at:{" "}
+                <span className="muted">{aj.started_at ?? "—"}</span>
+                {aj.derived_started_from_folder ? (
+                  <span className="muted"> (derived)</span>
+                ) : null}
+              </li>
+              <li>
+                Last updated: <span className="muted">{aj.last_updated ?? "—"}</span>
+              </li>
+              <li>
+                Latest error:{" "}
+                <span className={aj.latest_error ? "err-inline" : "muted"}>
+                  {aj.latest_error ?? "None"}
+                </span>
+              </li>
+            </ul>
+          </section>
+        );
 
-              <details className="collapse-details">
-                <summary className="collapse-summary">Node timeline</summary>
-                <ul className="small mono validate-list pipeline-timeline">
-                  {(dashboard.pipeline_timeline_lines ?? []).map((line, i) => (
-                    <li key={`${i}-${line}`}>{line}</li>
-                  ))}
-                </ul>
-              </details>
+      case "pipeline-detail":
+        if (
+          !featuredId ||
+          !dashboard ||
+          (dashboard.pipeline_steps?.length ?? 0) === 0
+        ) {
+          return null;
+        }
+        return (
+          <section className="card wide pipeline-detail-card">
+            <button
+              type="button"
+              className="collapse-panel-header"
+              aria-expanded={pipelineDetailOpen}
+              onClick={() => setPipelineDetailOpen((o) => !o)}
+            >
+              <span className="collapse-caret" aria-hidden>
+                {pipelineDetailOpen ? "▼" : "▶"}
+              </span>
+              Pipeline detail
+            </button>
+            {pipelineDetailOpen ? (
+              <div className="collapse-panel-body">
+                {dashboard.version_flow ? (
+                  <p
+                    className="small mono accent wrap"
+                    style={{ marginBottom: "0.75rem", marginTop: 0 }}
+                  >
+                    {dashboard.version_flow}
+                  </p>
+                ) : null}
+                <p className="mono small" style={{ marginBottom: "0.75rem" }}>
+                  <strong>{dashboard.pipeline_focus_label ?? "—"}</strong>
+                </p>
 
-              {(dashboard.pipeline_timing_lines?.length ?? 0) > 0 ? (
                 <details className="collapse-details">
-                  <summary className="collapse-summary">Node timing</summary>
-                  <ul className="small mono validate-list">
-                    {(dashboard.pipeline_timing_lines ?? []).map((line, i) => (
+                  <summary className="collapse-summary">Node timeline</summary>
+                  <ul className="small mono validate-list pipeline-timeline">
+                    {(dashboard.pipeline_timeline_lines ?? []).map((line, i) => (
                       <li key={`${i}-${line}`}>{line}</li>
                     ))}
                   </ul>
                 </details>
-              ) : null}
 
-              {dashboard.actionable_error ? (
-                <>
-                  <h4 className="small muted mt" style={{ marginBottom: "0.35rem" }}>
-                    Actionable guidance
-                  </h4>
-                  <dl className="actionable-dl small">
-                    <dt className="muted">Problem</dt>
-                    <dd>{dashboard.actionable_error.problem}</dd>
-                    {dashboard.actionable_error.expected ? (
-                      <>
-                        <dt className="muted">Expected</dt>
-                        <dd className="mono wrap">{dashboard.actionable_error.expected}</dd>
-                      </>
-                    ) : null}
-                    <dt className="muted">Fix</dt>
-                    <dd>{dashboard.actionable_error.fix}</dd>
-                    <dt className="muted">Next action</dt>
-                    <dd>{dashboard.actionable_error.next_action}</dd>
-                  </dl>
-                </>
-              ) : null}
+                {(dashboard.pipeline_timing_lines?.length ?? 0) > 0 ? (
+                  <details className="collapse-details">
+                    <summary className="collapse-summary">Node timing</summary>
+                    <ul className="small mono validate-list">
+                      {(dashboard.pipeline_timing_lines ?? []).map((line, i) => (
+                        <li key={`${i}-${line}`}>{line}</li>
+                      ))}
+                    </ul>
+                  </details>
+                ) : null}
 
-              {dashboard.current_node_artifacts ? (
-                <details className="collapse-details">
-                  <summary className="collapse-summary">
-                    Current / failed node artifacts (
-                    {dashboard.current_node_artifacts.graph_node})
-                  </summary>
-                  <p className="small muted" style={{ marginBottom: "0.25rem" }}>
-                    Inputs
-                  </p>
-                  <ul className="small mono validate-list">
-                    {dashboard.current_node_artifacts.inputs.map((x) => (
-                      <li key={x}>{x}</li>
-                    ))}
-                  </ul>
-                  <p className="small muted mt" style={{ marginBottom: "0.25rem" }}>
-                    Outputs
-                  </p>
-                  <ul className="small mono validate-list">
-                    {dashboard.current_node_artifacts.outputs.map((x) => (
-                      <li key={x}>{x}</li>
-                    ))}
-                  </ul>
-                </details>
-              ) : null}
-            </div>
-          ) : null}
-        </section>
-      ) : null}
-
-      {dashboard?.primary_run_is_cycle_candidate &&
-      (dashboard.prior_certified_run_id || dashboard.prior_certified_version) ? (
-        <p className="small muted mt wrap">
-          Prior certified baseline (unchanged on disk):{" "}
-          <span className="mono">
-            {dashboard.prior_certified_version ?? "—"} (
-            {dashboard.prior_certified_run_id ?? "—"})
-          </span>
-        </p>
-      ) : null}
-
-      <div className="grid-cards">
-        <section className="card">
-          <h3>Selected domain</h3>
-          <p className="mono accent">{domain}</p>
-        </section>
-        <section className="card">
-          <h3>Featured run</h3>
-          <p className="mono accent">
-            {featuredId ?? <span className="muted">None</span>}
-          </p>
-          {execId ? (
-            <p className="small muted mt">
-              Execution: <strong className="mono">{execId}</strong>
-            </p>
-          ) : null}
-          {tc?.active_run_id && tc.active_run_id !== featuredId ? (
-            <p className="small muted mono mt">
-              Cycle blocking advance: <strong>{tc.active_run_id}</strong>
-            </p>
-          ) : null}
-        </section>
-        <section className="card wide">
-          <h3>{execId ? "Live progress" : "Progress snapshot"}</h3>
-          <p className="small mono accent" style={{ marginBottom: "0.35rem" }}>
-            Pipeline:{" "}
-            <strong>{pipelineStatusLabel(dashboard?.current_status)}</strong>
-            {dashboard?.dashboard_status_label ? (
-              <>
-                {" "}
-                · job{" "}
-                <strong>{jobStatusLabel(dashboard.dashboard_status_label)}</strong>
-              </>
-            ) : null}
-          </p>
-          {execId ? (
-            <>
-              <div className="progress-bar">
-                <div className="progress-fill" style={{ width: `${pct}%` }} />
-              </div>
-              <p className="mono small">
-                {pct}% ·{" "}
-                {stepLabel ? (
+                {dashboard.actionable_error ? (
                   <>
-                    step <strong className="accent">{stepLabel}</strong>
-                    {pollLive ? " · syncing…" : ""}
+                    <h4 className="small muted mt" style={{ marginBottom: "0.35rem" }}>
+                      Actionable guidance
+                    </h4>
+                    <dl className="actionable-dl small">
+                      <dt className="muted">Problem</dt>
+                      <dd>{dashboard.actionable_error.problem}</dd>
+                      {dashboard.actionable_error.expected ? (
+                        <>
+                          <dt className="muted">Expected</dt>
+                          <dd className="mono wrap">{dashboard.actionable_error.expected}</dd>
+                        </>
+                      ) : null}
+                      <dt className="muted">Fix</dt>
+                      <dd>{dashboard.actionable_error.fix}</dd>
+                      <dt className="muted">Next action</dt>
+                      <dd>{dashboard.actionable_error.next_action}</dd>
+                    </dl>
                   </>
-                ) : pollLive ? (
-                  "syncing…"
-                ) : (
-                  "—"
-                )}
-              </p>
-            </>
-          ) : (
-            <>
-              <div
-                className="progress-bar progress-bar-idle"
-                role="img"
-                aria-label="Standing by — no job executing"
-              >
-                <span className="progress-idle-inner">Standing by</span>
+                ) : null}
+
+                {dashboard.current_node_artifacts ? (
+                  <details className="collapse-details">
+                    <summary className="collapse-summary">
+                      Current / failed node artifacts (
+                      {dashboard.current_node_artifacts.graph_node})
+                    </summary>
+                    <p className="small muted" style={{ marginBottom: "0.25rem" }}>
+                      Inputs
+                    </p>
+                    <ul className="small mono validate-list">
+                      {dashboard.current_node_artifacts.inputs.map((x) => (
+                        <li key={x}>{x}</li>
+                      ))}
+                    </ul>
+                    <p className="small muted mt" style={{ marginBottom: "0.25rem" }}>
+                      Outputs
+                    </p>
+                    <ul className="small mono validate-list">
+                      {dashboard.current_node_artifacts.outputs.map((x) => (
+                        <li key={x}>{x}</li>
+                      ))}
+                    </ul>
+                  </details>
+                ) : null}
               </div>
-              <p className="mono small muted">
-                No job executing.
-                {featuredId && dashboard?.dashboard_status_label ? (
+            ) : null}
+          </section>
+        );
+
+      case "prior-baseline":
+        if (
+          !dashboard?.primary_run_is_cycle_candidate ||
+          !(dashboard.prior_certified_run_id || dashboard.prior_certified_version)
+        ) {
+          return null;
+        }
+        return (
+          <div className="card wide" style={{ padding: "0.85rem 1rem" }}>
+            <p className="small muted wrap" style={{ margin: 0 }}>
+              Prior certified baseline (unchanged on disk):{" "}
+              <span className="mono">
+                {dashboard.prior_certified_version ?? "—"} (
+                {dashboard.prior_certified_run_id ?? "—"})
+              </span>
+            </p>
+          </div>
+        );
+
+      case "summary-grid":
+        return (
+          <div className="grid-cards">
+            <section className="card">
+              <h3>Selected domain</h3>
+              <p className="mono accent">{domain}</p>
+            </section>
+            <section className="card">
+              <h3>Featured run</h3>
+              <p className="mono accent">
+                {featuredId ?? <span className="muted">None</span>}
+              </p>
+              {execId ? (
+                <p className="small muted mt">
+                  Execution: <strong className="mono">{execId}</strong>
+                </p>
+              ) : null}
+              {tc?.active_run_id && tc.active_run_id !== featuredId ? (
+                <p className="small muted mono mt">
+                  Cycle blocking advance: <strong>{tc.active_run_id}</strong>
+                </p>
+              ) : null}
+            </section>
+            <section className="card wide">
+              <h3>{execId ? "Live progress" : "Progress snapshot"}</h3>
+              <p className="small mono accent" style={{ marginBottom: "0.35rem" }}>
+                Pipeline:{" "}
+                <strong>{pipelineStatusLabel(dashboard?.current_status)}</strong>
+                {dashboard?.dashboard_status_label ? (
                   <>
                     {" "}
-                    Last featured snapshot:{" "}
-                    <strong className="accent">
-                      {jobStatusLabel(dashboard.dashboard_status_label)}
-                    </strong>
-                    {dashboard.dashboard_status_label === "CERTIFIED" ? (
-                      <span> — run complete (historical)</span>
-                    ) : null}
+                    · job{" "}
+                    <strong>{jobStatusLabel(dashboard.dashboard_status_label)}</strong>
                   </>
                 ) : null}
               </p>
-            </>
-          )}
-        </section>
-        <section className="card">
-          <h3>Eval status</h3>
-          <p className="mono">
-            {st?.eval_passed === true ? (
-              <span className="ok">PASS</span>
-            ) : st?.eval_passed === false ? (
-              <span className="danger">FAIL</span>
-            ) : (
-              <span className="muted">—</span>
-            )}
-          </p>
-          <p className="small muted">
-            Final exam:{" "}
-            {st?.final_exam_passed === true
-              ? "PASS"
-              : st?.final_exam_passed === false
-                ? "FAIL"
-                : "—"}
-          </p>
-        </section>
-        <section className="card">
-          <h3>Certification</h3>
-          <p className="mono">
-            {st?.certified === true ? (
-              <span className="ok">certified</span>
-            ) : (
-              <span className="muted">not certified</span>
-            )}
-          </p>
-          <p className="small muted">{dashboard?.certification_status}</p>
-        </section>
-        <section className="card wide">
-          <h3>Failure reason</h3>
-          <p className="mono err-inline wrap">
-            {dashboard?.latest_error || <span className="muted">None</span>}
-          </p>
-        </section>
-      </div>
-
-      {tc ? (
-        <section className="card mt wide">
-          <h3>Advance Training Cycle</h3>
-          <p className="small muted">
-            Reads certified runs from{" "}
-            <span className="mono">/data/NDE/{domain}/runs/*/state.json</span>, bumps{" "}
-            <span className="mono">vX.Y → vX.(Y+1)</span>, then invokes{" "}
-            <span className="mono">run_graph.sh</span> only (smoke by default). No training
-            execution inside this container.
-          </p>
-          <ul className="small mono validate-list">
-            <li>
-              Current certified version:{" "}
-              <strong>{tc.latest_certified_version ?? "—"}</strong>{" "}
-              <span className="muted">({tc.latest_certified_run_id ?? "—"})</span>
-            </li>
-            <li>
-              Next candidate version:{" "}
-              <strong>{tc.next_candidate_version ?? "—"}</strong>
-            </li>
-            <li>
-              Active run ID (blocks advance):{" "}
-              <strong>{tc.active_run_id ?? "—"}</strong>
-            </li>
-            <li>
-              Planned run id (when advance allowed):{" "}
-              <strong>{tc.next_run_id_would_be ?? "—"}</strong>
-            </li>
-          </ul>
-
-          {tc.active_cycle ? (
-            <div className="mt">
-              <h4 className="small muted" style={{ marginBottom: "0.35rem" }}>
-                Blocking candidate snapshot
-              </h4>
-              <div className="progress-bar">
-                <div
-                  className="progress-fill"
-                  style={{ width: `${tc.active_cycle.progress_percent ?? 0}%` }}
-                />
-              </div>
-              <p className="mono small">
-                {tc.active_cycle.progress_percent ?? 0}% ·{" "}
-                <strong className="accent">{tc.active_cycle.current_step}</strong>
+              {execId ? (
+                <>
+                  <div className="progress-bar">
+                    <div className="progress-fill" style={{ width: `${pct}%` }} />
+                  </div>
+                  <p className="mono small">
+                    {pct}% ·{" "}
+                    {stepLabel ? (
+                      <>
+                        step <strong className="accent">{stepLabel}</strong>
+                        {pollLive ? " · syncing…" : ""}
+                      </>
+                    ) : pollLive ? (
+                      "syncing…"
+                    ) : (
+                      "—"
+                    )}
+                  </p>
+                </>
+              ) : (
+                <>
+                  <div
+                    className="progress-bar progress-bar-idle"
+                    role="img"
+                    aria-label="Standing by — no job executing"
+                  >
+                    <span className="progress-idle-inner">Standing by</span>
+                  </div>
+                  <p className="mono small muted">
+                    No job executing.
+                    {featuredId && dashboard?.dashboard_status_label ? (
+                      <>
+                        {" "}
+                        Last featured snapshot:{" "}
+                        <strong className="accent">
+                          {jobStatusLabel(dashboard.dashboard_status_label)}
+                        </strong>
+                        {dashboard.dashboard_status_label === "CERTIFIED" ? (
+                          <span> — run complete (historical)</span>
+                        ) : null}
+                      </>
+                    ) : null}
+                  </p>
+                </>
+              )}
+            </section>
+            <section className="card">
+              <h3>Eval status</h3>
+              <p className="mono">
+                {st?.eval_passed === true ? (
+                  <span className="ok">PASS</span>
+                ) : st?.eval_passed === false ? (
+                  <span className="danger">FAIL</span>
+                ) : (
+                  <span className="muted">—</span>
+                )}
               </p>
-              <p className="small mono">
-                Candidate version field: {tc.active_cycle.version ?? "—"}
+              <p className="small muted">
+                Final exam:{" "}
+                {st?.final_exam_passed === true
+                  ? "PASS"
+                  : st?.final_exam_passed === false
+                    ? "FAIL"
+                    : "—"}
               </p>
-              {tc.active_cycle.log_tail ? (
-                <pre className="log-pre mt">{tc.active_cycle.log_tail}</pre>
-              ) : null}
-            </div>
-          ) : null}
-
-          <p className="small muted wrap mono">{tc.graph_entrypoint}</p>
-          <div className="row-actions" style={{ gap: "0.75rem", flexWrap: "wrap" }}>
-            <button
-              type="button"
-              className="btn-primary"
-              disabled={advancing || !tc.can_advance}
-              title={
-                tc.can_advance
-                  ? "POST /api/advance/:domain (smoke)"
-                  : tc.advance_disabled_reason ?? "Cannot advance"
-              }
-              onClick={() => void runAdvanceCycle("smoke")}
-            >
-              {advancing ? "Starting…" : "Advance Training Cycle"}
-            </button>
-            <label
-              className="small"
-              style={{ display: "inline-flex", alignItems: "center", gap: 6 }}
-            >
-              <input
-                type="checkbox"
-                checked={fullAdminOk}
-                onChange={(e) => setFullAdminOk(e.target.checked)}
-              />
-              Admin approve full training
-            </label>
-            <button
-              type="button"
-              className="btn-ghost"
-              disabled={advancing || !tc.can_advance || !fullAdminOk}
-              title="Writes APPROVED and runs --mode full --require-approval"
-              onClick={() => void runAdvanceCycle("full")}
-            >
-              Advance (full)
-            </button>
+            </section>
+            <section className="card">
+              <h3>Certification</h3>
+              <p className="mono">
+                {st?.certified === true ? (
+                  <span className="ok">certified</span>
+                ) : (
+                  <span className="muted">not certified</span>
+                )}
+              </p>
+              <p className="small muted">{dashboard?.certification_status}</p>
+            </section>
+            <section className="card wide">
+              <h3>Failure reason</h3>
+              <p className="mono err-inline wrap">
+                {dashboard?.latest_error || <span className="muted">None</span>}
+              </p>
+            </section>
           </div>
-          {advanceMsg ? <p className="small mono wrap">{advanceMsg}</p> : null}
-        </section>
-      ) : null}
+        );
 
-      {st?.staging_path ? (
-        <section className="card mt">
-          <h3>Staging</h3>
-          <p className="mono small">{String(st.staging_path)}</p>
-          <p className="small muted">
-            Dataset ok: {String(st.dataset_ok)} · Train ok: {String(st.train_ok)}
-          </p>
-        </section>
-      ) : null}
+      case "advance-training":
+        if (!tc) return null;
+        return (
+          <section className="card wide">
+            <h3>Advance Training Cycle</h3>
+            <p className="small muted">
+              Reads certified runs from{" "}
+              <span className="mono">/data/NDE/{domain}/runs/*/state.json</span>, bumps{" "}
+              <span className="mono">vX.Y → vX.(Y+1)</span>, then invokes{" "}
+              <span className="mono">run_graph.sh</span> only (smoke by default). No training
+              execution inside this container.
+            </p>
+            <ul className="small mono validate-list">
+              <li>
+                Current certified version:{" "}
+                <strong>{tc.latest_certified_version ?? "—"}</strong>{" "}
+                <span className="muted">({tc.latest_certified_run_id ?? "—"})</span>
+              </li>
+              <li>
+                Next candidate version:{" "}
+                <strong>{tc.next_candidate_version ?? "—"}</strong>
+              </li>
+              <li>
+                Active run ID (blocks advance):{" "}
+                <strong>{tc.active_run_id ?? "—"}</strong>
+              </li>
+              <li>
+                Planned run id (when advance allowed):{" "}
+                <strong>{tc.next_run_id_would_be ?? "—"}</strong>
+              </li>
+            </ul>
+
+            {tc.active_cycle ? (
+              <div className="mt">
+                <h4 className="small muted" style={{ marginBottom: "0.35rem" }}>
+                  Blocking candidate snapshot
+                </h4>
+                <div className="progress-bar">
+                  <div
+                    className="progress-fill"
+                    style={{ width: `${tc.active_cycle.progress_percent ?? 0}%` }}
+                  />
+                </div>
+                <p className="mono small">
+                  {tc.active_cycle.progress_percent ?? 0}% ·{" "}
+                  <strong className="accent">{tc.active_cycle.current_step}</strong>
+                </p>
+                <p className="small mono">
+                  Candidate version field: {tc.active_cycle.version ?? "—"}
+                </p>
+                {tc.active_cycle.log_tail ? (
+                  <pre className="log-pre mt">{tc.active_cycle.log_tail}</pre>
+                ) : null}
+              </div>
+            ) : null}
+
+            <p className="small muted wrap mono">{tc.graph_entrypoint}</p>
+            <div className="row-actions" style={{ gap: "0.75rem", flexWrap: "wrap" }}>
+              <button
+                type="button"
+                className="btn-primary"
+                disabled={advancing || !tc.can_advance}
+                title={
+                  tc.can_advance
+                    ? "POST /api/advance/:domain (smoke)"
+                    : tc.advance_disabled_reason ?? "Cannot advance"
+                }
+                onClick={() => void runAdvanceCycle("smoke")}
+              >
+                {advancing ? "Starting…" : "Advance Training Cycle"}
+              </button>
+              <label
+                className="small"
+                style={{ display: "inline-flex", alignItems: "center", gap: 6 }}
+              >
+                <input
+                  type="checkbox"
+                  checked={fullAdminOk}
+                  onChange={(e) => setFullAdminOk(e.target.checked)}
+                />
+                Admin approve full training
+              </label>
+              <button
+                type="button"
+                className="btn-ghost"
+                disabled={advancing || !tc.can_advance || !fullAdminOk}
+                title="Writes APPROVED and runs --mode full --require-approval"
+                onClick={() => void runAdvanceCycle("full")}
+              >
+                Advance (full)
+              </button>
+            </div>
+            {advanceMsg ? <p className="small mono wrap">{advanceMsg}</p> : null}
+          </section>
+        );
+
+      case "staging":
+        if (!st?.staging_path) return null;
+        return (
+          <section className="card">
+            <h3>Staging</h3>
+            <p className="mono small">{String(st.staging_path)}</p>
+            <p className="small muted">
+              Dataset ok: {String(st.dataset_ok)} · Train ok: {String(st.train_ok)}
+            </p>
+          </section>
+        );
+
+      default:
+        return null;
+    }
+  };
+
+  return (
+    <div className="page">
+      <h2 className="page-title">Dashboard</h2>
+      <p className="small muted" style={{ marginTop: "-0.5rem", marginBottom: "0.75rem" }}>
+        Drag ⠿ on each section to reorder. Layout is saved per domain in this browser.
+      </p>
+      {dashboardErr && <p className="err">{dashboardErr}</p>}
+
+      <DndContext
+        sensors={sensors}
+        collisionDetection={closestCenter}
+        onDragEnd={onDragEnd}
+      >
+        <SortableContext items={orderedBlockIds} strategy={verticalListSortingStrategy}>
+          <div className="dashboard-sortable-list">
+            {orderedBlockIds.map((blockId) => {
+              const content = renderBlock(blockId);
+              if (content == null) return null;
+              return (
+                <SortableDashboardBlock key={blockId} id={blockId}>
+                  {content}
+                </SortableDashboardBlock>
+              );
+            })}
+          </div>
+        </SortableContext>
+      </DndContext>
     </div>
   );
 }
