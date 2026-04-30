@@ -1000,6 +1000,291 @@ function derivePipelineVisual(domain, runId) {
   return activeJobBase(100, "CERTIFIED", "certified", "certify", null, null);
 }
 
+/** Operator-facing 7-step pipeline (smoke_eval shown as run_eval). */
+const PIPELINE_OPERATOR_STEPS = [
+  { index: 1, graph_node: "validate_domain_contract", name: "validate_domain_contract" },
+  { index: 2, graph_node: "validate_training_dataset", name: "validate_training_dataset" },
+  { index: 3, graph_node: "smoke_train", name: "smoke_train" },
+  { index: 4, graph_node: "smoke_eval", name: "run_eval" },
+  { index: 5, graph_node: "evaluate_gate", name: "evaluate_gate" },
+  { index: 6, graph_node: "final_exam", name: "final_exam" },
+  { index: 7, graph_node: "certify", name: "certify" },
+];
+
+function proofEndMs(npPath, j) {
+  if (j?.updated_at) {
+    const t = Date.parse(String(j.updated_at));
+    if (Number.isFinite(t)) return t;
+  }
+  try {
+    return fs.statSync(npPath).mtimeMs;
+  } catch {
+    return null;
+  }
+}
+
+function extractStagingHintFromTrainingYaml(domain) {
+  const configPath = path.join(DATA_NDE, domain, "training", "config.yaml");
+  if (!fs.existsSync(configPath)) {
+    return { config_path: configPath, resolved_hint: null, file_exists: false };
+  }
+  const txt = readUtf8Safe(configPath).slice(0, 48000);
+  let resolved = null;
+  for (const line of txt.split("\n")) {
+    const m = line.match(
+      /^\s*(staging[_a-z]*path|dataset[_a-z]*path|train[_a-z]*file|jsonl[_a-z]*path)\s*:\s*["']?([^"'\n#]+)/i
+    );
+    if (m) {
+      resolved = m[2].trim().replace(/["']\s*$/, "");
+      break;
+    }
+  }
+  if (!resolved) {
+    const m2 = txt.match(/[/][^\s"']+\.jsonl\b/);
+    if (m2) resolved = m2[0];
+  }
+  return { config_path: configPath, resolved_hint: resolved, file_exists: true };
+}
+
+function buildVersionFlowString(domain, runId, primaryIsCycle, tcSummary, primaryState, pv) {
+  const priorV = tcSummary?.latest_certified_version || "—";
+  const candV =
+    (primaryState?.version && String(primaryState.version)) ||
+    parseSemverFromRunId(runId, domain) ||
+    "—";
+  const tailRaw = pv?.dashboard_status || "IN_PROGRESS";
+  const tail =
+    tailRaw === "CERTIFIED"
+      ? "CERTIFIED"
+      : tailRaw === "BLOCKED"
+        ? "BLOCKED"
+        : tailRaw === "FAILED"
+          ? "FAILED"
+          : tailRaw === "TRAINING" || tailRaw === "EVAL" || tailRaw === "RUNNING" || tailRaw === "STARTING"
+            ? "RUNNING"
+            : String(tailRaw).toUpperCase();
+  if (!primaryIsCycle && pv?.dashboard_status === "CERTIFIED") {
+    return `${priorV} certified`;
+  }
+  return `${priorV} certified → ${candV} candidate → ${tail}`;
+}
+
+function buildActionableErrorBlock(domain, rawErr, primaryState, stagingHint) {
+  const stripped = String(rawErr || "")
+    .replace(/^BLOCKED:\s*/i, "")
+    .trim();
+  const blob = `${stripped} ${primaryState?.last_error || ""}`.toLowerCase();
+  const looksStaging =
+    /jsonl|staging|dataset/.test(blob) &&
+    /not found|missing|fail|unavailable|dataset_ok/.test(blob);
+  if (looksStaging) {
+    const expected =
+      stagingHint?.resolved_hint ||
+      primaryState?.staging_path ||
+      primaryState?.artifacts?.staging_path ||
+      (stagingHint?.file_exists
+        ? `(configure path in ${stagingHint.config_path})`
+        : `(create ${stagingHint?.config_path || path.join(DATA_NDE, domain, "training", "config.yaml")})`);
+    return {
+      problem: "Staging training dataset is missing.",
+      expected: String(expected),
+      fix: "Upload/source material, run Process Sources, or correct training/config.yaml dataset path.",
+      next_action: "Fix dataset, then retry Advance Training Cycle.",
+    };
+  }
+  return {
+    problem: stripped || "Pipeline stopped.",
+    expected:
+      stagingHint?.config_path && stagingHint.file_exists
+        ? `Review dataset paths in ${stagingHint.config_path}`
+        : null,
+    fix: "Inspect node proofs under this run’s nodes/ directory and correct configuration or inputs.",
+    next_action: "Resolve the issue, then run Advance Training Cycle again if appropriate.",
+  };
+}
+
+function buildCurrentNodeArtifacts(domain, runId, graphNode, primaryState, stagingHint) {
+  const rr = runRoot(domain, runId);
+  const domCfg = path.join(DATA_NDE, domain, "domain_config.yaml");
+  const trainCfg = path.join(DATA_NDE, domain, "training", "config.yaml");
+  const inputs = [
+    `domain_config.yaml → ${domCfg}`,
+    `training/config.yaml → ${trainCfg}`,
+  ];
+  const staging =
+    stagingHint?.resolved_hint ||
+    primaryState?.staging_path ||
+    primaryState?.artifacts?.staging_path ||
+    `(expected staging JSONL from training/config.yaml — ${trainCfg})`;
+  inputs.push(`expected staging dataset → ${staging}`);
+  const outputs = [
+    `node_status.json → ${path.join(rr, "nodes", graphNode, "node_status.json")}`,
+    `state.json → ${path.join(rr, "state.json")}`,
+  ];
+  return { graph_node: graphNode, inputs, outputs };
+}
+
+function buildPipelineDashboardFields(
+  domain,
+  runId,
+  primaryState,
+  pv,
+  tcSummary,
+  primaryIsCycle,
+  certificateOnDisk,
+  stagingHint
+) {
+  const total_steps = PIPELINE_OPERATOR_STEPS.length;
+  const root = runRoot(domain, runId);
+  const ts = deriveRunTimestamps(domain, runId, primaryState, []);
+  const runStartMs = ts.started_at ? Date.parse(ts.started_at) : null;
+
+  const rowMeta = [];
+  let prevEndMs = Number.isFinite(runStartMs) ? runStartMs : null;
+
+  for (const def of PIPELINE_OPERATOR_STEPS) {
+    const np = path.join(root, "nodes", def.graph_node, "node_status.json");
+    const j = readJsonSafe(np);
+    let status = null;
+    let duration_ms = null;
+    let error = null;
+
+    if (j && j.status) {
+      const raw = String(j.status).toUpperCase();
+      if (raw === "PASS" || raw === "OK" || raw === "PASSED") status = "PASS";
+      else if (raw === "SKIPPED") status = "SKIPPED";
+      else status = "FAIL";
+      if (status === "FAIL" || status === "SKIPPED") {
+        error =
+          (j.failure_reason && String(j.failure_reason)) ||
+          (Array.isArray(j.errors) && j.errors.length ? j.errors.map(String).join("; ") : null) ||
+          (primaryState?.last_error != null ? String(primaryState.last_error) : null);
+      }
+      const endMs = proofEndMs(np, j);
+      if (prevEndMs != null && endMs != null) {
+        duration_ms = Math.max(0, endMs - prevEndMs);
+      }
+      if (endMs != null) prevEndMs = endMs;
+    }
+    rowMeta.push({ def, j, np, status, duration_ms, error });
+  }
+
+  const ixFail = rowMeta.findIndex((r) => r.status === "FAIL");
+  const ixSkip = rowMeta.findIndex((r) => r.status === "SKIPPED");
+
+  if (ixFail >= 0) {
+    for (let k = ixFail + 1; k < rowMeta.length; k++) {
+      if (rowMeta[k].status === null) rowMeta[k].status = "PENDING";
+    }
+  } else if (ixSkip >= 0) {
+    for (let k = ixSkip + 1; k < rowMeta.length; k++) {
+      if (rowMeta[k].status === null) rowMeta[k].status = "PENDING";
+    }
+  } else {
+    const ixNull = rowMeta.findIndex((r) => r.status === null);
+    if (ixNull >= 0) {
+      rowMeta[ixNull].status = "RUNNING";
+      for (let k = ixNull + 1; k < rowMeta.length; k++) {
+        if (rowMeta[k].status === null) rowMeta[k].status = "PENDING";
+      }
+    }
+  }
+
+  if (
+    (primaryState?.certified === true || certificateOnDisk) &&
+    !rowMeta.some((r) => r.status === "FAIL")
+  ) {
+    for (const r of rowMeta) {
+      if (r.status === null || r.status === "RUNNING" || r.status === "PENDING") {
+        r.status = "PASS";
+      }
+    }
+  }
+
+  const pipeline_steps = rowMeta.map((r) => ({
+    index: r.def.index,
+    name: r.def.name,
+    graph_node: r.def.graph_node,
+    status: r.status || "PENDING",
+    duration_ms: r.duration_ms,
+    error: r.error,
+  }));
+
+  const nonPass = pipeline_steps.find((s) => s.status !== "PASS");
+  let current_step_index = nonPass ? nonPass.index : total_steps;
+  const focusDef = PIPELINE_OPERATOR_STEPS.find((d) => d.index === current_step_index);
+  const pipeline_focus_label = focusDef
+    ? `Step ${current_step_index} / ${total_steps} — ${focusDef.name}`
+    : `Step ${total_steps} / ${total_steps} — certify`;
+
+  const timeline_lines = pipeline_steps.map((s) => `${s.status} ${s.name}`);
+  const timing_lines = [];
+  for (const r of rowMeta) {
+    const ms = r.duration_ms;
+    const nm = r.def.name;
+    if (r.status === "PASS" && ms != null) {
+      timing_lines.push(`${nm}: completed in ${Math.round(ms / 1000)}s`);
+    } else if (r.status === "FAIL" && ms != null) {
+      timing_lines.push(`${nm}: failed after ${Math.round(ms / 1000)}s`);
+    } else if (r.status === "FAIL" && ms == null) {
+      timing_lines.push(`${nm}: failed`);
+    }
+  }
+
+  const version_flow = buildVersionFlowString(
+    domain,
+    runId,
+    primaryIsCycle,
+    tcSummary,
+    primaryState,
+    pv
+  );
+
+  const latestErr = pv?.latest_error ?? primaryState?.last_error ?? null;
+  const needsGuidance =
+    !!String(latestErr || "").trim() ||
+    pv?.dashboard_status === "BLOCKED" ||
+    pv?.dashboard_status === "FAILED";
+  const actionable_error = needsGuidance
+    ? buildActionableErrorBlock(domain, latestErr || "", primaryState, stagingHint)
+    : null;
+
+  const focusGraph = focusDef?.graph_node || pv?.current_node || "validate_domain_contract";
+  const current_node_artifacts = buildCurrentNodeArtifacts(
+    domain,
+    runId,
+    focusGraph,
+    primaryState,
+    stagingHint
+  );
+
+  return {
+    pipeline_steps,
+    current_step_index,
+    total_steps,
+    version_flow,
+    actionable_error,
+    pipeline_focus_label,
+    pipeline_timeline_lines: timeline_lines,
+    pipeline_timing_lines: timing_lines,
+    current_node_artifacts,
+  };
+}
+
+function emptyPipelineDashboardFields() {
+  return {
+    pipeline_steps: [],
+    current_step_index: 0,
+    total_steps: 7,
+    version_flow: null,
+    actionable_error: null,
+    pipeline_focus_label: null,
+    pipeline_timeline_lines: [],
+    pipeline_timing_lines: [],
+    current_node_artifacts: null,
+  };
+}
+
 function runStatusSortRank(badge) {
   if (badge === "RUNNING") return 0;
   if (badge === "BLOCKED") return 1;
@@ -1672,6 +1957,21 @@ function buildDashboardPayload(domain) {
       ? readJsonSafe(path.join(runRoot(domain, LEGACY_FINQUANT_RUN_LABEL), "state.json"))
       : null;
 
+  const stagingHint = extractStagingHintFromTrainingYaml(domain);
+  const pipelineFields =
+    primaryRunId && pv
+      ? buildPipelineDashboardFields(
+          domain,
+          primaryRunId,
+          primaryState,
+          pv,
+          tcSummary,
+          primaryIsCycle,
+          certificateOnDisk,
+          stagingHint
+        )
+      : emptyPipelineDashboardFields();
+
   const base = {
     domain,
     selected_domain: domain,
@@ -1700,6 +2000,7 @@ function buildDashboardPayload(domain) {
         ? buildFinquantV02DashboardBlock(finquantLegacyState)
         : undefined,
     training_cycle: tcSummary,
+    ...pipelineFields,
   };
 
   if (tcSummary.active_cycle && tcSummary.active_run_id === primaryRunId) {

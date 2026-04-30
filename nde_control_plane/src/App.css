@@ -482,6 +482,24 @@ body {
   border-left: 3px solid var(--accent);
 }
 
+.pipeline-detail-card {
+  border-left: 3px solid var(--warn);
+}
+
+.actionable-dl {
+  margin: 0;
+}
+
+.actionable-dl dt {
+  margin-top: 0.5rem;
+  font-weight: 600;
+}
+
+.actionable-dl dd {
+  margin: 0.15rem 0 0 0;
+  padding-left: 0;
+}
+
 .inline-check {
   display: flex;
   align-items: center;

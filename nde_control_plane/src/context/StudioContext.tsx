@@ -73,6 +73,28 @@ export type RunListRow = {
   progress_percent?: number | null;
 };
 
+export type PipelineStepRow = {
+  index: number;
+  name: string;
+  graph_node: string;
+  status: string;
+  duration_ms: number | null;
+  error: string | null;
+};
+
+export type ActionableErrorPayload = {
+  problem: string;
+  expected: string | null;
+  fix: string;
+  next_action: string;
+};
+
+export type CurrentNodeArtifacts = {
+  graph_node: string;
+  inputs: string[];
+  outputs: string[];
+};
+
 export type TrainingCyclePayload = {
   latest_certified_version: string | null;
   latest_certified_run_id: string | null;
@@ -112,6 +134,15 @@ export type DashboardPayload = {
   finquant_legacy_complete?: boolean;
   finquant_v02?: FinquantV02Dashboard | null;
   training_cycle?: TrainingCyclePayload;
+  pipeline_steps?: PipelineStepRow[];
+  current_step_index?: number;
+  total_steps?: number;
+  version_flow?: string | null;
+  actionable_error?: ActionableErrorPayload | null;
+  pipeline_focus_label?: string | null;
+  pipeline_timeline_lines?: string[];
+  pipeline_timing_lines?: string[];
+  current_node_artifacts?: CurrentNodeArtifacts | null;
 };
 
 type StudioCtx = {
