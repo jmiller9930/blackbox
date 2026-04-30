@@ -179,16 +179,35 @@ export function pickTrainingNodeDirs(_domain, runId, ndeRoot, modeFull) {
   const smDir = path.join(rr, "nodes", "smoke_train");
   const ftStdout = path.join(ftDir, "stdout.log");
   const smStdout = path.join(smDir, "stdout.log");
-  if (fs.existsSync(ftStdout) || fs.existsSync(path.join(ftDir, "node_status.json"))) {
-    return { disk: "full_train", logDir: "full_train" };
+  let ftSize = 0;
+  let smSize = 0;
+  try {
+    if (fs.existsSync(ftStdout)) ftSize = fs.statSync(ftStdout).size;
+  } catch {
+    ftSize = 0;
   }
-  if (fs.existsSync(smStdout) || fs.existsSync(path.join(smDir, "node_status.json"))) {
+  try {
+    if (fs.existsSync(smStdout)) smSize = fs.statSync(smStdout).size;
+  } catch {
+    smSize = 0;
+  }
+  const ftNode = fs.existsSync(path.join(ftDir, "node_status.json"));
+  const smNode = fs.existsSync(path.join(smDir, "node_status.json"));
+
+  /** Prefer the directory that actually has trainer output (sizes break ties toward smoke_train). */
+  if (smSize > ftSize) {
     return { disk: "smoke_train", logDir: "smoke_train" };
   }
-  return {
-    disk: modeFull ? "full_train" : "smoke_train",
-    logDir: modeFull ? "full_train" : "smoke_train",
-  };
+  if (ftSize > smSize) {
+    return { disk: "full_train", logDir: "full_train" };
+  }
+  if (smNode || fs.existsSync(smStdout)) {
+    return { disk: "smoke_train", logDir: "smoke_train" };
+  }
+  if (ftNode || fs.existsSync(ftStdout)) {
+    return { disk: "full_train", logDir: "full_train" };
+  }
+  return { disk: "smoke_train", logDir: "smoke_train" };
 }
 
 function tailFileEnd(p, maxBytes = 96000) {
@@ -211,7 +230,12 @@ function tailFileEnd(p, maxBytes = 96000) {
   }
 }
 
-export function tailTrainingLogs(domain, runId, ndeRoot, logDir, maxBytes = 96000) {
+/**
+ * @param {object} [opts]
+ * @param {boolean} [opts.mergeTrainNodes] If true (full training), tail both full_train and smoke_train so
+ *   step regexes see LangGraph reality (runner often uses smoke_train while legacy dirs exist).
+ */
+export function tailTrainingLogs(domain, runId, ndeRoot, logDir, maxBytes = 96000, opts = {}) {
   const rr = path.join(ndeRoot, domain, "runs", runId);
   const parts = [];
   const appendDir = (dir) => {
@@ -221,6 +245,11 @@ export function tailTrainingLogs(domain, runId, ndeRoot, logDir, maxBytes = 9600
       if (t) parts.push(`=== ${dir}/${log} ===\n${t}`);
     }
   };
+  if (opts.mergeTrainNodes === true) {
+    appendDir("full_train");
+    appendDir("smoke_train");
+    return parts.join("\n\n").trim();
+  }
   appendDir(logDir);
   if (parts.length === 0) {
     const altDir = logDir === "full_train" ? "smoke_train" : "full_train";

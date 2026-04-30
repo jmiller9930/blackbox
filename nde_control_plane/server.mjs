@@ -523,7 +523,9 @@ function trainingLogTail(domain, runId) {
   const state = readJsonSafe(path.join(root, "state.json"));
   const modeFull = state?.mode === "full";
   const picked = pickTrainingNodeDirs(domain, runId, DATA_NDE, modeFull);
-  return tailTrainingLogs(domain, runId, DATA_NDE, picked.logDir, 96000);
+  return tailTrainingLogs(domain, runId, DATA_NDE, picked.logDir, 96000, {
+    mergeTrainNodes: modeFull,
+  });
 }
 
 function trainStepDisplayName(state) {
@@ -2222,22 +2224,51 @@ async function buildTrainingTelemetry(domain, runId, state) {
 
   const modeFull = state?.mode === "full";
   const picked = pickTrainingNodeDirs(domain, runId, DATA_NDE, modeFull);
-  const logTail = tailTrainingLogs(domain, runId, DATA_NDE, picked.logDir);
+  const logTail = tailTrainingLogs(domain, runId, DATA_NDE, picked.logDir, 96000, {
+    mergeTrainNodes: modeFull,
+  });
   const parsed = parseTrainerFromLog(logTail);
   const hints = extractTrainingConfigHints(DATA_NDE, REPO, domain);
 
   const ts = deriveRunTimestamps(domain, runId, state, []);
   const elapsed = formatElapsed(ts.elapsed_ms);
 
+  const trainStdout = path.join(
+    DATA_NDE,
+    domain,
+    "runs",
+    runId,
+    "nodes",
+    "smoke_train",
+    "stdout.log"
+  );
+  let train_log_bytes = 0;
+  try {
+    if (fs.existsSync(trainStdout)) train_log_bytes = fs.statSync(trainStdout).size;
+  } catch {
+    train_log_bytes = 0;
+  }
+
   let eta = "ETA: calculating";
   const cur = parsed.train_step_current;
   const tot = parsed.train_step_total;
   if (cur != null && tot != null && tot > 0 && cur >= 0 && ts.elapsed_ms > 1000) {
-    const rate = cur / ts.elapsed_ms;
-    if (rate > 0) {
-      const fmt = formatEtaMs((tot - cur) / rate);
-      if (fmt) eta = fmt;
+    if (cur < 1) {
+      eta = "ETA: waiting for step ≥ 1 in logs (step 0 cannot estimate finish time)";
+    } else {
+      const rate = cur / ts.elapsed_ms;
+      if (rate > 0) {
+        const fmt = formatEtaMs((tot - cur) / rate);
+        if (fmt) eta = fmt;
+      }
     }
+  } else if (
+    eta === "ETA: calculating" &&
+    train_log_bytes > 400 &&
+    (cur == null || tot == null)
+  ) {
+    eta =
+      "ETA: need step fraction in logs (e.g. 123/3000)—check Training telemetry log tail";
   }
 
   const gpu = await sampleNvidiaSmi();
@@ -2254,22 +2285,6 @@ async function buildTrainingTelemetry(domain, runId, state) {
       vram_used = `${gpu.vram_used_mb} MiB / ${gpu.vram_total_mb} MiB`;
     }
     if (gpu.gpu_util_pct != null) gpu_utilization = `${gpu.gpu_util_pct}%`;
-  }
-
-  const trainStdout = path.join(
-    DATA_NDE,
-    domain,
-    "runs",
-    runId,
-    "nodes",
-    "smoke_train",
-    "stdout.log"
-  );
-  let train_log_bytes = 0;
-  try {
-    if (fs.existsSync(trainStdout)) train_log_bytes = fs.statSync(trainStdout).size;
-  } catch {
-    train_log_bytes = 0;
   }
 
   const gpuEngaged =
