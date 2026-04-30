@@ -590,6 +590,9 @@ app.post("/api/finquant/validate-v02", async (_req, res) => {
       }
     });
 
+  /** Set once training proof succeeds (used in eval catch responses). */
+  let proofFields;
+
   try {
     const adapter_exists =
       fs.existsSync(adapterPath) && fs.statSync(adapterPath).isDirectory();
@@ -636,7 +639,7 @@ app.post("/api/finquant/validate-v02", async (_req, res) => {
     }
 
     const proof = detectFinquantV02TrainingProof(trainBlob);
-    const proofFields = {
+    proofFields = {
       has_train_runtime: proof.has_train_runtime,
       has_steps_3000: proof.has_steps_3000,
       has_progress_3000: proof.has_progress_3000,
@@ -752,6 +755,7 @@ app.post("/api/finquant/validate-v02", async (_req, res) => {
       step: "eval",
       error: msg.slice(0, 8000),
       state_path: statePath,
+      ...(proofFields ?? {}),
     });
   }
 });
