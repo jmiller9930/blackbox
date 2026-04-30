@@ -398,6 +398,9 @@ def _parallel_batch_watchdog_wall_sec_v1() -> int:
 
     ``PATTERN_GAME_BATCH_STUCK_AFTER_SEC`` — default **3600** (1 hour). Set **0** to disable.
     Legitimate long batches: raise this (and ensure workers complete within it).
+
+    GT066 — Prefer explicit terminal errors from stage timeouts (Student seam wall, RM trace validate
+    wall) configured **below** this ceiling so the watchdog is not the first terminal signal.
     """
     raw = (os.environ.get("PATTERN_GAME_BATCH_STUCK_AFTER_SEC") or "").strip()
     if not raw:
@@ -499,6 +502,23 @@ def _student_seam_after_parallel_max_sec_v1() -> float:
     return max(0.0, n)
 
 
+def _rm_trace_validate_max_sec_v1() -> float:
+    """
+    Wall clock for ``validate_student_reasoning_model_trace_for_job_v1`` (post-seam RM trace proof scan).
+
+    ``PATTERN_GAME_RM_TRACE_VALIDATE_MAX_SEC`` — default **120**. **0** = unlimited (may hang until batch
+    watchdog if the trace scan blocks).
+    """
+    raw = (os.environ.get("PATTERN_GAME_RM_TRACE_VALIDATE_MAX_SEC") or "").strip()
+    if not raw:
+        return 120.0
+    try:
+        n = float(raw)
+    except ValueError:
+        return 120.0
+    return max(0.0, n)
+
+
 def _run_student_loop_seam_after_parallel_with_timeout_v1(
     *,
     job_id: str,
@@ -522,17 +542,28 @@ def _run_student_loop_seam_after_parallel_with_timeout_v1(
     )
 
     limit = _student_seam_after_parallel_max_sec_v1()
-    if limit <= 0:
-        return (
-            student_loop_seam_after_parallel_batch_v1(
-                results=results,
-                run_id=job_id,
-                strategy_id=strategy_id,
-                exam_run_contract_request_v1=exam_run_contract_request_v1,
-                operator_batch_audit=operator_batch_audit,
-            ),
-            False,
+    lim_label = "unlimited" if limit <= 0 else f"{limit:.0f}"
+    try:
+        _parallel_batch_pipeline_log_gt066_v1(
+            job_id, "student_seam_enter_v1", f"wall_limit_sec={lim_label}"
         )
+    except Exception:
+        pass
+    if limit <= 0:
+        aud0 = student_loop_seam_after_parallel_batch_v1(
+            results=results,
+            run_id=job_id,
+            strategy_id=strategy_id,
+            exam_run_contract_request_v1=exam_run_contract_request_v1,
+            operator_batch_audit=operator_batch_audit,
+        )
+        try:
+            _parallel_batch_pipeline_log_gt066_v1(
+                job_id, "student_seam_finished_v1", "timed_out=False"
+            )
+        except Exception:
+            pass
+        return (aud0, False)
 
     ex = ThreadPoolExecutor(max_workers=1)
 
@@ -547,7 +578,14 @@ def _run_student_loop_seam_after_parallel_with_timeout_v1(
 
     try:
         fut = ex.submit(_call)
-        return fut.result(timeout=limit), False
+        aud = fut.result(timeout=limit)
+        try:
+            _parallel_batch_pipeline_log_gt066_v1(
+                job_id, "student_seam_finished_v1", "timed_out=False"
+            )
+        except Exception:
+            pass
+        return aud, False
     except FuturesTimeout:
         print(
             f"[pattern_game_parallel] job_id={job_id} STUDENT SEAM wall timeout after {limit:.0f}s "
@@ -556,6 +594,9 @@ def _run_student_loop_seam_after_parallel_with_timeout_v1(
             flush=True,
         )
         try:
+            _parallel_batch_pipeline_log_gt066_v1(
+                job_id, "student_seam_finished_v1", "timed_out=True"
+            )
             _parallel_job_append_rm_preflight_line_v1(
                 job_id,
                 f"STUDENT SEAM: wall timeout after {limit:.0f}s — batch terminal error (GT065).",
@@ -748,6 +789,69 @@ def _parallel_job_append_rm_preflight_line_v1(job_id: str, line: str) -> None:
         j.setdefault("rm_preflight_terminal_lines_v1", []).append(msg)
         j["last_message"] = msg
     print(f"[pattern_game_parallel] job_id={jid} {msg}", file=sys.stderr, flush=True)
+
+
+def _parallel_batch_pipeline_log_gt066_v1(job_id: str, phase: str, detail: str = "") -> None:
+    """GT066 — Structured stderr + operator tape lines for batch pipeline observability (offline proof)."""
+    jid = str(job_id or "").strip()
+    ph = str(phase or "").strip()
+    if not jid or not ph:
+        return
+    dt = str(detail or "").strip()
+    tail = (" — " + dt) if dt else ""
+    msg = f"GT066_PIPELINE: {ph}{tail}"
+    print(f"[pattern_game_parallel] job_id={jid} {msg}", file=sys.stderr, flush=True)
+    _parallel_job_append_rm_preflight_line_v1(jid, msg)
+
+
+def _validate_student_rm_trace_contract_bounded_v1(job_id: str) -> dict[str, Any]:
+    """GT066 — RM trace file scan with optional wall clock so post-seam validation cannot hang until watchdog."""
+    from concurrent.futures import ThreadPoolExecutor
+    from concurrent.futures import TimeoutError as FuturesTimeout
+
+    from renaissance_v4.game_theory.tools.student_reasoning_model_trace_proof_v1 import (
+        validate_student_reasoning_model_trace_for_job_v1,
+    )
+
+    jid = str(job_id or "").strip()
+    limit = _rm_trace_validate_max_sec_v1()
+    if limit <= 0:
+        return validate_student_reasoning_model_trace_for_job_v1(jid)
+    ex = ThreadPoolExecutor(max_workers=1)
+
+    def _call() -> dict[str, Any]:
+        return validate_student_reasoning_model_trace_for_job_v1(jid)
+
+    try:
+        fut = ex.submit(_call)
+        return fut.result(timeout=limit)
+    except FuturesTimeout:
+        try:
+            _parallel_batch_pipeline_log_gt066_v1(
+                jid,
+                "student_rm_trace_validate_timeout_v1",
+                f"limit_sec={limit:.0f}",
+            )
+        except Exception:
+            pass
+        msg = (
+            f"student_rm_trace_validate_wall_timeout_v1: RM trace proof scan exceeded {limit:.0f}s "
+            "(abandoned wait). Tune PATTERN_GAME_RM_TRACE_VALIDATE_MAX_SEC or reduce trace volume."
+        )
+        print(f"[pattern_game_parallel] job_id={jid} {msg}", file=sys.stderr, flush=True)
+        try:
+            _parallel_job_append_rm_preflight_line_v1(jid, msg)
+        except Exception:
+            pass
+        return {
+            "schema": "student_reasoning_model_trace_proof_v1",
+            "ok_v1": False,
+            "errors_v1": [msg],
+            "wall_timeout_v1": True,
+            "limit_sec_v1": limit,
+        }
+    finally:
+        ex.shutdown(wait=False)
 
 
 def _parallel_job_store_rm_gate_summary_v1(job_id: str, summary: dict[str, Any]) -> None:
@@ -1125,6 +1229,7 @@ def _web_ui_require_hypothesis() -> bool:
 FAILED_RUNTIME_STUDENT_RM_TRACE_CONTRACT_V1 = "failed_runtime_student_rm_trace_contract_v1"
 FAILED_STUDENT_FULL_RUN_CONTRACT_STATUS_V1 = "failed_student_full_run_contract_v1"
 STUDENT_SEAM_WALL_TIMEOUT_STATUS_V1 = "student_seam_wall_timeout_v1"
+STUDENT_RM_TRACE_VALIDATE_WALL_TIMEOUT_STATUS_V1 = "student_rm_trace_validate_wall_timeout_v1"
 FAILED_FATAL_AUTHORITY_SEAL_MISMATCH_V1 = "fatal_authority_seal_mismatch_v1"
 
 
@@ -2308,6 +2413,14 @@ def create_app() -> Flask:
                 )
                 emit_referee_execution_completed_v1(job_id=job_id, fingerprint=lt_fp, results=results)
                 referee_parallel_completed_emit_v1 = True
+                try:
+                    _parallel_batch_pipeline_log_gt066_v1(
+                        job_id,
+                        "replay_parallel_returned_v1",
+                        f"n={len(results)}",
+                    )
+                except Exception:
+                    pass
                 validate_reference_comparison_batch_results(
                     results, operator_recipe_id=operator_batch_audit.get("operator_recipe_id")
                 )
@@ -2531,13 +2644,21 @@ def create_app() -> Flask:
                     return
 
                 if student_rm_wiring_mandate_active_v1(exam_req if isinstance(exam_req, dict) else None):
-                    from renaissance_v4.game_theory.tools.student_reasoning_model_trace_proof_v1 import (
-                        validate_student_reasoning_model_trace_for_job_v1,
-                    )
-
-                    trace_contract_audit = validate_student_reasoning_model_trace_for_job_v1(job_id)
+                    trace_contract_audit = _validate_student_rm_trace_contract_bounded_v1(job_id)
                     if not trace_contract_audit.get("ok_v1"):
-                        err_rt = _student_rm_trace_contract_error_message_v1(trace_contract_audit)
+                        if trace_contract_audit.get("wall_timeout_v1"):
+                            _lim_rt = float(trace_contract_audit.get("limit_sec_v1") or 0)
+                            err_rt = (
+                                f"{STUDENT_RM_TRACE_VALIDATE_WALL_TIMEOUT_STATUS_V1}: "
+                                f"RM trace proof scan exceeded {_lim_rt:.0f}s "
+                                "(bounded wait — tune PATTERN_GAME_RM_TRACE_VALIDATE_MAX_SEC)."
+                            )
+                            _batch_term_rt = STUDENT_RM_TRACE_VALIDATE_WALL_TIMEOUT_STATUS_V1
+                            _status_v1_rt = STUDENT_RM_TRACE_VALIDATE_WALL_TIMEOUT_STATUS_V1
+                        else:
+                            err_rt = _student_rm_trace_contract_error_message_v1(trace_contract_audit)
+                            _batch_term_rt = FAILED_RUNTIME_STUDENT_RM_TRACE_CONTRACT_V1
+                            _status_v1_rt = FAILED_RUNTIME_STUDENT_RM_TRACE_CONTRACT_V1
                         exam_line_rt = _exam_run_line_meta_for_parallel_job_v1(
                             exam_req=exam_req if isinstance(exam_req, dict) else None,
                             fingerprint_preview=fp_prev if isinstance(fp_prev, str) else None,
@@ -2549,9 +2670,7 @@ def create_app() -> Flask:
                         )
                         if isinstance(exam_line_rt, dict):
                             exam_line_rt["student_rm_trace_contract_audit_v1"] = trace_contract_audit
-                            exam_line_rt["batch_terminal_status_v1"] = (
-                                FAILED_RUNTIME_STUDENT_RM_TRACE_CONTRACT_V1
-                            )
+                            exam_line_rt["batch_terminal_status_v1"] = _batch_term_rt
                         timing_rt = record_parallel_batch_finished(
                             job_id=job_id,
                             started_at_utc=started_iso,
@@ -2571,7 +2690,7 @@ def create_app() -> Flask:
                             "error": err_rt,
                             "student_rm_trace_contract_audit_v1": trace_contract_audit,
                             "batch_timing": timing_rt,
-                            "status_v1": FAILED_RUNTIME_STUDENT_RM_TRACE_CONTRACT_V1,
+                            "status_v1": _status_v1_rt,
                             "results": results,
                         }
                         with _JOBS_LOCK:
@@ -2688,6 +2807,14 @@ def create_app() -> Flask:
                     seam_audit=seam_audit,
                     error=None,
                 )
+                try:
+                    _parallel_batch_pipeline_log_gt066_v1(
+                        job_id,
+                        "scorecard_write_begin_v1",
+                        "terminal_candidate=done",
+                    )
+                except Exception:
+                    pass
                 timing = record_parallel_batch_finished(
                     job_id=job_id,
                     started_at_utc=started_iso,
@@ -2701,6 +2828,14 @@ def create_app() -> Flask:
                     student_seam_observability_v1=seam_audit,
                     exam_run_line_meta_v1=exam_line,
                 )
+                try:
+                    _parallel_batch_pipeline_log_gt066_v1(
+                        job_id,
+                        "scorecard_write_end_v1",
+                        "ok=True",
+                    )
+                except Exception:
+                    pass
                 payload = {
                     "ok": True,
                     "job_id": job_id,
@@ -2734,6 +2869,14 @@ def create_app() -> Flask:
                     payload["operator_metrics_suppressed_v1"] = bool(
                         full_run_contract_v1.get("operator_metrics_suppressed_v1")
                     )
+                try:
+                    _parallel_batch_pipeline_log_gt066_v1(
+                        job_id,
+                        "final_status_write_begin_v1",
+                        "status=done",
+                    )
+                except Exception:
+                    pass
                 with _JOBS_LOCK:
                     j = _JOBS.get(job_id)
                     if j:
@@ -2749,6 +2892,14 @@ def create_app() -> Flask:
                     session_log_batch_dir=session_batch_dir[0],
                     telemetry_dir=telem_dir,
                 )
+                try:
+                    _parallel_batch_pipeline_log_gt066_v1(
+                        job_id,
+                        "final_status_write_end_v1",
+                        "status=done",
+                    )
+                except Exception:
+                    pass
             except ParallelBatchCancelledError as e:
                 emit_referee_execution_completed_v1(
                     job_id=job_id, fingerprint=lt_fp, results=list(e.partial_results or [])
@@ -3401,6 +3552,14 @@ def create_app() -> Flask:
                     job_id=job_id, fingerprint=lt_fp_block, results=results
                 )
                 referee_parallel_completed_emit_block_v1 = True
+                try:
+                    _parallel_batch_pipeline_log_gt066_v1(
+                        job_id,
+                        "replay_parallel_returned_v1",
+                        f"n={len(results)}",
+                    )
+                except Exception:
+                    pass
             except ParallelBatchCancelledError as e:
                 emit_referee_execution_completed_v1(
                     job_id=job_id, fingerprint=lt_fp_block, results=list(e.partial_results or [])
@@ -3647,13 +3806,21 @@ def create_app() -> Flask:
             if student_rm_wiring_mandate_active_v1(
                 exam_req_block if isinstance(exam_req_block, dict) else None
             ):
-                from renaissance_v4.game_theory.tools.student_reasoning_model_trace_proof_v1 import (
-                    validate_student_reasoning_model_trace_for_job_v1,
-                )
-
-                trace_contract_audit_b = validate_student_reasoning_model_trace_for_job_v1(job_id)
+                trace_contract_audit_b = _validate_student_rm_trace_contract_bounded_v1(job_id)
                 if not trace_contract_audit_b.get("ok_v1"):
-                    err_rtb = _student_rm_trace_contract_error_message_v1(trace_contract_audit_b)
+                    if trace_contract_audit_b.get("wall_timeout_v1"):
+                        _lim_rtb = float(trace_contract_audit_b.get("limit_sec_v1") or 0)
+                        err_rtb = (
+                            f"{STUDENT_RM_TRACE_VALIDATE_WALL_TIMEOUT_STATUS_V1}: "
+                            f"RM trace proof scan exceeded {_lim_rtb:.0f}s "
+                            "(bounded wait — tune PATTERN_GAME_RM_TRACE_VALIDATE_MAX_SEC)."
+                        )
+                        _batch_term_rtb = STUDENT_RM_TRACE_VALIDATE_WALL_TIMEOUT_STATUS_V1
+                        _status_v1_rtb = STUDENT_RM_TRACE_VALIDATE_WALL_TIMEOUT_STATUS_V1
+                    else:
+                        err_rtb = _student_rm_trace_contract_error_message_v1(trace_contract_audit_b)
+                        _batch_term_rtb = FAILED_RUNTIME_STUDENT_RM_TRACE_CONTRACT_V1
+                        _status_v1_rtb = FAILED_RUNTIME_STUDENT_RM_TRACE_CONTRACT_V1
                     exam_line_rtb = _exam_run_line_meta_for_parallel_job_v1(
                         exam_req=exam_req_block if isinstance(exam_req_block, dict) else None,
                         fingerprint_preview=fp_prev_block if isinstance(fp_prev_block, str) else None,
@@ -3665,9 +3832,7 @@ def create_app() -> Flask:
                     )
                     if isinstance(exam_line_rtb, dict):
                         exam_line_rtb["student_rm_trace_contract_audit_v1"] = trace_contract_audit_b
-                        exam_line_rtb["batch_terminal_status_v1"] = (
-                            FAILED_RUNTIME_STUDENT_RM_TRACE_CONTRACT_V1
-                        )
+                        exam_line_rtb["batch_terminal_status_v1"] = _batch_term_rtb
                     timing_rtb = record_parallel_batch_finished(
                         job_id=job_id,
                         started_at_utc=started_iso,
@@ -3687,7 +3852,7 @@ def create_app() -> Flask:
                         "job_id": job_id,
                         "batch_timing": timing_rtb,
                         "student_rm_trace_contract_audit_v1": trace_contract_audit_b,
-                        "status_v1": FAILED_RUNTIME_STUDENT_RM_TRACE_CONTRACT_V1,
+                        "status_v1": _status_v1_rtb,
                         "results": results,
                     }
                     _pan_rt = pf_audit_block.get("rm_preflight_results_panel_v1")
@@ -3822,6 +3987,14 @@ def create_app() -> Flask:
                 seam_audit=seam_blocking,
                 error=None,
             )
+            try:
+                _parallel_batch_pipeline_log_gt066_v1(
+                    job_id,
+                    "scorecard_write_begin_v1",
+                    "terminal_candidate=done",
+                )
+            except Exception:
+                pass
             timing = record_parallel_batch_finished(
                 job_id=job_id,
                 started_at_utc=started_iso,
@@ -3835,6 +4008,14 @@ def create_app() -> Flask:
                 student_seam_observability_v1=seam_blocking,
                 exam_run_line_meta_v1=exam_line_block,
             )
+            try:
+                _parallel_batch_pipeline_log_gt066_v1(
+                    job_id,
+                    "scorecard_write_end_v1",
+                    "ok=True",
+                )
+            except Exception:
+                pass
             ok_body: dict[str, Any] = {
                 "ok": True,
                 "job_id": job_id,
@@ -3874,6 +4055,14 @@ def create_app() -> Flask:
             if disk_warn_msgs:
                 ok_body["operator_disk_warnings"] = disk_warn_msgs
             persisted_ok_body = ok_body
+            try:
+                _parallel_batch_pipeline_log_gt066_v1(
+                    job_id,
+                    "final_status_write_begin_v1",
+                    "status=done",
+                )
+            except Exception:
+                pass
             with _JOBS_LOCK:
                 jok = _JOBS.get(job_id)
                 if isinstance(jok, dict):
@@ -3893,6 +4082,14 @@ def create_app() -> Flask:
                 session_log_batch_dir=session_batch_dir[0],
                 telemetry_dir=telem_dir,
             )
+            try:
+                _parallel_batch_pipeline_log_gt066_v1(
+                    job_id,
+                    "final_status_write_end_v1",
+                    "status=done",
+                )
+            except Exception:
+                pass
             return jsonify(ok_body)
         except Exception as e:
             err_s = f"{type(e).__name__}: {e}"

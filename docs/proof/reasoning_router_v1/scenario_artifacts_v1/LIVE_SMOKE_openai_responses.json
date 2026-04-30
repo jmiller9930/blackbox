@@ -1,7 +1,7 @@
 {
   "schema": "gt_directive_026ai_live_smoke_v1",
   "closure_version_v1": 2,
-  "generated_at_utc": "2026-04-26T22:46:31Z",
+  "generated_at_utc": "2026-04-30T01:33:10Z",
   "python": "3.11.0",
   "note": "Adapter smoke failed; unified router path not run.",
   "code_paths_proven_v1": [
@@ -16,7 +16,7 @@
     "input_tokens": 0,
     "output_tokens": 0,
     "total_tokens": 0,
-    "latency_ms": 284.029,
+    "latency_ms": 398.867,
     "error": "<urlopen error [SSL: CERTIFICATE_VERIFY_FAILED] certificate verify failed: unable to get local issuer certificate (_ssl.c:992)>",
     "response_status": "request_failed"
   },

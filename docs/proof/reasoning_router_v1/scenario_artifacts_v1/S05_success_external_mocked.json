@@ -2,7 +2,7 @@
   "schema": "gt_directive_026ai_scenario_proof_bundle_v1",
   "proof_version": 1,
   "scenario_id": "05_successful_external_escalation_mocked",
-  "generated_at_utc": "2026-04-26T22:46:30Z",
+  "generated_at_utc": "2026-04-30T01:33:09Z",
   "narrative": "Low confidence → call → accepted review; tokens & cost on ledger (mocked provider)",
   "python": "3.11.0",
   "entry_reasoning_excerpt_v1": {
@@ -10,11 +10,21 @@
       "indicator_score": 0.0,
       "memory_score": 0.0,
       "prior_outcome_score": 0.0,
+      "pattern_memory_score": 0.0,
+      "ev_score_adjustment_v1": 0.0,
       "risk_adjustment": 0.0,
       "final_score": 0.0,
       "action": "no_trade",
       "long_threshold": 0.2,
-      "short_threshold": -0.2
+      "short_threshold": -0.2,
+      "ev_decision_gate_v1": {
+        "schema": "ev_decision_gate_v1",
+        "applied_v1": false,
+        "prior_action_v1": "no_trade",
+        "post_action_v1": "no_trade",
+        "wrong_direction_blocked_v1": false,
+        "forced_no_trade_ev_v1": false
+      }
     },
     "confidence_01": 0.5
   },
@@ -81,9 +91,9 @@
     "contract_version": 1,
     "router_enabled_v1": true,
     "external_api_enabled_v1": true,
-    "local_model_requested_v1": "qwen3-coder:30b",
-    "local_model_resolved_v1": "qwen3-coder:30b",
-    "local_base_url_used_v1": "http://172.20.1.66:11434",
+    "local_model_requested_v1": "qwen2.5:7b",
+    "local_model_resolved_v1": "qwen2.5:7b",
+    "local_base_url_used_v1": "http://172.20.2.230:11434",
     "external_provider_v1": "openai",
     "external_model_requested_v1": "gpt-5.5",
     "external_model_resolved_v1": "gpt-proof-mock",
@@ -114,7 +124,7 @@
     "output_tokens_v1": 10,
     "total_tokens_v1": 20,
     "estimated_cost_usd_v1": 0.00012,
-    "latency_ms_v1": 0.002792003215290606,
+    "latency_ms_v1": 0.002916996891144663,
     "provider_v1": "openai",
     "model_requested_v1": "gpt-5.5",
     "model_resolved_v1": "gpt-proof-mock",
@@ -174,6 +184,6 @@
   "security_serialized_scan_v1": {
     "ok": true,
     "forbidden_hits": [],
-    "byte_length": 1660
+    "byte_length": 1651
   }
 }

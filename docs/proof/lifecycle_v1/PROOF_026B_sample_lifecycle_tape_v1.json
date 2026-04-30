@@ -495,7 +495,18 @@
           "operator_message_v1": "Missing node."
         },
         {
-          "node_id": "indicator_context_evaluated",
+          "node_id": "indicator_context_eval_v1",
+          "status": "NOT_PROVEN",
+          "input_summary_v1": "\u2014",
+          "output_summary_v1": "\u2014",
+          "blocking_rule_v1": "",
+          "error_codes_v1": [],
+          "evidence_fields_v1": [],
+          "evidence_values_v1": {},
+          "operator_message_v1": "Missing node."
+        },
+        {
+          "node_id": "perps_state_model_evaluated_v1",
           "status": "NOT_PROVEN",
           "input_summary_v1": "\u2014",
           "output_summary_v1": "\u2014",
@@ -539,7 +550,7 @@
           "operator_message_v1": "Missing node."
         },
         {
-          "node_id": "decision_synthesized",
+          "node_id": "decision_synthesis_v1",
           "status": "NOT_PROVEN",
           "input_summary_v1": "\u2014",
           "output_summary_v1": "\u2014",

@@ -167,8 +167,8 @@ def test_post_run_parallel_blocking_writes_lane_metadata(
                                 return_value=None,
                             ):
                                 with patch(
-                                    "renaissance_v4.game_theory.tools.student_reasoning_model_trace_proof_v1.validate_student_reasoning_model_trace_for_job_v1",
-                                    return_value=_fake_student_rm_trace_proof_ok_v1(),
+                                    "renaissance_v4.game_theory.web_app._validate_student_rm_trace_contract_bounded_v1",
+                                        return_value=_fake_student_rm_trace_proof_ok_v1(),
                                 ):
                                     with patch(
                                         "renaissance_v4.game_theory.learning_trace_events_v1.count_learning_trace_terminal_integrity_v1",
@@ -275,7 +275,7 @@ def test_post_run_parallel_start_returns_200_with_exam_contract(
                                     return_value=None,
                                 ):
                                     with patch(
-                                        "renaissance_v4.game_theory.tools.student_reasoning_model_trace_proof_v1.validate_student_reasoning_model_trace_for_job_v1",
+                                        "renaissance_v4.game_theory.web_app._validate_student_rm_trace_contract_bounded_v1",
                                         return_value=_fake_student_rm_trace_proof_ok_v1(),
                                     ):
                                         with patch(
