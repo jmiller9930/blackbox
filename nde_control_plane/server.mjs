@@ -446,7 +446,7 @@ function performAdvanceTrainingCycle(rawDomain, body) {
         domain,
         current_certified: certified.version,
         next_candidate: nextVer,
-        run_id,
+        run_id: runId,
       },
     };
   } catch (e) {
