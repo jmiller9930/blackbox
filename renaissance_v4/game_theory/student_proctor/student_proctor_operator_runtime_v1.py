@@ -321,6 +321,27 @@ def _env_seam_enabled() -> bool:
     return v not in ("0", "false", "no", "off")
 
 
+def student_seam_max_trades_cap_v1() -> int | None:
+    """
+    GT067 — Bound post-replay Student seam work: process at most N **closed** replay trades (global order).
+
+    ``PATTERN_GAME_STUDENT_SEAM_MAX_TRADES`` — default **25**. ``0`` / ``none`` / negative → **unlimited**
+    (dangerous on huge replays).
+
+    Trades beyond the cap are skipped with audit ``student_seam_trades_skipped_due_to_cap_v1``.
+    """
+    raw = (os.environ.get("PATTERN_GAME_STUDENT_SEAM_MAX_TRADES") or "").strip().lower()
+    if raw in ("0", "none", "unlimited", "-1"):
+        return None
+    if not raw:
+        return 25
+    try:
+        n = int(raw)
+    except ValueError:
+        return 25
+    return n if n > 0 else None
+
+
 def _env_unified_agent_reasoning_router_v1() -> bool:
     """Legacy opt-in for extra router wiring; OR'd with Student mandate (see unified_router below)."""
     v = (os.environ.get("PATTERN_GAME_UNIFIED_AGENT_REASONING_ROUTER") or "0").strip().lower()
@@ -425,7 +446,8 @@ def student_loop_seam_after_parallel_batch_v1(
     operator_batch_audit: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
     """
-    For each successful scenario row with ``replay_outcomes_json``, process each trade.
+    For each successful scenario row with ``replay_outcomes_json``, process each closed trade **subject to**
+    ``PATTERN_GAME_STUDENT_SEAM_MAX_TRADES`` (GT067 — default **25**; excess trades skipped, audited).
 
     Returns an audit dict suitable for merging into API ``result`` payloads (Directive 11 fields).
     """
@@ -624,6 +646,8 @@ def student_loop_seam_after_parallel_batch_v1(
         }
 
     replay_closed_trades_total_v1 = _replay_closed_trades_total_v1(results)
+    seam_trade_cap_v1 = student_seam_max_trades_cap_v1()
+    student_seam_trades_skipped_due_to_cap_v1 = 0
     _student_rm_contract_tok = None
     if mandate_active_v1:
         _student_rm_contract_tok = student_rm_trace_mandate_begin_v1()
@@ -672,6 +696,9 @@ def student_loop_seam_after_parallel_batch_v1(
                     o = outcome_record_from_jsonable(raw)
                 except (TypeError, ValueError) as e:
                     errors.append(f"{sid}: outcome_from_json {e!r}")
+                    continue
+                if seam_trade_cap_v1 is not None and trades_seen >= seam_trade_cap_v1:
+                    student_seam_trades_skipped_due_to_cap_v1 += 1
                     continue
                 trades_seen += 1
                 if use_llm and batch_student_llm_gate_failed:
@@ -1330,6 +1357,10 @@ def student_loop_seam_after_parallel_batch_v1(
                             "run_id": run_id,
                             "rm_preflight_wiring_early_exit_v1": True,
                             "replay_closed_trades_total_v1": replay_closed_trades_total_v1,
+                            "student_seam_max_trades_v1": seam_trade_cap_v1,
+                            "student_seam_trades_skipped_due_to_cap_v1": int(
+                                student_seam_trades_skipped_due_to_cap_v1
+                            ),
                             "student_seam_stop_reason_v1": "rm_preflight_early_exit_first_seal_v1",
                             "student_decision_authority_mandate_enforced_v1": bool(mandate_active_v1),
                             "candle_timeframe_minutes_effective_v1": int(c_tf),
@@ -1531,11 +1562,17 @@ def student_loop_seam_after_parallel_batch_v1(
                 "no_replay_outcomes_v1"
                 if replay_closed_trades_total_v1 <= 0
                 else (
-                    "completed_all_trades_v1"
-                    if trades_seen == replay_closed_trades_total_v1
-                    else "trade_loop_incomplete_v1"
+                    "completed_bounded_seam_trades_v1"
+                    if student_seam_trades_skipped_due_to_cap_v1 > 0
+                    else (
+                        "completed_all_trades_v1"
+                        if trades_seen == replay_closed_trades_total_v1
+                        else "trade_loop_incomplete_v1"
+                    )
                 )
             ),
+            "student_seam_max_trades_v1": seam_trade_cap_v1,
+            "student_seam_trades_skipped_due_to_cap_v1": int(student_seam_trades_skipped_due_to_cap_v1),
             "student_decision_authority_mandate_enforced_v1": bool(mandate_active_v1),
             "candle_timeframe_minutes_effective_v1": int(c_tf),
             "student_learning_store_path": str(store.resolve()),
@@ -1610,6 +1647,8 @@ def student_loop_seam_after_parallel_batch_v1(
             "schema": "student_loop_seam_audit_v1",
             "run_id": run_id,
             "replay_closed_trades_total_v1": replay_closed_trades_total_v1,
+            "student_seam_max_trades_v1": seam_trade_cap_v1,
+            "student_seam_trades_skipped_due_to_cap_v1": int(student_seam_trades_skipped_due_to_cap_v1),
             "trades_considered": trades_seen,
             "student_seam_stop_reason_v1": "fatal_authority_seal_mismatch_v1",
             "fatal_authority_seal_mismatch_v1": True,
@@ -1657,6 +1696,8 @@ def student_loop_seam_after_parallel_batch_v1(
             "schema": "student_loop_seam_audit_v1",
             "run_id": run_id,
             "replay_closed_trades_total_v1": replay_closed_trades_total_v1,
+            "student_seam_max_trades_v1": seam_trade_cap_v1,
+            "student_seam_trades_skipped_due_to_cap_v1": int(student_seam_trades_skipped_due_to_cap_v1),
             "trades_considered": trades_seen,
             "student_seam_stop_reason_v1": "seam_unhandled_exception_v1",
             "student_decision_authority_mandate_enforced_v1": bool(mandate_active_v1),
@@ -1700,5 +1741,6 @@ __all__ = [
     "SCHEMA_WIRING_HONESTY_ANNOTATION_V1",
     "StudentSeamFatalAuthoritySealMismatch",
     "student_loop_seam_after_parallel_batch_v1",
+    "student_seam_max_trades_cap_v1",
     "student_seam_wall_timeout_audit_v1",
 ]
