@@ -18,6 +18,7 @@ const REPO = process.env.REPO_MOUNT || "/repo";
 const FINQUANT_LEGACY_ROOT =
   process.env.FINQUANT_LEGACY_ROOT || "/data/finquant-1";
 const LEGACY_FINQUANT_RUN_LABEL = "finquant-v0.2-full";
+const FINQUANT_V02_ADAPTER_NAME = "finquant-1-qwen7b-v0.2";
 
 const NODE_SEQUENCE = [
   "contract_ok",
