@@ -41,12 +41,11 @@ RUN_ARGS=(
   -v "${REPO_HOST}:/repo:ro"
 )
 
-# FinQuant v0.2 eval runs /data/NDE/tools/run_finquant_v02_eval.sh inside the container;
-# it needs a real Python (GPU stack). Prefer host interpreter bind-mount when present.
-HOST_PY="${HOST_PYTHON_FOR_EVAL:-/usr/bin/python3}"
-if [[ -f "${HOST_PY}" ]]; then
-  RUN_ARGS+=( -v "${HOST_PY}:/host/python3:ro" -e TRAIN_PYTHON=/host/python3 )
-fi
+# FinQuant eval script uses TRAIN_PYTHON (see /data/NDE/tools/run_finquant_v02_eval.sh).
+# Point at a full interpreter on a shared volume (e.g. conda/venv on the host under
+# /data/finquant-1 or /data/NDE). Example:
+#   TRAIN_PYTHON=/data/finquant-1/.venv/bin/python ./run-docker.sh
+[[ -n "${TRAIN_PYTHON:-}" ]] && RUN_ARGS+=( -e "TRAIN_PYTHON=${TRAIN_PYTHON}" )
 
 if [[ "${FOREGROUND}" == true ]]; then
   echo "Running (foreground). Ctrl+C to stop."
