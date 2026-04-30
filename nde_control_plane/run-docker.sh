@@ -41,6 +41,13 @@ RUN_ARGS=(
   -v "${REPO_HOST}:/repo:ro"
 )
 
+# FinQuant v0.2 eval runs /data/NDE/tools/run_finquant_v02_eval.sh inside the container;
+# it needs a real Python (GPU stack). Prefer host interpreter bind-mount when present.
+HOST_PY="${HOST_PYTHON_FOR_EVAL:-/usr/bin/python3}"
+if [[ -f "${HOST_PY}" ]]; then
+  RUN_ARGS+=( -v "${HOST_PY}:/host/python3:ro" -e TRAIN_PYTHON=/host/python3 )
+fi
+
 if [[ "${FOREGROUND}" == true ]]; then
   echo "Running (foreground). Ctrl+C to stop."
   exec docker run --rm -it "${RUN_ARGS[@]}" "${IMAGE}"
