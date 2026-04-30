@@ -77,5 +77,7 @@ def test_d6_web_app_batch_handler_runs_seam_after_parallel_results(tmp_path: Pat
     web = root / "web_app.py"
     text = web.read_text(encoding="utf-8")
     i_parallel = text.find("results = run_scenarios_parallel(")
-    i_seam = text.find("seam_audit = student_loop_seam_after_parallel_batch_v1(")
+    i_seam = text.find(
+        "seam_audit, seam_timed_out = _run_student_loop_seam_after_parallel_with_timeout_v1("
+    )
     assert i_parallel != -1 and i_seam != -1 and i_parallel < i_seam

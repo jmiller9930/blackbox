@@ -117,7 +117,8 @@ def test_gt064_execute_student_behavior_probe_not_called_blocking_parallel(
                     return_value=[_fake_parallel_row()],
                 ):
                     with patch(
-                        "renaissance_v4.game_theory.web_app.student_loop_seam_after_parallel_batch_v1",
+                        "renaissance_v4.game_theory.student_proctor.student_proctor_operator_runtime_v1"
+                        ".student_loop_seam_after_parallel_batch_v1",
                         return_value=fake_seam,
                     ):
                         with patch(

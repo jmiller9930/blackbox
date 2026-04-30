@@ -151,8 +151,8 @@ def test_post_run_parallel_blocking_writes_lane_metadata(
                 return_value=[_fake_parallel_row()],
             ):
                 with patch(
-                    "renaissance_v4.game_theory.web_app.student_loop_seam_after_parallel_batch_v1",
-                    return_value=fake_seam,
+                    "renaissance_v4.game_theory.web_app._run_student_loop_seam_after_parallel_with_timeout_v1",
+                    return_value=(fake_seam, False),
                 ):
                     with patch(
                         "renaissance_v4.game_theory.web_app.promote_groundhog_bundle_from_parallel_scenarios_v1",
@@ -259,8 +259,8 @@ def test_post_run_parallel_start_returns_200_with_exam_contract(
                     return_value=[_fake_parallel_row()],
                 ):
                     with patch(
-                        "renaissance_v4.game_theory.web_app.student_loop_seam_after_parallel_batch_v1",
-                        return_value=fake_seam,
+                        "renaissance_v4.game_theory.web_app._run_student_loop_seam_after_parallel_with_timeout_v1",
+                        return_value=(fake_seam, False),
                     ):
                         with patch(
                             "renaissance_v4.game_theory.web_app.promote_groundhog_bundle_from_parallel_scenarios_v1",

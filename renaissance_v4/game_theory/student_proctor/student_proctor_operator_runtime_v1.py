@@ -373,6 +373,47 @@ def _replay_closed_trades_total_v1(results: list[dict[str, Any]]) -> int:
     return n
 
 
+def student_seam_wall_timeout_audit_v1(
+    *,
+    results: list[dict[str, Any]],
+    run_id: str,
+    wall_limit_sec: float,
+) -> dict[str, Any]:
+    """
+    GT065 — Synthetic seam audit when ``student_loop_seam_after_parallel_batch_v1`` exceeds a wall-clock
+    budget in ``web_app`` (executor abandons wait; orphan seam thread may still run).
+    """
+    _ = str(run_id).strip()
+    return {
+        "schema": "student_loop_seam_audit_v1",
+        "skipped": True,
+        "reason": (
+            f"student_seam_wall_timeout_v1: post-replay seam exceeded {float(wall_limit_sec):.0f}s "
+            "(see PATTERN_GAME_STUDENT_SEAM_AFTER_PARALLEL_MAX_SEC)"
+        ),
+        "replay_closed_trades_total_v1": _replay_closed_trades_total_v1(results),
+        "student_seam_stop_reason_v1": "student_seam_wall_timeout_v1",
+        "student_seam_wall_limit_sec_v1": float(wall_limit_sec),
+        "student_learning_rows_appended": 0,
+        "student_retrieval_matches": 0,
+        "student_output_fingerprint": None,
+        "shadow_student_enabled": False,
+        "phased_honesty_annotation_v1": _phased_honesty_annotation_v1(
+            seam_attempted=True,
+            student_emit_occurred=False,
+        ),
+        "wiring_honesty_annotation_v1": _wiring_honesty_annotation_v1(
+            seam_attempted=True,
+            trades_seen=0,
+            first_packet_annex_present=None,
+            retrieval_matches_total=0,
+        ),
+        "memory_semantics_annotation_v1": _memory_semantics_annotation_v1(seam_attempted=True),
+        "deliverable_vocabulary_annotation_v1": _deliverable_vocabulary_annotation_v1(seam_attempted=True),
+        "llm_student_output_rejections_v1": 0,
+    }
+
+
 def student_loop_seam_after_parallel_batch_v1(
     *,
     results: list[dict[str, Any]],
@@ -1659,4 +1700,5 @@ __all__ = [
     "SCHEMA_WIRING_HONESTY_ANNOTATION_V1",
     "StudentSeamFatalAuthoritySealMismatch",
     "student_loop_seam_after_parallel_batch_v1",
+    "student_seam_wall_timeout_audit_v1",
 ]

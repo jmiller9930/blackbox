@@ -185,9 +185,6 @@ from renaissance_v4.game_theory.student_proctor.student_learning_operator_v1 imp
     clear_student_learning_store_v1,
     student_learning_store_status_v1,
 )
-from renaissance_v4.game_theory.student_proctor.student_proctor_operator_runtime_v1 import (
-    student_loop_seam_after_parallel_batch_v1,
-)
 from renaissance_v4.game_theory.student_rm_trace_contract_v1 import student_rm_wiring_mandate_active_v1
 from renaissance_v4.game_theory.student_controlled_replay_v1 import (
     apply_automated_student_lanes_from_exam_contract_v1,
@@ -483,6 +480,98 @@ def _parallel_batch_watchdog_v1() -> None:
             session_log_batch_dir=None,
             telemetry_dir=td_path,
         )
+
+
+def _student_seam_after_parallel_max_sec_v1() -> float:
+    """
+    Wall clock for ``student_loop_seam_after_parallel_batch_v1`` (post-replay Directive 09 seam).
+
+    ``PATTERN_GAME_STUDENT_SEAM_AFTER_PARALLEL_MAX_SEC`` — default **600** (10 minutes). **0** = unlimited
+    (lab debugging only — can hang until batch watchdog).
+    """
+    raw = (os.environ.get("PATTERN_GAME_STUDENT_SEAM_AFTER_PARALLEL_MAX_SEC") or "").strip()
+    if not raw:
+        return 600.0
+    try:
+        n = float(raw)
+    except ValueError:
+        return 600.0
+    return max(0.0, n)
+
+
+def _run_student_loop_seam_after_parallel_with_timeout_v1(
+    *,
+    job_id: str,
+    results: list[dict[str, Any]],
+    strategy_id: str | None,
+    exam_run_contract_request_v1: dict[str, Any] | None,
+    operator_batch_audit: dict[str, Any] | None,
+) -> tuple[dict[str, Any], bool]:
+    """
+    GT065 — Run Directive 09 seam with optional wall clock.
+
+    Returns ``(seam_audit, timed_out)``. When ``timed_out`` is True, the executor abandoned wait;
+    an orphan seam thread may still run until completion — the batch must still terminal-close.
+    """
+    from concurrent.futures import ThreadPoolExecutor
+    from concurrent.futures import TimeoutError as FuturesTimeout
+
+    from renaissance_v4.game_theory.student_proctor.student_proctor_operator_runtime_v1 import (
+        student_loop_seam_after_parallel_batch_v1,
+        student_seam_wall_timeout_audit_v1,
+    )
+
+    limit = _student_seam_after_parallel_max_sec_v1()
+    if limit <= 0:
+        return (
+            student_loop_seam_after_parallel_batch_v1(
+                results=results,
+                run_id=job_id,
+                strategy_id=strategy_id,
+                exam_run_contract_request_v1=exam_run_contract_request_v1,
+                operator_batch_audit=operator_batch_audit,
+            ),
+            False,
+        )
+
+    ex = ThreadPoolExecutor(max_workers=1)
+
+    def _call() -> dict[str, Any]:
+        return student_loop_seam_after_parallel_batch_v1(
+            results=results,
+            run_id=job_id,
+            strategy_id=strategy_id,
+            exam_run_contract_request_v1=exam_run_contract_request_v1,
+            operator_batch_audit=operator_batch_audit,
+        )
+
+    try:
+        fut = ex.submit(_call)
+        return fut.result(timeout=limit), False
+    except FuturesTimeout:
+        print(
+            f"[pattern_game_parallel] job_id={job_id} STUDENT SEAM wall timeout after {limit:.0f}s "
+            "(GT065 — terminal error; orphan seam thread may still run)",
+            file=sys.stderr,
+            flush=True,
+        )
+        try:
+            _parallel_job_append_rm_preflight_line_v1(
+                job_id,
+                f"STUDENT SEAM: wall timeout after {limit:.0f}s — batch terminal error (GT065).",
+            )
+        except Exception:
+            pass
+        return (
+            student_seam_wall_timeout_audit_v1(
+                results=results,
+                run_id=job_id,
+                wall_limit_sec=limit,
+            ),
+            True,
+        )
+    finally:
+        ex.shutdown(wait=False)
 
 
 def _prune_jobs() -> None:
@@ -1035,6 +1124,7 @@ def _web_ui_require_hypothesis() -> bool:
 
 FAILED_RUNTIME_STUDENT_RM_TRACE_CONTRACT_V1 = "failed_runtime_student_rm_trace_contract_v1"
 FAILED_STUDENT_FULL_RUN_CONTRACT_STATUS_V1 = "failed_student_full_run_contract_v1"
+STUDENT_SEAM_WALL_TIMEOUT_STATUS_V1 = "student_seam_wall_timeout_v1"
 FAILED_FATAL_AUTHORITY_SEAL_MISMATCH_V1 = "fatal_authority_seal_mismatch_v1"
 
 
@@ -2294,9 +2384,9 @@ def create_app() -> Flask:
                     )
                 ok_n = sum(1 for r in results if r.get("ok"))
                 op_rid = str(operator_batch_audit.get("operator_recipe_id") or "").strip() or None
-                seam_audit = student_loop_seam_after_parallel_batch_v1(
+                seam_audit, seam_timed_out = _run_student_loop_seam_after_parallel_with_timeout_v1(
+                    job_id=job_id,
                     results=results,
-                    run_id=job_id,
                     strategy_id=op_rid,
                     exam_run_contract_request_v1=exam_req if isinstance(exam_req, dict) else None,
                     operator_batch_audit=operator_batch_audit
@@ -2304,6 +2394,72 @@ def create_app() -> Flask:
                     else None,
                 )
                 seam_audit = finalize_seam_audit_authority_seal_contract_v1(job_id, seam_audit)
+                if seam_timed_out:
+                    _lim_tm = _student_seam_after_parallel_max_sec_v1()
+                    err_tm = (
+                        f"{STUDENT_SEAM_WALL_TIMEOUT_STATUS_V1}: post-replay Student seam exceeded {_lim_tm:.0f}s "
+                        "(executor abandoned wait). Orphan seam worker may still run. "
+                        "Tune PATTERN_GAME_STUDENT_SEAM_AFTER_PARALLEL_MAX_SEC."
+                    )
+                    exam_line_tm = _exam_run_line_meta_for_parallel_job_v1(
+                        exam_req=exam_req if isinstance(exam_req, dict) else None,
+                        fingerprint_preview=fp_prev if isinstance(fp_prev, str) else None,
+                        operator_batch_audit=operator_batch_audit,
+                        results=results,
+                        job_id=job_id,
+                        seam_audit=seam_audit,
+                        error=err_tm,
+                    )
+                    if isinstance(exam_line_tm, dict):
+                        exam_line_tm["batch_terminal_status_v1"] = STUDENT_SEAM_WALL_TIMEOUT_STATUS_V1
+                    timing_tm = record_parallel_batch_finished(
+                        job_id=job_id,
+                        started_at_utc=started_iso,
+                        start_unix=start_unix,
+                        total_scenarios=len(scenarios),
+                        workers_used=workers_used,
+                        results=results,
+                        session_log_batch_dir=session_batch_dir[0],
+                        error=err_tm,
+                        operator_batch_audit=operator_batch_audit,
+                        student_seam_observability_v1=seam_audit,
+                        exam_run_line_meta_v1=exam_line_tm,
+                    )
+                    tm_payload: dict[str, Any] = {
+                        "ok": False,
+                        "job_id": job_id,
+                        "error": err_tm,
+                        "results": results,
+                        "batch_timing": timing_tm,
+                        "status_v1": STUDENT_SEAM_WALL_TIMEOUT_STATUS_V1,
+                        "student_loop_directive_09_v1": seam_audit,
+                        "rm_preflight_audit_v1": pf_audit,
+                        "operator_metrics_suppressed_v1": True,
+                    }
+                    persisted_tm = tm_payload
+                    with _JOBS_LOCK:
+                        jtm = _JOBS.get(job_id)
+                        if jtm:
+                            jtm["status"] = "error"
+                            jtm["completed"] = len(results)
+                            jtm["error"] = err_tm
+                            jtm["batch_timing"] = timing_tm
+                            try:
+                                jtm["result"] = {
+                                    **tm_payload,
+                                    "operator_rm_gates_v1": _build_operator_rm_gates_v1(jtm, job_id),
+                                }
+                            except Exception:
+                                jtm["result"] = dict(tm_payload)
+                            persisted_tm = jtm["result"]
+                    _persist_parallel_terminal_v1(
+                        job_id,
+                        "error",
+                        persisted_tm,
+                        session_log_batch_dir=session_batch_dir[0],
+                        telemetry_dir=telem_dir,
+                    )
+                    return
                 if seam_audit.get("fatal_authority_seal_mismatch_v1"):
                     _fd_asm = seam_audit.get("fatal_authority_seal_detail_v1")
                     _rc_asm = (
@@ -3338,9 +3494,9 @@ def create_app() -> Flask:
                 )
             ok_n = sum(1 for r in results if r.get("ok"))
             op_rid_block = str(operator_batch_audit.get("operator_recipe_id") or "").strip() or None
-            seam_blocking = student_loop_seam_after_parallel_batch_v1(
+            seam_blocking, seam_blocking_timed_out = _run_student_loop_seam_after_parallel_with_timeout_v1(
+                job_id=job_id,
                 results=results,
-                run_id=job_id,
                 strategy_id=op_rid_block,
                 exam_run_contract_request_v1=exam_req_block if isinstance(exam_req_block, dict) else None,
                 operator_batch_audit=operator_batch_audit
@@ -3348,6 +3504,74 @@ def create_app() -> Flask:
                 else None,
             )
             seam_blocking = finalize_seam_audit_authority_seal_contract_v1(job_id, seam_blocking)
+            if seam_blocking_timed_out:
+                _lim_tb = _student_seam_after_parallel_max_sec_v1()
+                err_tmb = (
+                    f"{STUDENT_SEAM_WALL_TIMEOUT_STATUS_V1}: post-replay Student seam exceeded {_lim_tb:.0f}s "
+                    "(executor abandoned wait). Orphan seam worker may still run. "
+                    "Tune PATTERN_GAME_STUDENT_SEAM_AFTER_PARALLEL_MAX_SEC."
+                )
+                exam_line_tmb = _exam_run_line_meta_for_parallel_job_v1(
+                    exam_req=exam_req_block if isinstance(exam_req_block, dict) else None,
+                    fingerprint_preview=fp_prev_block if isinstance(fp_prev_block, str) else None,
+                    operator_batch_audit=operator_batch_audit,
+                    results=results,
+                    job_id=job_id,
+                    seam_audit=seam_blocking,
+                    error=err_tmb,
+                )
+                if isinstance(exam_line_tmb, dict):
+                    exam_line_tmb["batch_terminal_status_v1"] = STUDENT_SEAM_WALL_TIMEOUT_STATUS_V1
+                timing_tmb = record_parallel_batch_finished(
+                    job_id=job_id,
+                    started_at_utc=started_iso,
+                    start_unix=start_unix,
+                    total_scenarios=len(scenarios),
+                    workers_used=workers_used,
+                    results=results,
+                    session_log_batch_dir=session_batch_dir[0],
+                    error=err_tmb,
+                    operator_batch_audit=operator_batch_audit,
+                    student_seam_observability_v1=seam_blocking,
+                    exam_run_line_meta_v1=exam_line_tmb,
+                )
+                tm_body_b: dict[str, Any] = {
+                    "ok": False,
+                    "job_id": job_id,
+                    "error": err_tmb,
+                    "results": results,
+                    "batch_timing": timing_tmb,
+                    "status_v1": STUDENT_SEAM_WALL_TIMEOUT_STATUS_V1,
+                    "student_loop_directive_09_v1": seam_blocking,
+                    "rm_preflight_audit_v1": pf_audit_block,
+                    "operator_metrics_suppressed_v1": True,
+                }
+                _pan_tm = pf_audit_block.get("rm_preflight_results_panel_v1")
+                if isinstance(_pan_tm, dict):
+                    tm_body_b["rm_preflight_results_panel_v1"] = copy.deepcopy(_pan_tm)
+                persisted_tmb = dict(tm_body_b)
+                with _JOBS_LOCK:
+                    jtmb = _JOBS.get(job_id)
+                    if isinstance(jtmb, dict):
+                        jtmb["status"] = "error"
+                        jtmb["error"] = err_tmb
+                        jtmb["batch_timing"] = timing_tmb
+                        try:
+                            jtmb["result"] = {
+                                **tm_body_b,
+                                "operator_rm_gates_v1": _build_operator_rm_gates_v1(jtmb, job_id),
+                            }
+                        except Exception:
+                            jtmb["result"] = dict(tm_body_b)
+                        persisted_tmb = jtmb["result"]
+                _persist_parallel_terminal_v1(
+                    job_id,
+                    "error",
+                    persisted_tmb,
+                    session_log_batch_dir=session_batch_dir[0],
+                    telemetry_dir=telem_dir,
+                )
+                return jsonify(persisted_tmb), 400
             if seam_blocking.get("fatal_authority_seal_mismatch_v1"):
                 _fd_asmb = seam_blocking.get("fatal_authority_seal_detail_v1")
                 _rc_asmb = (
