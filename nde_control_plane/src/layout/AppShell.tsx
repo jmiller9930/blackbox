@@ -1,4 +1,5 @@
 import { NavLink, Outlet } from "react-router-dom";
+import { studioVersionLabel } from "../buildMeta";
 import { useStudio } from "../context/StudioContext";
 
 const nav = [
@@ -71,6 +72,9 @@ export default function AppShell() {
           <main className="page-main">
             <Outlet />
           </main>
+          <footer className="app-version-footer" title="Bump package.json version when shipping UI changes; build ID is set each vite build.">
+            <span className="mono">{studioVersionLabel()}</span>
+          </footer>
         </div>
       </div>
     </div>

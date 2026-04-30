@@ -156,6 +156,15 @@ body {
   padding: 0.35rem 0.6rem;
 }
 
+.app-version-footer {
+  flex-shrink: 0;
+  padding: 0.45rem 1.25rem;
+  border-top: 1px solid var(--border);
+  font-size: 0.72rem;
+  color: var(--muted);
+  background: rgba(0, 0, 0, 0.2);
+}
+
 .page-main {
   flex: 1;
   padding: 1rem 1.25rem 2rem;

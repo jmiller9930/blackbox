@@ -376,6 +376,24 @@ const upload = multer({
   },
 });
 
+function readStudioPackageSemver() {
+  try {
+    const p = path.join(__dirname, "package.json");
+    const j = JSON.parse(fs.readFileSync(p, "utf8"));
+    return typeof j.version === "string" ? j.version : "0.0.0";
+  } catch {
+    return "unknown";
+  }
+}
+
+/** Matches package.json in the running container / repo checkout */
+app.get("/api/studio-version", (_req, res) => {
+  res.json({
+    service: "nde-studio",
+    semver: readStudioPackageSemver(),
+  });
+});
+
 app.get("/api/domains", (_req, res) => {
   let discovered = ["secops", "finquant"];
   try {
