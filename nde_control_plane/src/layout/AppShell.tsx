@@ -1,4 +1,5 @@
 import { NavLink, Outlet } from "react-router-dom";
+import { useEffect, useState } from "react";
 import { studioVersionLabel } from "../buildMeta";
 import { useStudio } from "../context/StudioContext";
 
@@ -11,8 +12,34 @@ const nav = [
   { to: "/settings", label: "Settings" },
 ];
 
+type StudioVersionApi = { commit?: string; semver?: string };
+
 export default function AppShell() {
   const { domains, domain, setDomain } = useStudio();
+  const [gitShort, setGitShort] = useState<string | null>(null);
+
+  useEffect(() => {
+    let cancelled = false;
+    fetch("/api/studio-version")
+      .then((r) => (r.ok ? r.json() : null))
+      .then((j: StudioVersionApi | null) => {
+        if (cancelled || !j || typeof j.commit !== "string") return;
+        const c = j.commit.trim();
+        if (!c || c === "unknown") return;
+        setGitShort(c.length > 7 ? c.slice(0, 7) : c);
+      })
+      .catch(() => {});
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  const versionBanner = [
+    studioVersionLabel(),
+    gitShort ? `git ${gitShort}` : null,
+  ]
+    .filter(Boolean)
+    .join(" · ");
 
   return (
     <div className="shell-root">
@@ -27,9 +54,9 @@ export default function AppShell() {
             <h1>NDE Studio</h1>
             <p
               className="banner-version mono"
-              title="Bump package.json version when shipping UI changes; build ID is set each vite build."
+              title="Semver from package.json; timestamp from vite build; git from container NDE_STUDIO_COMMIT."
             >
-              {studioVersionLabel()}
+              {versionBanner}
             </p>
             <p className="banner-tagline">Control Plane</p>
           </div>
