@@ -8,6 +8,17 @@ import path from "path";
 import { execFile, spawn } from "child_process";
 import { promisify } from "util";
 import { fileURLToPath } from "url";
+import {
+  resolveStagingJsonlWithSource,
+  countJsonlRows,
+  pickTrainingNodeDirs,
+  tailTrainingLogs,
+  parseTrainerFromLog,
+  sampleNvidiaSmi,
+  formatEtaMs,
+  classifyDatasetPath,
+  extractTrainingConfigHints,
+} from "./trainingTelemetryLib.mjs";
 
 const execFileAsync = promisify(execFile);
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
@@ -508,14 +519,15 @@ function listNodeStatuses(runPath) {
 }
 
 function trainingLogTail(domain, runId) {
-  const rr = runRoot(domain, runId);
-  const parts = [];
-  for (const log of ["stdout.log", "stderr.log"]) {
-    const p = path.join(rr, "nodes", "smoke_train", log);
-    const t = tailFile(p, 32000);
-    if (t) parts.push(`=== smoke_train/${log} ===\n${t}`);
-  }
-  return parts.join("\n\n").trim();
+  const root = runRoot(domain, runId);
+  const state = readJsonSafe(path.join(root, "state.json"));
+  const modeFull = state?.mode === "full";
+  const picked = pickTrainingNodeDirs(domain, runId, DATA_NDE, modeFull);
+  return tailTrainingLogs(domain, runId, DATA_NDE, picked.logDir, 96000);
+}
+
+function trainStepDisplayName(state) {
+  return state?.mode === "full" ? "full_train" : "smoke_train";
 }
 
 const FINQUANT_V02_STEPS = 3000;
@@ -888,7 +900,7 @@ function derivePipelineVisual(domain, runId) {
         60,
         "FAILED",
         "failed",
-        "smoke_train",
+        trainStepDisplayName(state),
         state?.last_error,
         null
       );
@@ -981,7 +993,7 @@ function derivePipelineVisual(domain, runId) {
       60,
       "FAILED",
       "failed",
-      "smoke_train",
+      trainStepDisplayName(state),
       state?.last_error,
       null
     );
@@ -994,7 +1006,14 @@ function derivePipelineVisual(domain, runId) {
       p = 15 + Math.min(1, frac.cur / frac.tot) * 45;
     }
     const pl = frac && frac.tot > 0 ? `${frac.cur}/${frac.tot}` : null;
-    return activeJobBase(Math.round(p), "TRAINING", "training", "smoke_train", null, pl);
+    return activeJobBase(
+      Math.round(p),
+      "TRAINING",
+      "training",
+      trainStepDisplayName(state),
+      null,
+      pl
+    );
   }
 
   const eOk = state?.eval_passed === true || npass("smoke_eval");
@@ -1038,16 +1057,19 @@ function derivePipelineVisual(domain, runId) {
   return activeJobBase(100, "CERTIFIED", "certified", "certify", null, null);
 }
 
-/** Operator-facing 7-step pipeline (smoke_eval shown as run_eval). */
-const PIPELINE_OPERATOR_STEPS = [
-  { index: 1, graph_node: "validate_domain_contract", name: "validate_domain_contract" },
-  { index: 2, graph_node: "validate_training_dataset", name: "validate_training_dataset" },
-  { index: 3, graph_node: "smoke_train", name: "smoke_train" },
-  { index: 4, graph_node: "smoke_eval", name: "run_eval" },
-  { index: 5, graph_node: "evaluate_gate", name: "evaluate_gate" },
-  { index: 6, graph_node: "final_exam", name: "final_exam" },
-  { index: 7, graph_node: "certify", name: "certify" },
-];
+/** Operator-facing 7-step pipeline (smoke_eval shown as run_eval). Step 3 label reflects mode. */
+function pipelineOperatorSteps(modeFull) {
+  const trainLabel = modeFull ? "full_train" : "smoke_train";
+  return [
+    { index: 1, graph_node: "validate_domain_contract", name: "validate_domain_contract" },
+    { index: 2, graph_node: "validate_training_dataset", name: "validate_training_dataset" },
+    { index: 3, graph_node: "smoke_train", name: trainLabel },
+    { index: 4, graph_node: "smoke_eval", name: "run_eval" },
+    { index: 5, graph_node: "evaluate_gate", name: "evaluate_gate" },
+    { index: 6, graph_node: "final_exam", name: "final_exam" },
+    { index: 7, graph_node: "certify", name: "certify" },
+  ];
+}
 
 function proofEndMs(npPath, j) {
   if (j?.updated_at) {
@@ -1179,9 +1201,11 @@ function buildPipelineDashboardFields(
   tcSummary,
   primaryIsCycle,
   certificateOnDisk,
-  stagingHint
+  stagingHint,
+  modeFull
 ) {
-  const total_steps = PIPELINE_OPERATOR_STEPS.length;
+  const pipelineDefs = pipelineOperatorSteps(!!modeFull);
+  const total_steps = pipelineDefs.length;
   const root = runRoot(domain, runId);
   const ts = deriveRunTimestamps(domain, runId, primaryState, []);
   const runStartMs = ts.started_at ? Date.parse(ts.started_at) : null;
@@ -1189,7 +1213,7 @@ function buildPipelineDashboardFields(
   const rowMeta = [];
   let prevEndMs = Number.isFinite(runStartMs) ? runStartMs : null;
 
-  for (const def of PIPELINE_OPERATOR_STEPS) {
+  for (const def of pipelineDefs) {
     const np = path.join(root, "nodes", def.graph_node, "node_status.json");
     const j = readJsonSafe(np);
     let status = null;
@@ -1259,7 +1283,7 @@ function buildPipelineDashboardFields(
 
   const nonPass = pipeline_steps.find((s) => s.status !== "PASS");
   let current_step_index = nonPass ? nonPass.index : total_steps;
-  const focusDef = PIPELINE_OPERATOR_STEPS.find((d) => d.index === current_step_index);
+  const focusDef = pipelineDefs.find((d) => d.index === current_step_index);
   const pipeline_focus_label = focusDef
     ? `Step ${current_step_index} / ${total_steps} — ${focusDef.name}`
     : `Step ${total_steps} / ${total_steps} — certify`;
@@ -1353,7 +1377,8 @@ function buildSystemControlPlaneSlice(domain, executionRunId, featuredRunId, tcS
       tcSummary,
       execIsCycle,
       certDisk,
-      stagingHint
+      stagingHint,
+      execState?.mode === "full"
     );
     const posture = postureFromDashboardStatus(pv?.dashboard_status);
     const aj = pv?.active_job;
@@ -2112,7 +2137,84 @@ app.get("/api/runs/:domain", (req, res) => {
   res.json({ domain, runs: enriched });
 });
 
-function buildDashboardPayload(domain) {
+async function buildTrainingTelemetry(domain, runId, state) {
+  const resolved = resolveStagingJsonlWithSource(DATA_NDE, domain);
+  const rawPath =
+    state?.staging_path ||
+    state?.artifacts?.staging_path ||
+    resolved.path ||
+    null;
+  const classified = classifyDatasetPath(rawPath, resolved);
+  const datasetPath = classified.path || resolved.path || "";
+  const rowPath = datasetPath || resolved.path;
+  const rows = rowPath ? countJsonlRows(rowPath) : 0;
+
+  let dsrc = classified.source;
+  if (dsrc === "none") dsrc = resolved.source !== "none" ? resolved.source : "canonical";
+  if (!["config", "canonical", "legacy_fallback"].includes(dsrc)) dsrc = "canonical";
+
+  const modeFull = state?.mode === "full";
+  const picked = pickTrainingNodeDirs(domain, runId, DATA_NDE, modeFull);
+  const logTail = tailTrainingLogs(domain, runId, DATA_NDE, picked.logDir);
+  const parsed = parseTrainerFromLog(logTail);
+  const hints = extractTrainingConfigHints(DATA_NDE, REPO, domain);
+
+  const ts = deriveRunTimestamps(domain, runId, state, []);
+  const elapsed = formatElapsed(ts.elapsed_ms);
+
+  let eta = "ETA: calculating";
+  const cur = parsed.train_step_current;
+  const tot = parsed.train_step_total;
+  if (cur != null && tot != null && tot > 0 && cur >= 0 && ts.elapsed_ms > 1000) {
+    const rate = cur / ts.elapsed_ms;
+    if (rate > 0) {
+      const fmt = formatEtaMs((tot - cur) / rate);
+      if (fmt) eta = fmt;
+    }
+  }
+
+  const gpu = await sampleNvidiaSmi();
+  let gpu_name = null;
+  let vram_used = null;
+  let gpu_utilization = null;
+  if (gpu?.gpu_name) {
+    gpu_name = gpu.gpu_name;
+    if (gpu.vram_used_mb != null && gpu.vram_total_mb != null) {
+      vram_used = `${gpu.vram_used_mb} MiB / ${gpu.vram_total_mb} MiB`;
+    }
+    if (gpu.gpu_util_pct != null) gpu_utilization = `${gpu.gpu_util_pct}%`;
+  }
+
+  const verRaw = state?.version || parseSemverFromRunId(runId, domain) || "—";
+
+  return {
+    mode: "full",
+    domain,
+    version: `${verRaw} candidate`,
+    base_model: hints.base_model,
+    adapter_output: hints.adapter_output_full,
+    dataset_path: datasetPath,
+    dataset_resolution_source: dsrc,
+    dataset_rows: rows,
+    checkpoint_shards_loaded: parsed.checkpoint_shards_loaded ?? 0,
+    checkpoint_shards_total: parsed.checkpoint_shards_total ?? 0,
+    train_step_current: parsed.train_step_current ?? 0,
+    train_step_total: parsed.train_step_total ?? 3000,
+    progress_percent: parsed.progress_percent != null ? parsed.progress_percent : 0,
+    epoch: parsed.epoch ?? null,
+    loss: parsed.loss ?? null,
+    learning_rate: parsed.learning_rate ?? null,
+    mean_token_accuracy: parsed.mean_token_accuracy ?? null,
+    gpu_name,
+    vram_used,
+    gpu_utilization,
+    elapsed,
+    eta,
+    log_tail: logTail.slice(-32000),
+  };
+}
+
+async function buildDashboardPayload(domain) {
   const primary = resolveDashboardPrimaryRun(domain);
   const primaryRunId = primary.run_id;
   const primaryState = primary.state;
@@ -2152,9 +2254,23 @@ function buildDashboardPayload(domain) {
           tcSummary,
           primaryIsCycle,
           certificateOnDisk,
-          stagingHint
+          stagingHint,
+          primaryState?.mode === "full"
         )
       : emptyPipelineDashboardFields();
+
+  let training_telemetry = null;
+  if (executionRunId && pvExecution?.dashboard_status === "TRAINING") {
+    const execRoot = runRoot(domain, executionRunId);
+    const execStateTelemetry = readJsonSafe(path.join(execRoot, "state.json"));
+    if (execStateTelemetry?.mode === "full") {
+      training_telemetry = await buildTrainingTelemetry(
+        domain,
+        executionRunId,
+        execStateTelemetry
+      );
+    }
+  }
 
   const systemSlice = buildSystemControlPlaneSlice(
     domain,
@@ -2205,6 +2321,7 @@ function buildDashboardPayload(domain) {
         ? buildFinquantV02DashboardBlock(finquantLegacyState)
         : undefined,
     training_cycle: tcSummary,
+    training_telemetry,
     ...systemSlice,
     ...pipelineFields,
   };
@@ -2223,14 +2340,22 @@ function buildDashboardPayload(domain) {
 }
 
 /** Same payload as GET /api/dashboard/:domain with domain=finquant */
-app.get("/api/dashboard/finquant", (_req, res) => {
-  res.json(buildDashboardPayload("finquant"));
+app.get("/api/dashboard/finquant", async (_req, res) => {
+  try {
+    res.json(await buildDashboardPayload("finquant"));
+  } catch (e) {
+    res.status(500).json({ error: String(e?.message || e) });
+  }
 });
 
-app.get("/api/dashboard/:domain", (req, res) => {
+app.get("/api/dashboard/:domain", async (req, res) => {
   const domain = safeDomain(req.params.domain);
   if (!domain) return res.status(400).json({ error: "bad_domain" });
-  res.json(buildDashboardPayload(domain));
+  try {
+    res.json(await buildDashboardPayload(domain));
+  } catch (e) {
+    res.status(500).json({ error: String(e?.message || e) });
+  }
 });
 
 /**

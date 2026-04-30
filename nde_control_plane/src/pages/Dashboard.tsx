@@ -23,7 +23,11 @@ import {
   type DashboardBlockId,
 } from "../dashboardBlockOrder";
 import { SortableDashboardBlock } from "../SortableDashboardBlock";
-import { useStudio, type SystemPosture } from "../context/StudioContext";
+import {
+  useStudio,
+  type SystemPosture,
+  type TrainingTelemetryPayload,
+} from "../context/StudioContext";
 
 function pipelineStatusLabel(status: string | undefined): string {
   if (!status) return "—";
@@ -33,6 +37,93 @@ function pipelineStatusLabel(status: string | undefined): string {
 function jobStatusLabel(s: string | undefined): string {
   if (!s) return "—";
   return s.toUpperCase();
+}
+
+function formatTelemetryMetric(n: number | null | undefined, digits = 4): string {
+  if (n == null || Number.isNaN(n)) return "—";
+  const abs = Math.abs(n);
+  const d = abs >= 1000 ? 0 : abs >= 1 ? Math.min(4, digits) : Math.min(6, digits);
+  return n.toFixed(d).replace(/\.?0+$/, "");
+}
+
+function renderTelemetryRows(tt: TrainingTelemetryPayload) {
+  const gpuLine =
+    tt.gpu_name?.trim() ||
+    "GPU telemetry unavailable";
+  const vramLine = tt.vram_used?.trim() || "—";
+  const utilLine = tt.gpu_utilization?.trim() || "—";
+
+  return (
+    <ul className="small mono validate-list" style={{ marginBottom: 0 }}>
+      <li>
+        Run mode: <strong>FULL</strong>
+      </li>
+      <li>
+        Domain: <strong className="accent">{tt.domain}</strong>
+      </li>
+      <li>
+        Version: <strong>{tt.version}</strong>
+      </li>
+      <li className="wrap">
+        Dataset: <span className="accent">{tt.dataset_path || "—"}</span>
+      </li>
+      <li>
+        Dataset source: <strong>{tt.dataset_resolution_source}</strong>
+      </li>
+      <li>
+        Rows: <strong>{tt.dataset_rows}</strong>
+      </li>
+      <li className="wrap">
+        Base model: <span className="muted">{tt.base_model ?? "—"}</span>
+      </li>
+      <li className="wrap">
+        Adapter output: <span className="muted">{tt.adapter_output ?? "—"}</span>
+      </li>
+      <li>
+        Checkpoint shards:{" "}
+        <strong>
+          {tt.checkpoint_shards_loaded} / {tt.checkpoint_shards_total}
+        </strong>
+      </li>
+      <li>
+        Step:{" "}
+        <strong>
+          {tt.train_step_current} / {tt.train_step_total}
+        </strong>
+      </li>
+      <li>
+        Progress: <strong>{tt.progress_percent}%</strong>
+      </li>
+      <li>
+        Epoch: <strong>{formatTelemetryMetric(tt.epoch, 2)}</strong>
+      </li>
+      <li>
+        Loss: <strong>{formatTelemetryMetric(tt.loss)}</strong>
+      </li>
+      <li>
+        LR: <strong>{formatTelemetryMetric(tt.learning_rate)}</strong>
+      </li>
+      <li>
+        Token accuracy:{" "}
+        <strong>{formatTelemetryMetric(tt.mean_token_accuracy)}</strong>
+      </li>
+      <li>
+        GPU: <strong>{gpuLine}</strong>
+      </li>
+      <li>
+        VRAM: <strong>{vramLine}</strong>
+      </li>
+      <li>
+        GPU util: <strong>{utilLine}</strong>
+      </li>
+      <li>
+        Elapsed: <strong>{tt.elapsed}</strong>
+      </li>
+      <li>
+        ETA: <strong>{tt.eta}</strong>
+      </li>
+    </ul>
+  );
 }
 
 function systemPostureHeading(posture: SystemPosture | undefined): string {
@@ -177,6 +268,32 @@ export default function Dashboard() {
             ) : null}
           </section>
         );
+
+      case "training-telemetry": {
+        const tt = dashboard?.training_telemetry;
+        if (
+          !tt ||
+          !execId ||
+          dashboard?.dashboard_status_label !== "TRAINING"
+        ) {
+          return null;
+        }
+        return (
+          <section className="card wide training-telemetry-card">
+            <h3 style={{ marginTop: 0 }}>Training telemetry</h3>
+            <p className="mono accent" style={{ marginBottom: "0.5rem" }}>
+              Live full-training metrics (updates every ~2s)
+            </p>
+            {renderTelemetryRows(tt)}
+            {tt.log_tail ? (
+              <details className="collapse-details mt">
+                <summary className="collapse-summary">Log tail</summary>
+                <pre className="mono small log-tail-pre wrap">{tt.log_tail}</pre>
+              </details>
+            ) : null}
+          </section>
+        );
+      }
 
       case "certified-summary":
         if (!dashboard?.certified_feature_summary) return null;

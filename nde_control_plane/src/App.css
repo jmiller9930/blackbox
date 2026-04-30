@@ -357,6 +357,19 @@ body {
   white-space: pre-wrap;
 }
 
+.training-telemetry-card {
+  border-left: 3px solid var(--accent);
+}
+
+.log-tail-pre {
+  max-height: 240px;
+  overflow: auto;
+  margin-top: 0.5rem;
+  padding: 0.5rem;
+  background: rgba(0, 0, 0, 0.2);
+  border-radius: 4px;
+}
+
 .accent {
   color: var(--accent);
   font-weight: 600;

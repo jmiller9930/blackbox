@@ -104,6 +104,32 @@ export type CurrentNodeArtifacts = {
   outputs: string[];
 };
 
+export type TrainingTelemetryPayload = {
+  mode: string;
+  domain: string;
+  version: string;
+  base_model: string | null;
+  adapter_output: string | null;
+  dataset_path: string;
+  dataset_resolution_source: string;
+  dataset_rows: number;
+  checkpoint_shards_loaded: number;
+  checkpoint_shards_total: number;
+  train_step_current: number;
+  train_step_total: number;
+  progress_percent: number;
+  epoch: number | null;
+  loss: number | null;
+  learning_rate: number | null;
+  mean_token_accuracy: number | null;
+  gpu_name: string | null;
+  vram_used: string | null;
+  gpu_utilization: string | null;
+  elapsed: string;
+  eta: string;
+  log_tail: string;
+};
+
 export type TrainingCyclePayload = {
   latest_certified_version: string | null;
   latest_certified_run_id: string | null;
@@ -160,6 +186,7 @@ export type DashboardPayload = {
   pipeline_timeline_lines?: string[];
   pipeline_timing_lines?: string[];
   current_node_artifacts?: CurrentNodeArtifacts | null;
+  training_telemetry?: TrainingTelemetryPayload | null;
 };
 
 type StudioCtx = {
@@ -248,9 +275,19 @@ export function StudioProvider({ children }: { children: ReactNode }) {
   }, [refresh]);
 
   useEffect(() => {
-    const t = window.setInterval(() => void refresh(), 2000);
+    const fastPoll =
+      dashboard?.execution_active_run_id &&
+      dashboard.dashboard_status_label === "TRAINING" &&
+      dashboard.training_telemetry;
+    const ms = fastPoll ? 1500 : 2000;
+    const t = window.setInterval(() => void refresh(), ms);
     return () => window.clearInterval(t);
-  }, [refresh]);
+  }, [
+    refresh,
+    dashboard?.execution_active_run_id,
+    dashboard?.dashboard_status_label,
+    dashboard?.training_telemetry,
+  ]);
 
   const value = useMemo(
     () => ({

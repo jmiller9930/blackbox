@@ -3,6 +3,7 @@ import type { ActiveJobPayload, DashboardPayload, TrainingCyclePayload } from ".
 /** All dashboard blocks that can appear (subset shown based on data). */
 export const DASHBOARD_BLOCK_ORDER_DEFAULT = [
   "system-status",
+  "training-telemetry",
   "certified-summary",
   "job-in-progress",
   "pipeline-detail",
@@ -54,6 +55,14 @@ export function getVisibleDashboardBlockIds(args: {
   const vis = new Set<DashboardBlockId>();
 
   vis.add("system-status");
+
+  if (
+    dashboard?.training_telemetry &&
+    execId &&
+    dashboard.dashboard_status_label === "TRAINING"
+  ) {
+    vis.add("training-telemetry");
+  }
 
   if (dashboard?.certified_feature_summary) vis.add("certified-summary");
   if (execId && aj) vis.add("job-in-progress");
