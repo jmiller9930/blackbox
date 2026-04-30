@@ -5,6 +5,7 @@
 #   ./run-docker.sh              # build + run detached
 #   ./run-docker.sh --foreground
 #   REPO_HOST=/path/to/blackbox ./run-docker.sh
+#   NDE_STUDIO_GPUS=1 ./run-docker.sh   # pass GPUs for FinQuant v0.2 eval (nvidia runtime)
 #
 # URL: http://127.0.0.1:3999
 set -euo pipefail
@@ -46,6 +47,9 @@ RUN_ARGS=(
 # /data/finquant-1 or /data/NDE). Example:
 #   TRAIN_PYTHON=/data/finquant-1/.venv/bin/python ./run-docker.sh
 [[ -n "${TRAIN_PYTHON:-}" ]] && RUN_ARGS+=( -e "TRAIN_PYTHON=${TRAIN_PYTHON}" )
+
+# eval_finquant 4-bit load needs CUDA; set on GPU hosts (requires nvidia-container-toolkit).
+[[ "${NDE_STUDIO_GPUS:-}" == "1" ]] && RUN_ARGS+=( --gpus all )
 
 if [[ "${FOREGROUND}" == true ]]; then
   echo "Running (foreground). Ctrl+C to stop."
