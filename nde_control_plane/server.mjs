@@ -603,6 +603,7 @@ function classifyPrimaryTier(domain, runId) {
 
 function resolveDashboardPrimaryRun(domain) {
   const sorted = listRunsSorted(domain);
+  /** Tier 1: active / incomplete cycle (still moving). */
   for (const row of sorted) {
     if (classifyPrimaryTier(domain, row.run_id) === 1) {
       return {
@@ -612,15 +613,10 @@ function resolveDashboardPrimaryRun(domain) {
       };
     }
   }
-  for (const row of sorted) {
-    if (classifyPrimaryTier(domain, row.run_id) === 2) {
-      return {
-        run_id: row.run_id,
-        state: readJsonSafe(path.join(row.path, "state.json")),
-        is_cycle: true,
-      };
-    }
-  }
+  /**
+   * Prefer latest certified run before surfacing stale failed cycles — otherwise an old
+   * BLOCKED candidate (e.g. …-cycle-003) masks a newer certified success (…-cycle-004).
+   */
   const cert = findLatestCertifiedTrainingVersion(domain);
   if (cert?.run_id) {
     const rp = runRoot(domain, cert.run_id);
@@ -629,6 +625,16 @@ function resolveDashboardPrimaryRun(domain) {
       state: readJsonSafe(path.join(rp, "state.json")),
       is_cycle: isCycleRunId(domain, cert.run_id),
     };
+  }
+  /** Tier 2: newest terminal-failed cycle (attention / remediation). */
+  for (const row of sorted) {
+    if (classifyPrimaryTier(domain, row.run_id) === 2) {
+      return {
+        run_id: row.run_id,
+        state: readJsonSafe(path.join(row.path, "state.json")),
+        is_cycle: true,
+      };
+    }
   }
   if (sorted[0]) {
     const rp = sorted[0].path;
