@@ -139,7 +139,7 @@ _PATTERN_BANNER_WEBP_PATH = _RV4_ROOT / "assets" / "pattern.webp"
 _PATTERN_GAME_BANNER_BOOT_JS = _GAME_THEORY / "static" / "pattern_game_banner_boot.js"
 
 # Operator-visible web UI bundle version — bump when changing PAGE_HTML (HTML/CSS/JS) so deploys are provable.
-PATTERN_GAME_WEB_UI_VERSION = "2.19.108"
+PATTERN_GAME_WEB_UI_VERSION = "2.19.109"
 
 _PATTERN_GAME_SERVER_GIT_SHA_RESOLVED: str | None = None
 
@@ -1697,6 +1697,9 @@ def create_app() -> Flask:
         from renaissance_v4.game_theory.student_proctor.student_proctor_operator_runtime_v1 import (
             student_seam_max_trades_cap_v1,
         )
+        from renaissance_v4.game_theory.student_proctor.student_ollama_student_output_v1 import (
+            student_llm_contract_repair_enabled_v1,
+        )
 
         h = get_data_health()
         _cap_trades = student_seam_max_trades_cap_v1()
@@ -1706,6 +1709,7 @@ def create_app() -> Flask:
                 "pattern_game_web_ui_version": PATTERN_GAME_WEB_UI_VERSION,
                 "pattern_game_server_git_sha_v1": pattern_game_server_git_sha_v1(),
                 "pattern_game_student_seam_wall_max_sec_v1": _student_seam_after_parallel_max_sec_v1(),
+                "pattern_game_student_llm_contract_repair_v1": bool(student_llm_contract_repair_enabled_v1()),
                 "pattern_game_student_seam_max_trades_v1": _cap_trades,
                 "pattern_game_batch_watchdog_sec_v1": float(_parallel_batch_watchdog_wall_sec_v1()),
                 "max_evaluation_window_calendar_months": h.get("max_evaluation_window_calendar_months"),

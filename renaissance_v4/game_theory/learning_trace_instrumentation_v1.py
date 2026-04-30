@@ -942,12 +942,17 @@ def emit_student_decision_authority_v1(
     Returns **True** iff a line was appended to ``learning_trace_events_v1`` (instrumentation on
     and append succeeded). Mandate callers must treat **False** as a hard failure.
     """
+    from renaissance_v4.game_theory.student_rm_trace_contract_v1 import student_rm_trace_mandate_emit_active_v1
+
     pl = payload if isinstance(payload, dict) else {}
     would = bool(pl.get("authority_would_apply_v1"))
     st = "pass" if would or pl.get("authority_mode_v1") == "active" else "partial"
     if pl.get("authority_skipped_v1"):
         st = "partial"
-    if not learning_trace_instrumentation_enabled_v1():
+    if (
+        not learning_trace_instrumentation_enabled_v1()
+        and not student_rm_trace_mandate_emit_active_v1()
+    ):
         return False
     try:
         append_learning_trace_event_from_kwargs_v1(

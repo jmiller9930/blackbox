@@ -969,7 +969,7 @@ def run_rm_preflight_decision_snapshot_v1(
             _bundle_ms = ere.get("reasoning_router_bundle_wall_ms_v1") if isinstance(ere, dict) else None
             audit.append_skipped(
                 "llm_inference_v1",
-                "preflight_no_ollama_emit_student_output_via_ollama_v1_not_called_stub_seal_v1",
+                "preflight_stub_seal_v1_no_live_ollama_rca: seam_after_replay_calls_emit_student_output_via_ollama_v1",
             )
             audit.append_router_cost_rows_v1(
                 unified_router_ran_v1=bool(unified_router),

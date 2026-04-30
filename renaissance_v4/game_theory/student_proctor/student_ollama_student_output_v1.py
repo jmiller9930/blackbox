@@ -50,6 +50,21 @@ def _student_llm_max_trades_v1() -> int | None:
         return 20
 
 
+def student_llm_contract_repair_enabled_v1() -> bool:
+    """
+    When True (default), ``emit_student_output_via_ollama_v1`` uses the GT036/GT037 JSON + validation
+    repair path **outside** ``student_test_mode_isolation_v1`` — same resilience as the harness.
+
+    RM **preflight** still uses a deterministic stub seal (no Ollama). Without repairs, a passing
+    preflight plus failing seam (reasoning rows but zero seals) is normal if the model returns
+    slightly-invalid JSON on full packets.
+
+    Disable with ``PATTERN_GAME_STUDENT_LLM_CONTRACT_REPAIR=0``.
+    """
+    raw = (os.environ.get("PATTERN_GAME_STUDENT_LLM_CONTRACT_REPAIR") or "1").strip().lower()
+    return raw not in ("0", "false", "off", "no")
+
+
 def _ensure_conflicting_indicators_llm_contract_v1(out: dict[str, Any]) -> None:
     """
     Hard contract (no schema relaxation): ``conflicting_indicators`` must be a non-empty list.
@@ -488,9 +503,10 @@ def emit_student_output_via_ollama_v1(
         "`student_context_annex_v1` is present, it duplicates structured indicator/risk/synthesis/"
         "memory/prior signals the engine computed from the same bars — use them; do not invent OHLCV.\n\n"
     )
-    student_contract = student_test_mode_isolation_active_v1()
+    student_test_iso = student_test_mode_isolation_active_v1()
+    llm_repair_path_v1 = bool(student_test_iso or student_llm_contract_repair_enabled_v1())
     gt036_banner = ""
-    if student_contract:
+    if llm_repair_path_v1:
         gt036_banner = (
             "GT_DIRECTIVE_036 — STUDENT_TEST JSON CONTRACT (mandatory):\n"
             "- Return ONLY valid JSON — one single JSON object. NO markdown. NO code fences (no ```). "
@@ -516,14 +532,17 @@ def emit_student_output_via_ollama_v1(
         + "Full student_decision_packet_v1 (JSON; OHLCV bars and optional student_context_annex_v1):\n"
         + f"{pkt_json}\n"
     )
-    ollama_opts: dict[str, Any] | None = _OLLAMA_OPTIONS_STUDENT_TEST_CONTRACT_V1 if student_contract else None
+    ollama_opts: dict[str, Any] | None = (
+        _OLLAMA_OPTIONS_STUDENT_TEST_CONTRACT_V1 if llm_repair_path_v1 else None
+    )
 
     if isinstance(llm_io_capture_v1, dict):
         llm_io_capture_v1["user_prompt_v1"] = user
         llm_io_capture_v1["student_llm_ollama_options_v1"] = dict(ollama_opts or _OLLAMA_OPTIONS_DEFAULT_V1)
-        llm_io_capture_v1["gt036_student_test_json_contract_v1"] = bool(student_contract)
+        llm_io_capture_v1["gt036_student_test_json_contract_v1"] = bool(student_test_iso)
+        llm_io_capture_v1["student_llm_contract_repair_path_v1"] = bool(llm_repair_path_v1)
 
-    sys1 = _GT036_SYSTEM_PROMPT_V1 if student_contract else None
+    sys1 = _GT036_SYSTEM_PROMPT_V1 if llm_repair_path_v1 else None
     text1, err1 = _ollama_chat_once_v1(
         base_url=ollama_base_url,
         model=llm_model,
@@ -552,7 +571,7 @@ def emit_student_output_via_ollama_v1(
             llm_io_capture_v1["validation_repair_attempted_v1"] = False
         return out1, []
 
-    if not student_contract:
+    if not llm_repair_path_v1:
         if isinstance(llm_io_capture_v1, dict):
             llm_io_capture_v1["raw_assistant_text_v1"] = text1
         return None, errs1
@@ -725,6 +744,7 @@ def verify_ollama_model_tag_available_v1(
 
 __all__ = [
     "emit_student_output_via_ollama_v1",
+    "student_llm_contract_repair_enabled_v1",
     "verify_ollama_model_tag_available_v1",
     "_student_llm_max_trades_v1",
 ]

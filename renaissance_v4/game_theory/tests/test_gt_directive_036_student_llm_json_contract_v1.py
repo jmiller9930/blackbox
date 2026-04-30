@@ -50,6 +50,7 @@ def minimal_packet_v1() -> dict:
 
 def test_non_student_test_no_retry_on_prose(monkeypatch: pytest.MonkeyPatch, minimal_packet_v1: dict) -> None:
     monkeypatch.delenv("PATTERN_GAME_STUDENT_TEST_ISOLATION_V1", raising=False)
+    monkeypatch.setenv("PATTERN_GAME_STUDENT_LLM_CONTRACT_REPAIR", "0")
     calls: list[int] = []
 
     def _once(**_: object) -> tuple[str | None, str | None]:
