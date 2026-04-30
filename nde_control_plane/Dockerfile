@@ -17,6 +17,10 @@ ENV PORT=3999
 ENV NDE_DATA_ROOT=/data/NDE
 ENV REPO_MOUNT=/repo
 
+# Host-copied /data/NDE/.venv-train/bin/python is invoked from this container; it links libexpat (not in slim).
+RUN apt-get update && apt-get install -y --no-install-recommends libexpat1 \
+  && rm -rf /var/lib/apt/lists/*
+
 COPY package.json ./
 RUN npm install --omit=dev --no-audit --no-fund express@^4.21.0 multer@^1.4.5-lts.2
 
