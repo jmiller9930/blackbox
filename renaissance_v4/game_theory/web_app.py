@@ -139,7 +139,42 @@ _PATTERN_BANNER_WEBP_PATH = _RV4_ROOT / "assets" / "pattern.webp"
 _PATTERN_GAME_BANNER_BOOT_JS = _GAME_THEORY / "static" / "pattern_game_banner_boot.js"
 
 # Operator-visible web UI bundle version — bump when changing PAGE_HTML (HTML/CSS/JS) so deploys are provable.
-PATTERN_GAME_WEB_UI_VERSION = "2.19.106"
+PATTERN_GAME_WEB_UI_VERSION = "2.19.107"
+
+_PATTERN_GAME_SERVER_GIT_SHA_RESOLVED: str | None = None
+
+
+def pattern_game_server_git_sha_v1() -> str:
+    """
+    Short git HEAD from repo checkout or env (``PATTERN_GAME_GIT_SHA``, ``GIT_COMMIT``, …).
+
+    Shown in UI + ``/api/capabilities`` so operators can confirm Flask picked up a deploy without guessing.
+    """
+    global _PATTERN_GAME_SERVER_GIT_SHA_RESOLVED
+    if _PATTERN_GAME_SERVER_GIT_SHA_RESOLVED is not None:
+        return _PATTERN_GAME_SERVER_GIT_SHA_RESOLVED
+    for key in ("PATTERN_GAME_GIT_SHA", "GIT_COMMIT", "SOURCE_VERSION", "VERCEL_GIT_COMMIT_SHA"):
+        raw = (os.environ.get(key) or "").strip()
+        if len(raw) >= 7:
+            _PATTERN_GAME_SERVER_GIT_SHA_RESOLVED = raw[:40]
+            return _PATTERN_GAME_SERVER_GIT_SHA_RESOLVED
+    try:
+        import subprocess
+
+        cp = subprocess.run(
+            ["git", "rev-parse", "HEAD"],
+            cwd=str(_BLACKBOX_REPO_ROOT),
+            capture_output=True,
+            text=True,
+            timeout=6,
+        )
+        if cp.returncode == 0 and (cp.stdout or "").strip():
+            _PATTERN_GAME_SERVER_GIT_SHA_RESOLVED = (cp.stdout or "").strip()[:40]
+            return _PATTERN_GAME_SERVER_GIT_SHA_RESOLVED
+    except Exception:
+        pass
+    _PATTERN_GAME_SERVER_GIT_SHA_RESOLVED = "unknown"
+    return _PATTERN_GAME_SERVER_GIT_SHA_RESOLVED
 
 from renaissance_v4.game_theory.reasoning_model_operator_surface_v1 import (
     get_reasoning_model_operator_snapshot_v1,
@@ -1601,6 +1636,7 @@ def _render_page_html() -> str:
         PAGE_HTML.replace("__LIMITS_JSON__", json.dumps(lim))
         .replace("__STARTING_EQUITY__", str(float(PATTERN_GAME_STARTING_EQUITY_USD_SPEC)))
         .replace("__PATTERN_GAME_WEB_UI_VERSION__", PATTERN_GAME_WEB_UI_VERSION)
+        .replace("__PATTERN_GAME_SERVER_GIT_SHA__", pattern_game_server_git_sha_v1())
         .replace("__STUDENT_LLM_APPROVED_MODEL_V1__", STUDENT_LLM_APPROVED_MODEL_V1)
     )
 
@@ -1625,6 +1661,7 @@ def create_app() -> Flask:
     def index() -> Response:
         resp = Response(_render_page_html(), mimetype="text/html; charset=utf-8")
         resp.headers["X-Pattern-Game-UI-Version"] = PATTERN_GAME_WEB_UI_VERSION
+        resp.headers["X-Pattern-Game-Server-Git-SHA"] = pattern_game_server_git_sha_v1()
         return resp
 
     @app.get("/assets/pattern-banner.png")
@@ -1662,6 +1699,9 @@ def create_app() -> Flask:
             {
                 **get_parallel_limits(),
                 "pattern_game_web_ui_version": PATTERN_GAME_WEB_UI_VERSION,
+                "pattern_game_server_git_sha_v1": pattern_game_server_git_sha_v1(),
+                "pattern_game_student_seam_wall_max_sec_v1": _student_seam_after_parallel_max_sec_v1(),
+                "pattern_game_batch_watchdog_sec_v1": float(_parallel_batch_watchdog_wall_sec_v1()),
                 "max_evaluation_window_calendar_months": h.get("max_evaluation_window_calendar_months"),
                 "replay_tape_span_days_approx": h.get("replay_tape_span_days_approx"),
                 **runtime_status_snapshot(),
@@ -8027,7 +8067,7 @@ PAGE_HTML = """<!DOCTYPE html>
       <div class="pg-title-wrap">
         <div class="pg-header-title-row">
           <h1 class="pg-title">Pattern Machine learning
-            <span class="ui-version" title="Bump PATTERN_GAME_WEB_UI_VERSION in web_app.py">v__PATTERN_GAME_WEB_UI_VERSION__</span></h1>
+            <span class="ui-version" title="Bump PATTERN_GAME_WEB_UI_VERSION in web_app.py">v__PATTERN_GAME_WEB_UI_VERSION__</span><span class="ui-build-sha" style="opacity:.88;font-size:.78em;font-weight:600;margin-left:.35em" title="Repo HEAD in this Flask process (deploy proof; matches git on host when checkout is clean)">· __PATTERN_GAME_SERVER_GIT_SHA__</span></h1>
           <button type="button" class="pg-howto-btn" id="pgHowToOpenBtn" aria-haspopup="dialog" aria-controls="pgHowToDialog">How to use</button>
         </div>
         <p class="pg-lead-short">Choose pattern, evaluation window, trade window (candle rollup), then <strong>Run exam</strong>. Status cards above update live.</p>
