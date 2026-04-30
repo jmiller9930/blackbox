@@ -540,6 +540,11 @@ function trainPhaseHumanLabel(graphNodeName) {
   return n.replace(/_/g, " ") || "training";
 }
 
+/** Pipeline row `name` field (may equal graph id e.g. full_train) → banner copy. */
+function pipelineStepDisplayName(stepName) {
+  return trainPhaseHumanLabel(stepName);
+}
+
 const FINQUANT_V02_STEPS = 3000;
 
 function readUtf8Safe(p) {
@@ -1363,8 +1368,8 @@ function buildPipelineDashboardFields(
   let current_step_index = nonPass ? nonPass.index : total_steps;
   const focusDef = pipelineDefs.find((d) => d.index === current_step_index);
   const pipeline_focus_label = focusDef
-    ? `Step ${current_step_index} / ${total_steps} — ${focusDef.name}`
-    : `Step ${total_steps} / ${total_steps} — certify`;
+    ? `Pipeline ${current_step_index} / ${total_steps} · ${pipelineStepDisplayName(focusDef.name)}`
+    : `Pipeline ${total_steps} / ${total_steps} · certify`;
 
   const timeline_lines = pipeline_steps.map((s) => `${s.status} ${s.name}`);
   const timing_lines = [];
@@ -2524,7 +2529,8 @@ async function buildDashboardPayload(domain) {
         base.progress_label = tt.eta;
       }
     } else {
-      aj.training_progress_indeterminate = !gpuEngaged;
+      /** No optimizer fraction yet → bar must stay indeterminate even if GPU is hot. */
+      aj.training_progress_indeterminate = true;
       aj.training_progress_detail = tt.operator_headline;
       aj.training_progress_bar_percent = null;
       const stage = aj.pipeline_stage_label ?? "";
