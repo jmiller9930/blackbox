@@ -39,13 +39,28 @@ export type TrainingCycleBlocking = {
   detail?: string;
 };
 
+export type ActiveCycleSnapshot = {
+  run_id: string;
+  progress_percent: number;
+  current_step: string;
+  pipeline_status: string;
+  eval_passed: boolean | null;
+  final_exam_passed: boolean | null;
+  certified: boolean | null;
+  last_error: string | null;
+  version: string | null;
+  log_tail: string;
+};
+
 export type TrainingCyclePayload = {
   latest_certified_version: string | null;
   latest_certified_run_id: string | null;
   next_candidate_version: string | null;
   next_run_id_would_be: string | null;
+  active_run_id: string | null;
   blocking_run_id: string | null;
   active_blocking_candidate: TrainingCycleBlocking | null;
+  active_cycle: ActiveCycleSnapshot | null;
   can_advance: boolean;
   advance_disabled_reason: string | null;
   graph_entrypoint: string;
@@ -156,7 +171,7 @@ export function StudioProvider({ children }: { children: ReactNode }) {
   }, [refresh]);
 
   useEffect(() => {
-    const t = window.setInterval(() => void refresh(), 2500);
+    const t = window.setInterval(() => void refresh(), 2000);
     return () => window.clearInterval(t);
   }, [refresh]);
 

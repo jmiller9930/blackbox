@@ -12,6 +12,7 @@ from __future__ import annotations
 import argparse
 import json
 import os
+import re
 import subprocess
 import sqlite3
 import sys
@@ -73,6 +74,7 @@ class NDEState(TypedDict, total=False):
     mode: Mode
     nde_root: str
     run_id: str
+    version: str
     max_retries: int
     retry_count: int
     require_approval: bool
@@ -117,6 +119,12 @@ def _utc() -> str:
 
 def _run_dir(nde: Path, domain: str, run_id: str) -> Path:
     return nde / domain / "runs" / run_id
+
+
+def _training_semver_from_run_id(domain: str, run_id: str) -> str:
+    """Candidate training version from run id (e.g. finquant-v0.3-cycle-001 → v0.3)."""
+    m = re.match(rf"^{re.escape(domain)}-(v\d+\.\d+)(?:-|$)", run_id)
+    return m.group(1) if m else ""
 
 
 def _node_dir(run_root: Path, name: str) -> Path:
@@ -1103,6 +1111,7 @@ def main() -> None:
         "mode": mode,
         "nde_root": str(nde),
         "run_id": run_id,
+        "version": _training_semver_from_run_id(args.domain, run_id),
         "max_retries": args.max_retries,
         "retry_count": 0,
         "require_approval": bool(args.require_approval),
