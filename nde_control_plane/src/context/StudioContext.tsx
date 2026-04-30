@@ -33,6 +33,26 @@ export type FinquantV02Dashboard = {
   last_error: string | null;
 };
 
+export type TrainingCycleBlocking = {
+  run_id: string;
+  reason: string;
+  detail?: string;
+};
+
+export type TrainingCyclePayload = {
+  latest_certified_version: string | null;
+  latest_certified_run_id: string | null;
+  next_candidate_version: string | null;
+  next_run_id_would_be: string | null;
+  blocking_run_id: string | null;
+  active_blocking_candidate: TrainingCycleBlocking | null;
+  can_advance: boolean;
+  advance_disabled_reason: string | null;
+  graph_entrypoint: string;
+  default_mode: string;
+  full_training_requires_admin_approved: boolean;
+};
+
 export type DashboardPayload = {
   domain: string;
   active_run_id: string | null;
@@ -50,6 +70,7 @@ export type DashboardPayload = {
   finquant_legacy_training?: boolean;
   finquant_legacy_complete?: boolean;
   finquant_v02?: FinquantV02Dashboard | null;
+  training_cycle?: TrainingCyclePayload;
 };
 
 type StudioCtx = {

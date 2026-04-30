@@ -26,6 +26,45 @@ export default function Dashboard() {
   const { domain, dashboard, dashboardErr, polling, refresh } = useStudio();
   const [validating, setValidating] = useState(false);
   const [validateMsg, setValidateMsg] = useState<string | null>(null);
+  const [advancing, setAdvancing] = useState(false);
+  const [advanceMsg, setAdvanceMsg] = useState<string | null>(null);
+  const [fullAdminOk, setFullAdminOk] = useState(false);
+
+  const tc = dashboard?.training_cycle;
+
+  const runAdvanceCycle = useCallback(
+    async (mode: "smoke" | "full") => {
+      setAdvancing(true);
+      setAdvanceMsg(null);
+      try {
+        const body: Record<string, unknown> = { mode };
+        if (mode === "full") body.admin_approved = true;
+        const r = await fetch(
+          `/api/nde/advance-cycle/${encodeURIComponent(domain)}`,
+          {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify(body),
+          }
+        );
+        const j = (await r.json()) as Record<string, unknown>;
+        if (!r.ok) {
+          setAdvanceMsg(JSON.stringify(j).slice(0, 1600));
+        } else {
+          setAdvanceMsg(
+            `LangGraph started (${String(j.mode)}): ${String(j.run_id)} · prior certified run ${String(j.prior_certified_run_id)} unchanged on disk.`
+          );
+        }
+        await refresh();
+      } catch (e) {
+        setAdvanceMsg(String(e));
+      } finally {
+        setAdvancing(false);
+        setFullAdminOk(false);
+      }
+    },
+    [domain, refresh]
+  );
 
   const runValidateV02 = useCallback(async () => {
     setValidating(true);
@@ -139,14 +178,111 @@ export default function Dashboard() {
         </section>
       </div>
 
+      {tc ? (
+        <section className="card mt wide">
+          <h3>Advance Training Cycle</h3>
+          <p className="small muted">
+            Detects the latest <strong>certified</strong> version from{" "}
+            <span className="mono">/data/NDE/{domain}/runs/*/state.json</span>, bumps{" "}
+            <span className="mono">v0.N → v0.N+1</span>, then starts{" "}
+            <span className="mono">run_graph.sh</span> (LangGraph only). Smoke training is default;
+            full training requires explicit admin approval below.
+          </p>
+          <ul className="small mono validate-list">
+            <li>
+              Current certified version:{" "}
+              <strong>{tc.latest_certified_version ?? "—"}</strong> (
+              {tc.latest_certified_run_id ?? "—"})
+            </li>
+            <li>
+              Next candidate version: <strong>{tc.next_candidate_version ?? "—"}</strong>
+            </li>
+            <li>
+              Planned run id (when advance is allowed):{" "}
+              <strong>{tc.next_run_id_would_be ?? "—"}</strong>
+            </li>
+            <li>
+              Active / blocking candidate:{" "}
+              {tc.active_blocking_candidate ? (
+                <span className="warn">
+                  {tc.active_blocking_candidate.run_id} — {tc.active_blocking_candidate.reason}{" "}
+                  {tc.active_blocking_candidate.detail
+                    ? `(${tc.active_blocking_candidate.detail})`
+                    : ""}
+                </span>
+              ) : (
+                <span className="muted">none</span>
+              )}
+            </li>
+            <li>
+              Eval (latest dashboard snapshot):{" "}
+              <strong>
+                {st?.eval_passed === true
+                  ? "PASS"
+                  : st?.eval_passed === false
+                    ? "FAIL"
+                    : "—"}
+              </strong>{" "}
+              · Final exam:{" "}
+              <strong>
+                {st?.final_exam_passed === true
+                  ? "PASS"
+                  : st?.final_exam_passed === false
+                    ? "FAIL"
+                    : "—"}
+              </strong>{" "}
+              · Certified:{" "}
+              <strong className={st?.certified ? "ok" : "muted"}>
+                {String(!!st?.certified)}
+              </strong>
+            </li>
+          </ul>
+          <p className="small muted wrap mono">{tc.graph_entrypoint}</p>
+          <div className="row-actions" style={{ gap: "0.75rem", flexWrap: "wrap" }}>
+            <button
+              type="button"
+              className="btn-primary"
+              disabled={advancing || !tc.can_advance}
+              title={
+                tc.can_advance
+                  ? "Start smoke cycle via LangGraph"
+                  : tc.advance_disabled_reason ?? "Cannot advance"
+              }
+              onClick={() => void runAdvanceCycle("smoke")}
+            >
+              {advancing ? "Starting…" : "Advance Training Cycle (smoke)"}
+            </button>
+            <label className="small" style={{ display: "inline-flex", alignItems: "center", gap: 6 }}>
+              <input
+                type="checkbox"
+                checked={fullAdminOk}
+                onChange={(e) => setFullAdminOk(e.target.checked)}
+              />
+              Admin approve full training
+            </label>
+            <button
+              type="button"
+              className="btn-ghost"
+              disabled={advancing || !tc.can_advance || !fullAdminOk}
+              title="Creates APPROVED in the new run dir and invokes --mode full --require-approval"
+              onClick={() => void runAdvanceCycle("full")}
+            >
+              Advance (full)
+            </button>
+          </div>
+          {advanceMsg ? <p className="small mono wrap">{advanceMsg}</p> : null}
+        </section>
+      ) : null}
+
       {domain === "finquant" && (
         <section className="card mt">
-          <h3>FinQuant v0.2 validation</h3>
+          <h3>Legacy FinQuant v0.2 validation</h3>
           <p className="small muted">
-            Checks adapter, training proof (<span className="mono">train_runtime</span> + steps), then
-            runs host script{" "}
+            Optional path: checks adapter, training proof (<span className="mono">train_runtime</span>{" "}
+            + steps), then runs host script{" "}
             <span className="mono">/data/NDE/tools/run_finquant_v02_eval.sh</span> (Python + GPU on
             the host via <span className="mono">TRAIN_PYTHON</span>, not inside the Node container).
+            Prefer <strong>Advance Training Cycle</strong> for new semver bumps via LangGraph.
           </p>
           <p>
             <button

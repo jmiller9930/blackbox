@@ -96,6 +96,202 @@ function listRunsSorted(domain) {
   return entries;
 }
 
+/** LangGraph factory entrypoint on mounted NDE layout */
+const RUN_GRAPH_SCRIPT = path.join(DATA_NDE, "tools", "run_graph.sh");
+
+function parseSemverFromRunId(runId, domain) {
+  if (!runId || !domain) return null;
+  const esc = domain.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+  const anchored = new RegExp(`^${esc}-(v\\d+\\.\\d+)(?:-|$)`);
+  const m1 = String(runId).match(anchored);
+  if (m1) return m1[1];
+  const m2 = String(runId).match(/(v\d+\.\d+)/);
+  return m2 ? m2[1] : null;
+}
+
+function semverParts(ver) {
+  const s = String(ver).replace(/^v/, "");
+  return s.split(".").map((x) => parseInt(x, 10) || 0);
+}
+
+/** >0 if a > b */
+function semverCompare(a, b) {
+  const pa = semverParts(a);
+  const pb = semverParts(b);
+  const n = Math.max(pa.length, pb.length);
+  for (let i = 0; i < n; i++) {
+    const da = pa[i] || 0;
+    const db = pb[i] || 0;
+    if (da !== db) return da - db;
+  }
+  return 0;
+}
+
+function bumpMinorTrainingVersion(ver) {
+  const p = semverParts(ver);
+  const maj = p[0] ?? 0;
+  const min = p[1] ?? 0;
+  return `v${maj}.${min + 1}`;
+}
+
+function isRunCertified(domain, runId, state) {
+  const cp = path.join(runRoot(domain, runId), "CERTIFICATE.json");
+  if (fs.existsSync(cp)) return true;
+  return state?.certified === true;
+}
+
+function isTerminalCycleFailure(state) {
+  if (!state || typeof state !== "object") return false;
+  if (state.escalated) return true;
+  const st = summarizeStatus(state);
+  return (
+    st === "final_exam_failed" ||
+    st === "eval_failed" ||
+    st === "train_failed" ||
+    st === "dataset_failed" ||
+    st === "contract_failed" ||
+    st === "escalated"
+  );
+}
+
+/**
+ * Blocks advance if a LangGraph cycle run exists that is not certified and not in a terminal failure state,
+ * or if state.json is not yet written (graph in flight).
+ */
+function findBlockingCycleCandidate(domain) {
+  const runsDir = path.join(DATA_NDE, domain, "runs");
+  if (!fs.existsSync(runsDir)) return null;
+  const names = fs
+    .readdirSync(runsDir, { withFileTypes: true })
+    .filter((e) => e.isDirectory())
+    .map((e) => e.name);
+  for (const name of names) {
+    if (!name.includes("-cycle-")) continue;
+    if (!name.startsWith(`${domain}-`)) continue;
+    const stPath = path.join(runsDir, name, "state.json");
+    if (!fs.existsSync(stPath)) {
+      return {
+        run_id: name,
+        reason: "cycle_run_in_progress",
+        detail: "No state.json yet — LangGraph run may be active",
+      };
+    }
+    const st = readJsonSafe(stPath);
+    if (isRunCertified(domain, name, st)) continue;
+    if (isTerminalCycleFailure(st)) continue;
+    return {
+      run_id: name,
+      reason: "candidate_unfinished",
+      detail: summarizeStatus(st),
+    };
+  }
+  return null;
+}
+
+function findLatestCertifiedTrainingVersion(domain) {
+  let best = null;
+  let bestVer = null;
+  const sorted = listRunsSorted(domain);
+  for (const { run_id } of sorted) {
+    const stPath = path.join(runRoot(domain, run_id), "state.json");
+    const st = readJsonSafe(stPath);
+    if (!isRunCertified(domain, run_id, st)) continue;
+    let ver = parseSemverFromRunId(run_id, domain);
+    if (!ver && st?.version) {
+      const m = String(st.version).match(/v\d+\.\d+/);
+      if (m) ver = m[0];
+    }
+    if (!ver) {
+      const cert = readJsonSafe(path.join(runRoot(domain, run_id), "CERTIFICATE.json"));
+      if (cert?.run_id) ver = parseSemverFromRunId(String(cert.run_id), domain);
+    }
+    if (!ver) continue;
+    if (!bestVer || semverCompare(ver, bestVer) > 0) {
+      bestVer = ver;
+      best = { run_id, version: ver };
+    }
+  }
+  if (domain === "finquant") {
+    const legacyId = LEGACY_FINQUANT_RUN_LABEL;
+    const lp = path.join(runRoot(domain, legacyId), "state.json");
+    const lst = readJsonSafe(lp);
+    if (lst?.certified === true) {
+      const ver =
+        lst.version && String(lst.version).match(/^v\d+\.\d+$/)
+          ? String(lst.version)
+          : "v0.2";
+      if (!bestVer || semverCompare(ver, bestVer) > 0) {
+        best = { run_id: legacyId, version: ver };
+        bestVer = ver;
+      }
+    }
+  }
+  return best;
+}
+
+function allocateNextCycleRunId(domain, nextVer) {
+  const runsDir = path.join(DATA_NDE, domain, "runs");
+  fs.mkdirSync(runsDir, { recursive: true });
+  let seq = 1;
+  for (;;) {
+    const rid = `${domain}-${nextVer}-cycle-${String(seq).padStart(3, "0")}`;
+    if (!fs.existsSync(path.join(runsDir, rid))) return rid;
+    seq++;
+  }
+}
+
+function buildTrainingCycleSummary(domain) {
+  const certified = findLatestCertifiedTrainingVersion(domain);
+  const blocking = findBlockingCycleCandidate(domain);
+  const nextVer = certified ? bumpMinorTrainingVersion(certified.version) : null;
+  const canAdvance = !!(certified && !blocking);
+  const nextRunId =
+    certified && nextVer && canAdvance ? allocateNextCycleRunId(domain, nextVer) : null;
+  let advanceDisabledReason = null;
+  if (!certified) advanceDisabledReason = "no_certified_baseline";
+  else if (blocking) advanceDisabledReason = blocking.reason;
+  return {
+    latest_certified_version: certified?.version ?? null,
+    latest_certified_run_id: certified?.run_id ?? null,
+    next_candidate_version: nextVer,
+    next_run_id_would_be: nextRunId,
+    blocking_run_id: blocking?.run_id ?? null,
+    active_blocking_candidate: blocking,
+    can_advance: canAdvance,
+    advance_disabled_reason: advanceDisabledReason,
+    graph_entrypoint: RUN_GRAPH_SCRIPT,
+    default_mode: "smoke",
+    full_training_requires_admin_approved: true,
+  };
+}
+
+function spawnLangGraphRun(domain, runId, mode, adminApproved) {
+  const m = mode === "full" ? "full" : "smoke";
+  const args = ["--domain", domain, "--mode", m, "--run-id", runId];
+  if (m === "full") args.push("--require-approval");
+  const rr = runRoot(domain, runId);
+  fs.mkdirSync(rr, { recursive: true });
+  if (m === "full" && adminApproved) {
+    fs.writeFileSync(
+      path.join(rr, "APPROVED"),
+      `nde_studio_admin_approved_at=${new Date().toISOString()}\n`
+    );
+  }
+  const env = {
+    ...process.env,
+    REPO_ROOT: process.env.REPO_ROOT || REPO,
+    HOME: process.env.HOME || "/root",
+    NDE_ROOT: DATA_NDE,
+  };
+  const child = spawn(RUN_GRAPH_SCRIPT, args, {
+    env,
+    detached: true,
+    stdio: "ignore",
+  });
+  child.unref();
+  return child;
+}
+
 function progressPct(state) {
   if (!state || typeof state !== "object") return 0;
   let n = 0;
@@ -600,6 +796,7 @@ app.get("/api/studio-version", (_req, res) => {
   res.json({
     service: "nde-studio",
     semver: readStudioPackageSemver(),
+    commit: process.env.NDE_STUDIO_COMMIT || "unknown",
   });
 });
 
@@ -868,6 +1065,7 @@ function buildDashboardPayload(domain) {
     training_log_tail: latest ? trainingLogTail(domain, latest) : "",
     finquant_v02:
       domain === "finquant" ? buildFinquantV02DashboardBlock(state) : undefined,
+    training_cycle: buildTrainingCycleSummary(domain),
   };
 
   if (domain === "finquant") {
@@ -886,6 +1084,119 @@ app.get("/api/dashboard/:domain", (req, res) => {
   const domain = safeDomain(req.params.domain);
   if (!domain) return res.status(400).json({ error: "bad_domain" });
   res.json(buildDashboardPayload(domain));
+});
+
+/**
+ * Advance Training Cycle — smoke (default) or full (--require-approval + APPROVED file).
+ * Starts LangGraph via /data/NDE/tools/run_graph.sh only (never bypasses the graph).
+ */
+app.post("/api/nde/advance-cycle/:domain", (req, res) => {
+  const domain = safeDomain(req.params.domain);
+  if (!domain) return res.status(400).json({ ok: false, error: "bad_domain" });
+
+  const mode = req.body?.mode === "full" ? "full" : "smoke";
+  if (mode === "full" && req.body?.admin_approved !== true) {
+    return res.status(403).json({
+      ok: false,
+      error: "admin_approval_required",
+      message: "Full training requires JSON body admin_approved: true",
+    });
+  }
+
+  if (!fs.existsSync(RUN_GRAPH_SCRIPT)) {
+    return res.status(503).json({
+      ok: false,
+      error: "run_graph_missing",
+      path: RUN_GRAPH_SCRIPT,
+    });
+  }
+
+  const spawnLock = path.join(DATA_NDE, domain, ".advance_spawning.lock");
+  try {
+    if (fs.existsSync(spawnLock)) {
+      const ageMs = Date.now() - fs.statSync(spawnLock).mtimeMs;
+      if (ageMs < 120000) {
+        return res.status(429).json({
+          ok: false,
+          error: "advance_spawn_recent",
+          detail: "Wait for the prior advance request to finish starting",
+        });
+      }
+      fs.unlinkSync(spawnLock);
+    }
+  } catch {
+    /* ignore */
+  }
+
+  const certified = findLatestCertifiedTrainingVersion(domain);
+  if (!certified) {
+    return res.status(400).json({
+      ok: false,
+      error: "no_certified_baseline",
+      message:
+        "No certified training version found under runs/*/state.json or CERTIFICATE.json (FinQuant legacy finquant-v0.2-full counts when certified)",
+    });
+  }
+
+  const blocking = findBlockingCycleCandidate(domain);
+  if (blocking) {
+    return res.status(409).json({
+      ok: false,
+      error: "unfinished_candidate",
+      ...blocking,
+    });
+  }
+
+  const nextVer = bumpMinorTrainingVersion(certified.version);
+  const runId = allocateNextCycleRunId(domain, nextVer);
+
+  try {
+    fs.writeFileSync(
+      spawnLock,
+      JSON.stringify({
+        run_id: runId,
+        at: new Date().toISOString(),
+        mode,
+      })
+    );
+    const child = spawnLangGraphRun(
+      domain,
+      runId,
+      mode,
+      req.body?.admin_approved === true
+    );
+    try {
+      fs.unlinkSync(spawnLock);
+    } catch {
+      /* ignore */
+    }
+    return res.json({
+      ok: true,
+      domain,
+      prior_certified_run_id: certified.run_id,
+      prior_certified_version: certified.version,
+      prior_adapter_note:
+        "Prior certified runs and adapter paths on disk are not modified by this action.",
+      next_candidate_version: nextVer,
+      run_id: runId,
+      run_root: runRoot(domain, runId),
+      mode,
+      graph_pid: child.pid ?? null,
+      graph_script: RUN_GRAPH_SCRIPT,
+      nde_studio_semver: readStudioPackageSemver(),
+      nde_studio_commit: process.env.NDE_STUDIO_COMMIT || "unknown",
+    });
+  } catch (e) {
+    try {
+      fs.unlinkSync(spawnLock);
+    } catch {
+      /* ignore */
+    }
+    return res.status(500).json({
+      ok: false,
+      error: String(e?.message || e),
+    });
+  }
 });
 
 app.get("/api/sources/:domain", (req, res) => {
@@ -1110,21 +1421,11 @@ app.post("/api/simulate/:domain", (req, res) => {
 app.post("/api/train/:domain", (req, res) => {
   const domain = safeDomain(req.params.domain);
   if (!domain) return res.status(400).json({ ok: false, error: "bad_domain" });
-  const mode = req.body?.mode || "smoke";
-  const needAdmin = mode === "full";
-  if (needAdmin && !req.body?.admin_approved) {
-    return res.status(403).json({
-      ok: false,
-      error: "admin_approval_required",
-      message: "Full training requires admin approval in UI",
-    });
-  }
-  res.json({
-    ok: true,
-    domain,
-    mode,
+  res.status(410).json({
+    ok: false,
+    error: "deprecated_use_advance_cycle",
     message:
-      "Training is started via run_graph.sh on the host (not executed inside this container).",
+      "Use POST /api/nde/advance-cycle/:domain with JSON { \"mode\": \"smoke\" | \"full\", \"admin_approved\": true } for full.",
   });
 });
 

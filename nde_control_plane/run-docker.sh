@@ -19,6 +19,10 @@ PORT="${NDE_STUDIO_PORT:-3999}"
 REPO_HOST="${REPO_HOST:-${HOME}/blackbox}"
 NDE_HOST="${NDE_HOST:-/data/NDE}"
 FINQUANT_LEGACY_HOST="${FINQUANT_LEGACY_HOST:-/data/finquant-1}"
+REPO_ROOT_FOR_COMMIT="$(cd "${SCRIPT_DIR}/.." && pwd)"
+NDE_STUDIO_COMMIT="$(
+  cd "${REPO_ROOT_FOR_COMMIT}" && git rev-parse HEAD 2>/dev/null || echo unknown
+)"
 
 FOREGROUND=false
 for a in "$@"; do
@@ -37,6 +41,7 @@ RUN_ARGS=(
   -e NDE_DATA_ROOT=/data/NDE
   -e REPO_MOUNT=/repo
   -e FINQUANT_LEGACY_ROOT=/data/finquant-1
+  -e "NDE_STUDIO_COMMIT=${NDE_STUDIO_COMMIT}"
   -v "${NDE_HOST}:/data/NDE"
   -v "${FINQUANT_LEGACY_HOST}:/data/finquant-1"
   -v "${REPO_HOST}:/repo:ro"
