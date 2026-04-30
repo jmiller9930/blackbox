@@ -5,9 +5,13 @@ set -euo pipefail
 
 REPO_ROOT="${REPO_ROOT:-${HOME}/blackbox}"
 FINQUANT_BASE="${FINQUANT_BASE:-/data/finquant-1}"
-PY="${TRAIN_PYTHON:-python3}"
+# Default: training venv on NDE host layout (override with TRAIN_PYTHON).
+PY="${TRAIN_PYTHON:-/data/NDE/.venv-train/bin/python}"
 
 cd "${REPO_ROOT}"
+
+echo "Using Python: ${PY}" >&2
+"${PY}" --version >&2
 
 exec "${PY}" finquant/evals/eval_finquant.py \
   --adapter "${FINQUANT_BASE}/adapters/finquant-1-qwen7b-v0.2" \

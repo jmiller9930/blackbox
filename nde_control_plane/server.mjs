@@ -520,7 +520,8 @@ function runHostFinquantV02Eval() {
         ...process.env,
         REPO_ROOT: process.env.REPO_ROOT || REPO,
         FINQUANT_BASE: process.env.FINQUANT_BASE || FINQUANT_LEGACY_ROOT,
-        TRAIN_PYTHON: process.env.TRAIN_PYTHON || "python3",
+        TRAIN_PYTHON:
+          process.env.TRAIN_PYTHON || "/data/NDE/.venv-train/bin/python",
       },
     });
     child.stdout.on("data", (c) => out.push(c));
