@@ -75,6 +75,8 @@ class NDEState(TypedDict, total=False):
     nde_root: str
     run_id: str
     version: str
+    started_at: str
+    updated_at: str
     max_retries: int
     retry_count: int
     require_approval: bool
@@ -179,7 +181,18 @@ def _write_node_proof(
 
 def _sync_state_json(run_root: Path, state: dict[str, Any]) -> None:
     path = run_root / "state.json"
-    snap = dict(state)
+    existing: dict[str, Any] = {}
+    if path.is_file():
+        try:
+            existing = json.loads(path.read_text(encoding="utf-8"))
+        except json.JSONDecodeError:
+            pass
+    now = _utc()
+    merged = {**existing, **state}
+    if not merged.get("started_at"):
+        merged["started_at"] = existing.get("started_at") or now
+    merged["updated_at"] = now
+    snap = dict(merged)
     snap.pop("messages", None)
     path.write_text(json.dumps(snap, indent=2, default=str), encoding="utf-8")
 
@@ -1120,6 +1133,9 @@ def main() -> None:
         "simulate_result": args.simulate_result if mode == "simulate" else "",
         "messages": [],
     }
+
+    if not args.resume:
+        _sync_state_json(run_root, dict(initial))
 
     cfg = {"configurable": {"thread_id": run_id}}
     if args.resume:

@@ -8,6 +8,21 @@ type RunDetail = {
   log_tail?: string;
 };
 
+function badgeClass(studioStatus: string): string {
+  switch (studioStatus) {
+    case "RUNNING":
+      return "run-badge run-running";
+    case "BLOCKED":
+      return "run-badge run-blocked";
+    case "FAILED":
+      return "run-badge run-failed";
+    case "CERTIFIED":
+      return "run-badge run-certified";
+    default:
+      return "run-badge run-unknown";
+  }
+}
+
 export default function Runs() {
   const { domain, runs, selectedRunId, setSelectedRunId } = useStudio();
   const [detail, setDetail] = useState<RunDetail | null>(null);
@@ -31,7 +46,7 @@ export default function Runs() {
       }
     };
     void load();
-    const t = window.setInterval(load, 2600);
+    const t = window.setInterval(load, 2000);
     return () => {
       cancelled = true;
       window.clearInterval(t);
@@ -48,16 +63,21 @@ export default function Runs() {
             <p className="muted small">No runs.</p>
           ) : (
             <ul className="run-ul">
-              {runs.map((id) => (
-                <li key={id}>
+              {runs.map((row) => (
+                <li key={row.run_id}>
                   <button
                     type="button"
                     className={
-                      selectedRunId === id ? "run-pick active" : "run-pick"
+                      selectedRunId === row.run_id ? "run-pick active" : "run-pick"
                     }
-                    onClick={() => setSelectedRunId(id)}
+                    onClick={() => setSelectedRunId(row.run_id)}
                   >
-                    {id}
+                    <span className="run-row-head">
+                      <span className="mono">{row.run_id}</span>
+                      <span className={badgeClass(row.studio_status)}>
+                        {row.studio_status}
+                      </span>
+                    </span>
                   </button>
                 </li>
               ))}

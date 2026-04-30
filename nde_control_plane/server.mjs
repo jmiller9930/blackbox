@@ -283,16 +283,20 @@ function inferCurrentLangGraphStep(nodes) {
 function buildActiveCycleSnapshot(domain, runId) {
   const root = runRoot(domain, runId);
   const st = readJsonSafe(path.join(root, "state.json"));
+  const pv = derivePipelineVisual(domain, runId);
   const nodes = listNodeStatuses(root);
+  const step = pv
+    ? `${pv.current_node} (${pv.dashboard_status})`
+    : inferCurrentLangGraphStep(nodes);
   return {
     run_id: runId,
-    progress_percent: progressPct(st),
-    current_step: inferCurrentLangGraphStep(nodes),
-    pipeline_status: st ? summarizeStatus(st) : "starting",
+    progress_percent: pv?.progress_percent ?? progressPct(st),
+    current_step: step,
+    pipeline_status: pv?.pipeline_status ?? (st ? summarizeStatus(st) : "starting"),
     eval_passed: st?.eval_passed ?? null,
     final_exam_passed: st?.final_exam_passed ?? null,
     certified: st?.certified ?? null,
-    last_error: st?.last_error != null ? String(st.last_error) : null,
+    last_error: pv?.latest_error ?? (st?.last_error != null ? String(st.last_error) : null),
     version: st?.version ?? null,
     log_tail: trainingLogTail(domain, runId),
   };
@@ -561,6 +565,449 @@ function parseLastProgressFraction(text) {
   return last;
 }
 
+/** Last `NNN/TTT` in training logs for intra-stage progress (any denominator). */
+function parseLastProgressFractionGeneric(text) {
+  if (!text) return null;
+  const chunk = tailForParse(text);
+  const re = /(\d+)\s*\/\s*(\d+)/g;
+  let m;
+  let last = null;
+  while ((m = re.exec(chunk)) !== null) {
+    const cur = parseInt(m[1], 10);
+    const tot = parseInt(m[2], 10);
+    if (tot > 0 && cur >= 0 && tot < 1e9) last = { cur, tot };
+  }
+  return last;
+}
+
+function isCycleRunId(domain, runId) {
+  if (!runId || !domain) return false;
+  const rid = String(runId);
+  return rid.startsWith(`${domain}-`) && rid.includes("-cycle-");
+}
+
+/** Primary dashboard focus: newest tier-1, else newest tier-2 cycle, else latest certified. */
+function classifyPrimaryTier(domain, runId) {
+  if (!isCycleRunId(domain, runId)) return null;
+  const root = runRoot(domain, runId);
+  const stPath = path.join(root, "state.json");
+  const hasState = fs.existsSync(stPath);
+  const st = hasState ? readJsonSafe(stPath) : null;
+  if (!hasState) return 1;
+  if (st?.certified === true || fs.existsSync(path.join(root, "CERTIFICATE.json"))) {
+    return null;
+  }
+  if (st?.escalated === true || isTerminalCycleFailure(st)) return 2;
+  return 1;
+}
+
+function resolveDashboardPrimaryRun(domain) {
+  const sorted = listRunsSorted(domain);
+  for (const row of sorted) {
+    if (classifyPrimaryTier(domain, row.run_id) === 1) {
+      return {
+        run_id: row.run_id,
+        state: readJsonSafe(path.join(row.path, "state.json")),
+        is_cycle: true,
+      };
+    }
+  }
+  for (const row of sorted) {
+    if (classifyPrimaryTier(domain, row.run_id) === 2) {
+      return {
+        run_id: row.run_id,
+        state: readJsonSafe(path.join(row.path, "state.json")),
+        is_cycle: true,
+      };
+    }
+  }
+  const cert = findLatestCertifiedTrainingVersion(domain);
+  if (cert?.run_id) {
+    const rp = runRoot(domain, cert.run_id);
+    return {
+      run_id: cert.run_id,
+      state: readJsonSafe(path.join(rp, "state.json")),
+      is_cycle: isCycleRunId(domain, cert.run_id),
+    };
+  }
+  if (sorted[0]) {
+    const rp = sorted[0].path;
+    return {
+      run_id: sorted[0].run_id,
+      state: readJsonSafe(path.join(rp, "state.json")),
+      is_cycle: isCycleRunId(domain, sorted[0].run_id),
+    };
+  }
+  return { run_id: null, state: null, is_cycle: false };
+}
+
+function formatElapsed(ms) {
+  const s = Math.floor(Math.max(0, ms) / 1000);
+  const h = Math.floor(s / 3600);
+  const m = Math.floor((s % 3600) / 60);
+  const sec = s % 60;
+  return `${String(h).padStart(2, "0")}:${String(m).padStart(2, "0")}:${String(sec).padStart(2, "0")}`;
+}
+
+function deriveRunTimestamps(domain, runId, state, _nodes) {
+  let started = state?.started_at ? String(state.started_at) : null;
+  let updated = state?.updated_at ? String(state.updated_at) : null;
+  const root = runRoot(domain, runId);
+  let derivedStart = false;
+  if (!started) {
+    let minMs = null;
+    const nodesDir = path.join(root, "nodes");
+    try {
+      if (fs.existsSync(nodesDir)) {
+        for (const ent of fs.readdirSync(nodesDir, { withFileTypes: true })) {
+          if (!ent.isDirectory()) continue;
+          const np = path.join(nodesDir, ent.name, "node_status.json");
+          if (fs.existsSync(np)) {
+            const stt = fs.statSync(np);
+            minMs = minMs === null ? stt.mtimeMs : Math.min(minMs, stt.mtimeMs);
+          }
+        }
+      }
+    } catch {
+      /* ignore */
+    }
+    if (minMs !== null) {
+      started = new Date(minMs).toISOString();
+      derivedStart = true;
+    } else {
+      try {
+        const sr = fs.statSync(root);
+        const b = sr.birthtimeMs && sr.birthtimeMs > 0 ? sr.birthtimeMs : sr.mtimeMs;
+        started = new Date(b).toISOString();
+        derivedStart = true;
+      } catch {
+        started = null;
+      }
+    }
+  }
+  if (!updated) {
+    const sp = path.join(root, "state.json");
+    try {
+      if (fs.existsSync(sp)) {
+        updated = fs.statSync(sp).mtime.toISOString();
+      } else {
+        let maxMs = null;
+        const nodesDir = path.join(root, "nodes");
+        if (fs.existsSync(nodesDir)) {
+          for (const ent of fs.readdirSync(nodesDir, { withFileTypes: true })) {
+            if (!ent.isDirectory()) continue;
+            const np = path.join(nodesDir, ent.name, "node_status.json");
+            if (fs.existsSync(np)) {
+              const stt = fs.statSync(np);
+              maxMs = maxMs === null ? stt.mtimeMs : Math.max(maxMs, stt.mtimeMs);
+            }
+          }
+        }
+        updated =
+          maxMs !== null
+            ? new Date(maxMs).toISOString()
+            : started || new Date().toISOString();
+      }
+    } catch {
+      updated = started || new Date().toISOString();
+    }
+  }
+  const startedMs = started ? Date.parse(started) : NaN;
+  const now = Date.now();
+  const elapsedMs = Number.isFinite(startedMs) ? Math.max(0, now - startedMs) : 0;
+  return {
+    started_at: started,
+    last_updated: updated,
+    elapsed_ms: elapsedMs,
+    derived_started_from_folder: derivedStart,
+  };
+}
+
+function nodeStatMap(nodes) {
+  const m = {};
+  for (const n of nodes || []) {
+    m[String(n.node)] = String(n.status || "").toUpperCase();
+  }
+  return m;
+}
+
+/**
+ * Progress, status, runtime for one run (dashboard + runs list).
+ * Maps LangGraph stages to directive percentages; uses NNN/TTT inside smoke_train band.
+ */
+function derivePipelineVisual(domain, runId) {
+  if (!runId) return null;
+  const root = runRoot(domain, runId);
+  const statePath = path.join(root, "state.json");
+  const state = fs.existsSync(statePath) ? readJsonSafe(statePath) : null;
+  const nodes = listNodeStatuses(root);
+  const nm = nodeStatMap(nodes);
+  const trainLog = trainingLogTail(domain, runId);
+  const ts = deriveRunTimestamps(domain, runId, state, nodes);
+
+  const npass = (name) => nm[name] === "PASS";
+  const nfail = (name) =>
+    nm[name] === "FAIL" || nm[name] === "BLOCKED" || nm[name] === "FAILED";
+
+  function runListBadge(dashboardStatus) {
+    if (
+      dashboardStatus === "TRAINING" ||
+      dashboardStatus === "EVAL" ||
+      dashboardStatus === "STARTING" ||
+      dashboardStatus === "RUNNING"
+    ) {
+      return "RUNNING";
+    }
+    if (dashboardStatus === "BLOCKED") return "BLOCKED";
+    if (dashboardStatus === "FAILED") return "FAILED";
+    if (dashboardStatus === "CERTIFIED") return "CERTIFIED";
+    return "UNKNOWN";
+  }
+
+  function activeJobBase(
+    progressPercent,
+    dashboardStatus,
+    pipelineStatus,
+    currentNode,
+    latestError,
+    progressLabel
+  ) {
+    return {
+      progress_percent: progressPercent,
+      progress_label: progressLabel ?? null,
+      pipeline_status: pipelineStatus,
+      dashboard_status: dashboardStatus,
+      current_node: currentNode,
+      latest_error: latestError != null ? String(latestError) : null,
+      active_job: {
+        run_id: runId,
+        status: dashboardStatus,
+        progress_percent: progressPercent,
+        progress_label: progressLabel ?? null,
+        current_node: currentNode,
+        latest_error: latestError != null ? String(latestError) : null,
+        started_at: ts.started_at,
+        last_updated: ts.last_updated,
+        elapsed_display: formatElapsed(ts.elapsed_ms),
+        elapsed_ms: ts.elapsed_ms,
+        derived_started_from_folder: ts.derived_started_from_folder,
+      },
+      run_list_badge: runListBadge(dashboardStatus),
+    };
+  }
+
+  const certOnDisk = fs.existsSync(path.join(root, "CERTIFICATE.json"));
+  if (state?.certified === true || certOnDisk) {
+    return activeJobBase(100, "CERTIFIED", "certified", "certify", null, null);
+  }
+
+  if (state?.escalated === true) {
+    let pct = 10;
+    if (state?.contract_ok === true) pct = Math.max(pct, 5);
+    if (state?.dataset_ok === true) pct = Math.max(pct, 15);
+    if (state?.train_ok === true) pct = Math.max(pct, 60);
+    if (state?.eval_passed === true) pct = Math.max(pct, 75);
+    if (state?.gate_passed === true) pct = Math.max(pct, 85);
+    if (state?.final_exam_passed === true) pct = Math.max(pct, 95);
+    return activeJobBase(
+      Math.min(99, pct),
+      "FAILED",
+      "escalated",
+      "retry_or_escalate",
+      state?.escalate_reason || state?.last_error,
+      null
+    );
+  }
+
+  if (state && isTerminalCycleFailure(state)) {
+    const sum = summarizeStatus(state);
+    if (sum === "contract_failed" || state?.contract_ok === false) {
+      return activeJobBase(
+        5,
+        "BLOCKED",
+        "blocked",
+        "validate_domain_contract",
+        state?.last_error
+          ? `BLOCKED: ${state.last_error}`
+          : "BLOCKED: domain contract failed",
+        null
+      );
+    }
+    if (sum === "dataset_failed" || state?.dataset_ok === false) {
+      return activeJobBase(
+        15,
+        "BLOCKED",
+        "blocked",
+        "validate_training_dataset",
+        state?.last_error
+          ? `BLOCKED: ${state.last_error}`
+          : "BLOCKED: dataset validation failed",
+        null
+      );
+    }
+    if (sum === "train_failed" || state?.train_ok === false) {
+      return activeJobBase(
+        60,
+        "FAILED",
+        "failed",
+        "smoke_train",
+        state?.last_error,
+        null
+      );
+    }
+    if (sum === "eval_failed" || state?.eval_passed === false) {
+      return activeJobBase(75, "FAILED", "failed", "smoke_eval", state?.last_error, null);
+    }
+    if (sum === "final_exam_failed" || state?.final_exam_passed === false) {
+      return activeJobBase(
+        95,
+        "FAILED",
+        "failed",
+        "final_exam",
+        state?.last_error,
+        null
+      );
+    }
+  }
+
+  const cOk = state?.contract_ok === true || npass("validate_domain_contract");
+  const cBad =
+    state?.contract_ok === false ||
+    nfail("validate_domain_contract") ||
+    nm["validate_domain_contract"] === "FAIL";
+
+  if (cBad) {
+    return activeJobBase(
+      5,
+      "BLOCKED",
+      "blocked",
+      "validate_domain_contract",
+      state?.last_error || "BLOCKED: domain contract failed",
+      null
+    );
+  }
+
+  if (!cOk && !state && nodes.length === 0) {
+    return activeJobBase(
+      2,
+      "STARTING",
+      "starting",
+      "validate_domain_contract",
+      null,
+      null
+    );
+  }
+
+  if (!cOk) {
+    return activeJobBase(4, "RUNNING", "in_progress", "validate_domain_contract", null, null);
+  }
+
+  const dOk = state?.dataset_ok === true || npass("validate_training_dataset");
+  const dBad =
+    state?.dataset_ok === false ||
+    nfail("validate_training_dataset") ||
+    nm["validate_training_dataset"] === "FAIL";
+
+  if (dBad) {
+    return activeJobBase(
+      15,
+      "BLOCKED",
+      "blocked",
+      "validate_training_dataset",
+      state?.last_error
+        ? `BLOCKED: ${state.last_error}`
+        : "BLOCKED: dataset validation failed",
+      null
+    );
+  }
+
+  if (!dOk) {
+    return activeJobBase(
+      12,
+      "RUNNING",
+      "in_progress",
+      "validate_training_dataset",
+      null,
+      null
+    );
+  }
+
+  const tOk = state?.train_ok === true || npass("smoke_train");
+  const tBad =
+    state?.train_ok === false ||
+    nfail("smoke_train") ||
+    nm["smoke_train"] === "SKIPPED";
+
+  if (tBad) {
+    return activeJobBase(
+      60,
+      "FAILED",
+      "failed",
+      "smoke_train",
+      state?.last_error,
+      null
+    );
+  }
+
+  if (!tOk) {
+    const frac = parseLastProgressFractionGeneric(trainLog);
+    let p = 18;
+    if (frac && frac.tot > 0) {
+      p = 15 + Math.min(1, frac.cur / frac.tot) * 45;
+    }
+    const pl = frac && frac.tot > 0 ? `${frac.cur}/${frac.tot}` : null;
+    return activeJobBase(Math.round(p), "TRAINING", "training", "smoke_train", null, pl);
+  }
+
+  const eOk = state?.eval_passed === true || npass("smoke_eval");
+  const eBad = state?.eval_passed === false || nfail("smoke_eval");
+
+  if (eBad) {
+    return activeJobBase(75, "FAILED", "failed", "smoke_eval", state?.last_error, null);
+  }
+
+  if (!eOk) {
+    return activeJobBase(72, "EVAL", "evaluating", "smoke_eval", null, null);
+  }
+
+  const gOk = state?.gate_passed === true || npass("evaluate_gate");
+  const gBad = state?.gate_passed === false || nfail("evaluate_gate");
+
+  if (gBad) {
+    return activeJobBase(85, "FAILED", "failed", "evaluate_gate", state?.last_error, null);
+  }
+
+  if (!gOk) {
+    return activeJobBase(80, "EVAL", "evaluating", "evaluate_gate", null, null);
+  }
+
+  const feOk = state?.final_exam_passed === true || npass("final_exam");
+  const feBad = state?.final_exam_passed === false || nfail("final_exam");
+
+  if (feBad) {
+    return activeJobBase(95, "FAILED", "failed", "final_exam", state?.last_error, null);
+  }
+
+  if (!feOk) {
+    return activeJobBase(90, "EVAL", "evaluating", "final_exam", null, null);
+  }
+
+  const cyOk = npass("certify");
+  if (!cyOk) {
+    return activeJobBase(97, "RUNNING", "in_progress", "certify", null, null);
+  }
+
+  return activeJobBase(100, "CERTIFIED", "certified", "certify", null, null);
+}
+
+function runStatusSortRank(badge) {
+  if (badge === "RUNNING") return 0;
+  if (badge === "BLOCKED") return 1;
+  if (badge === "FAILED") return 2;
+  if (badge === "CERTIFIED") return 3;
+  return 4;
+}
+
 function legacyTrainingComplete(parseBlob, step3000) {
   if (!parseBlob) return false;
   if (/\btrain_runtime\b/i.test(parseBlob)) return true;
@@ -675,6 +1122,13 @@ function buildFinquantLegacySection() {
 }
 
 function mergeFinquantDashboard(base, legacyFin) {
+  if (base.primary_run_is_cycle_candidate) {
+    return {
+      ...base,
+      legacy_finquant: legacyFin,
+    };
+  }
+
   const ss = base.state_snapshot;
   const v02 = ss && ss.version === "v0.2";
 
@@ -741,23 +1195,6 @@ function mergeFinquantDashboard(base, legacyFin) {
     out.progress_percent = 0;
   }
   return out;
-}
-
-function resolveFinquantLatestRunAndState(sorted) {
-  const v02RunId = LEGACY_FINQUANT_RUN_LABEL;
-  const v02StatePath = path.join(runRoot("finquant", v02RunId), "state.json");
-  if (fs.existsSync(v02StatePath)) {
-    return {
-      latest: v02RunId,
-      state: readJsonSafe(v02StatePath),
-    };
-  }
-  const latest = sorted[0]?.run_id ?? null;
-  if (!latest) return { latest: null, state: null };
-  return {
-    latest,
-    state: readJsonSafe(path.join(runRoot("finquant", latest), "state.json")),
-  };
 }
 
 function buildFinquantV02DashboardBlock(state) {
@@ -1189,92 +1626,90 @@ app.get("/api/runs/:domain", (req, res) => {
   const domain = safeDomain(req.params.domain);
   if (!domain) return res.status(400).json({ error: "bad_domain" });
   const sorted = listRunsSorted(domain);
-  res.json({
-    domain,
-    runs: sorted.map((r) => ({ run_id: r.run_id, path: r.path })),
+  const mtimeById = new Map(sorted.map((r) => [r.run_id, r.mtime]));
+  const enriched = sorted.map((r) => {
+    const pv = derivePipelineVisual(domain, r.run_id);
+    const studio_status = pv?.run_list_badge ?? "UNKNOWN";
+    return {
+      run_id: r.run_id,
+      path: r.path,
+      studio_status,
+      progress_percent: pv?.progress_percent ?? null,
+    };
   });
+  enriched.sort((a, b) => {
+    const ra = runStatusSortRank(a.studio_status);
+    const rb = runStatusSortRank(b.studio_status);
+    if (ra !== rb) return ra - rb;
+    return (mtimeById.get(b.run_id) ?? 0) - (mtimeById.get(a.run_id) ?? 0);
+  });
+  res.json({ domain, runs: enriched });
 });
 
 function buildDashboardPayload(domain) {
-  const sorted = listRunsSorted(domain);
-  let latest = sorted[0]?.run_id ?? null;
-  let state = null;
+  const primary = resolveDashboardPrimaryRun(domain);
+  const primaryRunId = primary.run_id;
+  const primaryState = primary.state;
+  const pv = primaryRunId ? derivePipelineVisual(domain, primaryRunId) : null;
 
-  if (domain === "finquant") {
-    const r = resolveFinquantLatestRunAndState(sorted);
-    latest = r.latest;
-    state = r.state;
-  } else if (sorted.length) {
-    latest = sorted[0].run_id;
-    state = readJsonSafe(path.join(runRoot(domain, latest), "state.json"));
+  let certificateOnDisk = false;
+  if (primaryRunId) {
+    certificateOnDisk = fs.existsSync(
+      path.join(runRoot(domain, primaryRunId), "CERTIFICATE.json")
+    );
   }
 
-  let cert = false;
-  let lastErr = "";
-  if (latest) {
-    cert = fs.existsSync(path.join(runRoot(domain, latest), "CERTIFICATE.json"));
-    lastErr = state?.last_error != null ? String(state.last_error) : "";
-  }
   const stagingPath =
-    state?.staging_path ||
-    state?.artifacts?.staging_path ||
+    primaryState?.staging_path ||
+    primaryState?.artifacts?.staging_path ||
     null;
 
   const tcSummary = buildTrainingCycleSummary(domain);
-  let progressPercent = progressPct(state);
-  let progressLabel = null;
-  let mergedLastErr = lastErr || null;
-  let currentStatus = state ? summarizeStatus(state) : "no_runs";
-  if (tcSummary.active_cycle) {
-    progressPercent = tcSummary.active_cycle.progress_percent;
-    progressLabel = tcSummary.active_cycle.current_step;
-    currentStatus = tcSummary.active_cycle.pipeline_status || currentStatus;
-    if (tcSummary.active_cycle.last_error) {
-      mergedLastErr = tcSummary.active_cycle.last_error;
-    }
-  }
+  const primaryIsCycle = !!(primary.is_cycle && primaryRunId);
+
+  const finquantLegacyState =
+    domain === "finquant"
+      ? readJsonSafe(path.join(runRoot(domain, LEGACY_FINQUANT_RUN_LABEL), "state.json"))
+      : null;
 
   const base = {
     domain,
     selected_domain: domain,
-    active_run_id: latest,
-    latest_run_id: latest,
-    progress_percent: progressPercent,
-    progress_label: progressLabel,
-    current_status: currentStatus,
-    latest_error: mergedLastErr,
-    certification_status: cert
+    active_run_id: primaryRunId,
+    latest_run_id: primaryRunId,
+    primary_run_is_cycle_candidate: primaryIsCycle,
+    prior_certified_run_id: primaryIsCycle ? tcSummary.latest_certified_run_id : null,
+    prior_certified_version: primaryIsCycle ? tcSummary.latest_certified_version : null,
+    progress_percent: pv?.progress_percent ?? 0,
+    progress_label: pv?.progress_label ?? null,
+    current_status: pv?.pipeline_status ?? (primaryState ? summarizeStatus(primaryState) : "no_runs"),
+    dashboard_status_label: pv?.dashboard_status ?? null,
+    latest_error: pv?.latest_error ?? null,
+    active_job: pv?.active_job ?? null,
+    certification_status: certificateOnDisk
       ? "issued"
-      : state?.certified
+      : primaryState?.certified
         ? "state_certified"
         : "none",
-    certificate_on_disk: cert,
-    state_snapshot: state,
+    certificate_on_disk: certificateOnDisk,
+    state_snapshot: primaryState,
     staging_path_hint: stagingPath,
-    training_log_tail: latest ? trainingLogTail(domain, latest) : "",
+    training_log_tail: primaryRunId ? trainingLogTail(domain, primaryRunId) : "",
     finquant_v02:
-      domain === "finquant" ? buildFinquantV02DashboardBlock(state) : undefined,
+      domain === "finquant"
+        ? buildFinquantV02DashboardBlock(finquantLegacyState)
+        : undefined,
     training_cycle: tcSummary,
   };
 
-  if (tcSummary.active_cycle) {
+  if (tcSummary.active_cycle && tcSummary.active_run_id === primaryRunId) {
     base.training_log_tail =
-      tcSummary.active_cycle.log_tail ||
-      base.training_log_tail ||
-      "";
+      tcSummary.active_cycle.log_tail || base.training_log_tail || "";
   }
 
   if (domain === "finquant") {
     const lf = buildFinquantLegacySection();
     const out = mergeFinquantDashboard(base, lf);
-    if (tcSummary.active_cycle) {
-      out.progress_percent = tcSummary.active_cycle.progress_percent;
-      out.progress_label = tcSummary.active_cycle.current_step;
-      out.current_status = tcSummary.active_cycle.pipeline_status || out.current_status;
-      out.latest_error = tcSummary.active_cycle.last_error || out.latest_error;
-      out.training_log_tail =
-        tcSummary.active_cycle.log_tail || out.training_log_tail || "";
-    }
     return out;
   }
   return base;

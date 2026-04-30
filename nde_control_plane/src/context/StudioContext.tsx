@@ -52,6 +52,27 @@ export type ActiveCycleSnapshot = {
   log_tail: string;
 };
 
+export type ActiveJobPayload = {
+  run_id: string;
+  status: string;
+  progress_percent: number;
+  progress_label: string | null;
+  current_node: string;
+  latest_error: string | null;
+  started_at: string | null;
+  last_updated: string | null;
+  elapsed_display: string;
+  elapsed_ms: number;
+  derived_started_from_folder?: boolean;
+};
+
+export type RunListRow = {
+  run_id: string;
+  path?: string;
+  studio_status: string;
+  progress_percent?: number | null;
+};
+
 export type TrainingCyclePayload = {
   latest_certified_version: string | null;
   latest_certified_run_id: string | null;
@@ -71,11 +92,16 @@ export type TrainingCyclePayload = {
 export type DashboardPayload = {
   domain: string;
   active_run_id: string | null;
+  primary_run_is_cycle_candidate?: boolean;
+  prior_certified_run_id?: string | null;
+  prior_certified_version?: string | null;
   progress_percent: number;
   /** FinQuant v0.2 step label e.g. 2726/3000 — present when legacy logs parsed */
   progress_label?: string | null;
   current_status: string;
+  dashboard_status_label?: string | null;
   latest_error: string | null;
+  active_job?: ActiveJobPayload | null;
   certification_status: string;
   certificate_on_disk: boolean;
   state_snapshot: Record<string, unknown> | null;
@@ -92,7 +118,7 @@ type StudioCtx = {
   domains: string[];
   domain: string;
   setDomain: (d: string) => void;
-  runs: string[];
+  runs: RunListRow[];
   selectedRunId: string | null;
   setSelectedRunId: (id: string | null) => void;
   dashboard: DashboardPayload | null;
@@ -112,7 +138,7 @@ async function getJson<T>(path: string): Promise<T> {
 export function StudioProvider({ children }: { children: ReactNode }) {
   const [domains, setDomains] = useState<string[]>(["secops", "finquant"]);
   const [domain, setDomain] = useState("secops");
-  const [runs, setRuns] = useState<string[]>([]);
+  const [runs, setRuns] = useState<RunListRow[]>([]);
   const [selectedRunId, setSelectedRunId] = useState<string | null>(null);
   const [dashboard, setDashboard] = useState<DashboardPayload | null>(null);
   const [dashboardErr, setDashboardErr] = useState<string | null>(null);
@@ -132,14 +158,15 @@ export function StudioProvider({ children }: { children: ReactNode }) {
       const dEnc = encodeURIComponent(domain);
       const [dash, runList] = await Promise.all([
         getJson<DashboardPayload>(`/api/dashboard/${dEnc}`),
-        getJson<{ runs?: { run_id: string }[] }>(`/api/runs/${dEnc}`),
+        getJson<{ runs?: RunListRow[] }>(`/api/runs/${dEnc}`),
       ]);
 
       setDashboard(dash);
       setDashboardErr(null);
 
-      const ids = (runList.runs ?? []).map((r) => r.run_id);
-      setRuns(ids);
+      const rows = runList.runs ?? [];
+      setRuns(rows);
+      const ids = rows.map((r) => r.run_id);
 
       const lf = dash.legacy_finquant;
       const legacyLabel = lf?.active_run_label;
