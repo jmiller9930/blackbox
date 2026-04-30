@@ -66,6 +66,15 @@ export type ActiveJobPayload = {
   derived_started_from_folder?: boolean;
 };
 
+export type SystemPosture = "NO_ACTIVE_JOB" | "RUNNING" | "BLOCKED" | "FAILED";
+
+export type CertifiedFeatureSummary = {
+  run_id: string;
+  status: string;
+  completed_at: string | null;
+  duration_display: string;
+};
+
 export type RunListRow = {
   run_id: string;
   path?: string;
@@ -114,6 +123,14 @@ export type TrainingCyclePayload = {
 export type DashboardPayload = {
   domain: string;
   active_run_id: string | null;
+  /** Primary run shown for pipeline detail / context (may be certified while idle). */
+  featured_run_id?: string | null;
+  /** Tier-1 LangGraph cycle actually executing; null when idle. */
+  execution_active_run_id?: string | null;
+  system_posture?: SystemPosture;
+  latest_certified_run_id?: string | null;
+  system_status_lines?: string[];
+  certified_feature_summary?: CertifiedFeatureSummary | null;
   primary_run_is_cycle_candidate?: boolean;
   prior_certified_run_id?: string | null;
   prior_certified_version?: string | null;
@@ -201,11 +218,13 @@ export function StudioProvider({ children }: { children: ReactNode }) {
 
       const lf = dash.legacy_finquant;
       const legacyLabel = lf?.active_run_label;
+      const featured =
+        dash.featured_run_id ?? dash.active_run_id;
       const preferred =
-        dash.active_run_id &&
-        (ids.includes(dash.active_run_id) ||
-          (legacyLabel && dash.active_run_id === legacyLabel))
-          ? dash.active_run_id
+        featured &&
+        (ids.includes(featured) ||
+          (legacyLabel && featured === legacyLabel))
+          ? featured
           : ids[0] ?? legacyLabel ?? null;
 
       setSelectedRunId((cur) => {

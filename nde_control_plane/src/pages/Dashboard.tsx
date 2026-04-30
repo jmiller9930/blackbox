@@ -1,5 +1,5 @@
 import { useCallback, useState } from "react";
-import { useStudio } from "../context/StudioContext";
+import { useStudio, type SystemPosture } from "../context/StudioContext";
 
 function pipelineStatusLabel(status: string | undefined): string {
   if (!status) return "—";
@@ -11,6 +11,20 @@ function jobStatusLabel(s: string | undefined): string {
   return s.toUpperCase();
 }
 
+function systemPostureHeading(posture: SystemPosture | undefined): string {
+  switch (posture) {
+    case "RUNNING":
+      return "Running";
+    case "BLOCKED":
+      return "Blocked";
+    case "FAILED":
+      return "Failed";
+    case "NO_ACTIVE_JOB":
+    default:
+      return "No active job running";
+  }
+}
+
 export default function Dashboard() {
   const { domain, dashboard, dashboardErr, polling, refresh } = useStudio();
   const [advancing, setAdvancing] = useState(false);
@@ -19,6 +33,12 @@ export default function Dashboard() {
 
   const tc = dashboard?.training_cycle;
   const aj = dashboard?.active_job;
+  const execId = dashboard?.execution_active_run_id ?? null;
+  const featuredId = dashboard?.featured_run_id ?? dashboard?.active_run_id ?? null;
+  const posture = dashboard?.system_posture ?? "NO_ACTIVE_JOB";
+  const statusLines = dashboard?.system_status_lines ?? [];
+  const pollLive = !!(polling && execId);
+
   const pct = dashboard?.progress_percent ?? aj?.progress_percent ?? 0;
   const stepLabel =
     dashboard?.progress_label ??
@@ -64,9 +84,50 @@ export default function Dashboard() {
       <h2 className="page-title">Dashboard</h2>
       {dashboardErr && <p className="err">{dashboardErr}</p>}
 
-      {dashboard?.active_run_id && aj ? (
+      <section className="card mt wide system-status-card">
+        <h3 style={{ marginTop: 0 }}>System status</h3>
+        <p className="mono accent" style={{ marginBottom: "0.5rem" }}>
+          {systemPostureHeading(posture)}
+        </p>
+        {statusLines.length > 0 ? (
+          <ul className="small mono validate-list" style={{ marginBottom: 0 }}>
+            {statusLines.map((line, i) => (
+              <li key={`${i}-${line.slice(0, 24)}`}>{line}</li>
+            ))}
+          </ul>
+        ) : null}
+      </section>
+
+      {dashboard?.certified_feature_summary ? (
+        <section className="card mt wide certified-summary-card">
+          <h3 style={{ marginTop: 0 }}>Latest certified run</h3>
+          <ul className="small mono validate-list" style={{ marginBottom: 0 }}>
+            <li>
+              Run ID:{" "}
+              <strong className="accent">
+                {dashboard.certified_feature_summary.run_id}
+              </strong>
+            </li>
+            <li>
+              Status: <strong>CERTIFIED</strong>
+            </li>
+            <li>
+              Duration:{" "}
+              <strong>{dashboard.certified_feature_summary.duration_display}</strong>
+            </li>
+            <li>
+              Completed:{" "}
+              <span className="muted">
+                {dashboard.certified_feature_summary.completed_at ?? "—"}
+              </span>
+            </li>
+          </ul>
+        </section>
+      ) : null}
+
+      {execId && aj ? (
         <section className="card mt wide active-job-card">
-          <h3 style={{ marginTop: 0 }}>Active job</h3>
+          <h3 style={{ marginTop: 0 }}>Job in progress</h3>
           <ul className="small mono validate-list" style={{ marginBottom: 0 }}>
             <li>
               Run ID: <strong className="accent">{aj.run_id}</strong>
@@ -83,7 +144,7 @@ export default function Dashboard() {
             </li>
             <li>
               Elapsed: <strong>{aj.elapsed_display}</strong>
-              {polling ? <span className="muted"> · syncing…</span> : null}
+              {pollLive ? <span className="muted"> · syncing…</span> : null}
             </li>
             <li>
               Pipeline step:{" "}
@@ -112,7 +173,8 @@ export default function Dashboard() {
         </section>
       ) : null}
 
-      {dashboard?.active_run_id &&
+      {featuredId &&
+      dashboard &&
       (dashboard.pipeline_steps?.length ?? 0) > 0 ? (
         <section className="card mt wide pipeline-detail-card">
           <h3 style={{ marginTop: 0 }}>Pipeline detail</h3>
@@ -213,21 +275,23 @@ export default function Dashboard() {
           <p className="mono accent">{domain}</p>
         </section>
         <section className="card">
-          <h3>Active / latest run</h3>
-          <p className="mono">
-            {dashboard?.active_run_id ?? (
-              <span className="muted">No active run</span>
-            )}
+          <h3>Featured run</h3>
+          <p className="mono accent">
+            {featuredId ?? <span className="muted">None</span>}
           </p>
-          {tc?.active_run_id &&
-          tc.active_run_id !== dashboard?.active_run_id ? (
+          {execId ? (
+            <p className="small muted mt">
+              Execution: <strong className="mono">{execId}</strong>
+            </p>
+          ) : null}
+          {tc?.active_run_id && tc.active_run_id !== featuredId ? (
             <p className="small muted mono mt">
               Cycle blocking advance: <strong>{tc.active_run_id}</strong>
             </p>
           ) : null}
         </section>
         <section className="card wide">
-          <h3>Live progress</h3>
+          <h3>{execId ? "Live progress" : "Progress snapshot"}</h3>
           <p className="small mono accent" style={{ marginBottom: "0.35rem" }}>
             Pipeline:{" "}
             <strong>{pipelineStatusLabel(dashboard?.current_status)}</strong>
@@ -247,12 +311,14 @@ export default function Dashboard() {
             {stepLabel ? (
               <>
                 step <strong className="accent">{stepLabel}</strong>
-                {polling ? " · syncing…" : ""}
+                {pollLive ? " · syncing…" : ""}
               </>
-            ) : polling ? (
+            ) : pollLive ? (
               "syncing…"
+            ) : execId ? (
+              "—"
             ) : (
-              "idle"
+              "no job running"
             )}
           </p>
         </section>

@@ -647,6 +647,21 @@ function resolveDashboardPrimaryRun(domain) {
   return { run_id: null, state: null, is_cycle: false };
 }
 
+/** Tier-1 cycle = execution still in-flight (not certified, not terminal failure). */
+function resolveExecutionActiveRunId(domain) {
+  const sorted = listRunsSorted(domain);
+  for (const row of sorted) {
+    if (classifyPrimaryTier(domain, row.run_id) === 1) return row.run_id;
+  }
+  return null;
+}
+
+function postureFromDashboardStatus(ds) {
+  if (ds === "BLOCKED") return "BLOCKED";
+  if (ds === "FAILED") return "FAILED";
+  return "RUNNING";
+}
+
 function formatElapsed(ms) {
   const s = Math.floor(Math.max(0, ms) / 1000);
   const h = Math.floor(s / 3600);
@@ -726,6 +741,23 @@ function deriveRunTimestamps(domain, runId, state, _nodes) {
     last_updated: updated,
     elapsed_ms: elapsedMs,
     derived_started_from_folder: derivedStart,
+  };
+}
+
+function buildCertifiedFeatureSummary(domain, runId, state, certificateOnDisk) {
+  if (!runId || !(state?.certified === true || certificateOnDisk)) return null;
+  const ts = deriveRunTimestamps(domain, runId, state, []);
+  const completed = state?.updated_at ? String(state.updated_at) : ts.last_updated;
+  const started = ts.started_at;
+  let durationMs = 0;
+  if (started && completed) {
+    durationMs = Math.max(0, Date.parse(completed) - Date.parse(started));
+  }
+  return {
+    run_id: runId,
+    status: "CERTIFIED",
+    completed_at: completed,
+    duration_display: formatElapsed(durationMs),
   };
 }
 
@@ -1300,6 +1332,77 @@ function emptyPipelineDashboardFields() {
   };
 }
 
+/**
+ * Operator control-plane: separates execution (tier-1) from featured context (primary run).
+ * Idle copy is always "No active job running." (never "standby").
+ */
+function buildSystemControlPlaneSlice(domain, executionRunId, featuredRunId, tcSummary, stagingHint) {
+  const latest_certified_run_id = tcSummary?.latest_certified_run_id ?? null;
+
+  if (executionRunId) {
+    const root = runRoot(domain, executionRunId);
+    const execState = readJsonSafe(path.join(root, "state.json"));
+    const pv = derivePipelineVisual(domain, executionRunId);
+    const certDisk = fs.existsSync(path.join(root, "CERTIFICATE.json"));
+    const execIsCycle = isCycleRunId(domain, executionRunId);
+    const epf = buildPipelineDashboardFields(
+      domain,
+      executionRunId,
+      execState,
+      pv,
+      tcSummary,
+      execIsCycle,
+      certDisk,
+      stagingHint
+    );
+    const posture = postureFromDashboardStatus(pv?.dashboard_status);
+    const aj = pv?.active_job;
+    const lines = [];
+    if (posture === "RUNNING") lines.push("Job in progress.");
+    else if (posture === "BLOCKED") lines.push("Job blocked.");
+    else lines.push("Job failed.");
+    lines.push(`Run: ${executionRunId}`);
+    if (epf.pipeline_focus_label) lines.push(epf.pipeline_focus_label);
+    if (aj?.elapsed_display) lines.push(`Elapsed: ${aj.elapsed_display}`);
+    return {
+      system_posture: posture,
+      execution_active_run_id: executionRunId,
+      featured_run_id: featuredRunId,
+      latest_certified_run_id,
+      system_status_lines: lines,
+    };
+  }
+
+  if (featuredRunId && classifyPrimaryTier(domain, featuredRunId) === 2) {
+    const pv = derivePipelineVisual(domain, featuredRunId);
+    const posture = postureFromDashboardStatus(pv?.dashboard_status);
+    const err = pv?.latest_error ? String(pv.latest_error).trim() : "";
+    const lines = [
+      "No active job running.",
+      posture === "BLOCKED"
+        ? "Remediation: a cycle finished blocked."
+        : "Remediation: a cycle finished failed.",
+      `Run: ${featuredRunId}`,
+    ];
+    if (err) lines.push(`Reason: ${err.slice(0, 400)}`);
+    return {
+      system_posture: posture,
+      execution_active_run_id: null,
+      featured_run_id: featuredRunId,
+      latest_certified_run_id,
+      system_status_lines: lines,
+    };
+  }
+
+  return {
+    system_posture: "NO_ACTIVE_JOB",
+    execution_active_run_id: null,
+    featured_run_id: featuredRunId,
+    latest_certified_run_id,
+    system_status_lines: [],
+  };
+}
+
 function runStatusSortRank(badge) {
   if (badge === "RUNNING") return 0;
   if (badge === "BLOCKED") return 1;
@@ -1421,6 +1524,63 @@ function buildFinquantLegacySection() {
   };
 }
 
+/** Legacy FinQuant v0.2 log-based path overrides control-plane execution vs idle semantics. */
+function overlayFinquantLegacySystemPlane(out, legacyFin) {
+  if (out.primary_run_is_cycle_candidate) return out;
+  const label = legacyFin.active_run_label;
+  const fs = legacyFin.finquant_status;
+  const ss = out.state_snapshot;
+  const v02 = ss && ss.version === "v0.2";
+
+  if (v02 && ss.train_ok === false) {
+    const pv = derivePipelineVisual("finquant", label);
+    return {
+      ...out,
+      execution_active_run_id: label,
+      featured_run_id: out.featured_run_id ?? label,
+      system_posture: postureFromDashboardStatus(pv?.dashboard_status),
+      system_status_lines: ["Job in progress (legacy v0.2).", `Run: ${label}`],
+      active_job: pv?.active_job ?? out.active_job,
+    };
+  }
+
+  if (fs === "training") {
+    const pv = derivePipelineVisual("finquant", label);
+    return {
+      ...out,
+      execution_active_run_id: label,
+      featured_run_id: out.featured_run_id ?? label,
+      system_posture: "RUNNING",
+      system_status_lines: ["Job in progress (legacy v0.2).", `Run: ${label}`],
+      active_job: pv?.active_job ?? out.active_job,
+    };
+  }
+
+  if (fs === "failed") {
+    const pv = derivePipelineVisual("finquant", label);
+    return {
+      ...out,
+      execution_active_run_id: null,
+      system_posture: "FAILED",
+      system_status_lines: [
+        "No active job running.",
+        `Legacy training failed (${label}).`,
+        pv?.latest_error ? String(pv.latest_error).slice(0, 400) : "",
+      ].filter(Boolean),
+      active_job: null,
+    };
+  }
+
+  return {
+    ...out,
+    execution_active_run_id: null,
+    featured_run_id: out.featured_run_id ?? out.active_run_id,
+    system_posture: "NO_ACTIVE_JOB",
+    system_status_lines: [],
+    active_job: null,
+  };
+}
+
 function mergeFinquantDashboard(base, legacyFin) {
   if (base.primary_run_is_cycle_candidate) {
     return {
@@ -1446,6 +1606,7 @@ function mergeFinquantDashboard(base, legacyFin) {
 
   if (v02 && ss.train_ok === true) {
     out.active_run_id = LEGACY_FINQUANT_RUN_LABEL;
+    out.featured_run_id = LEGACY_FINQUANT_RUN_LABEL;
     out.progress_percent = 100;
     out.progress_label = legacyFin.progress_label ?? "3000/3000";
     out.finquant_legacy_complete = true;
@@ -1457,44 +1618,49 @@ function mergeFinquantDashboard(base, legacyFin) {
     } else {
       out.current_status = "complete";
     }
-    return out;
+    return overlayFinquantLegacySystemPlane(out, legacyFin);
   }
   if (v02 && ss.train_ok === false) {
     out.active_run_id = LEGACY_FINQUANT_RUN_LABEL;
+    out.featured_run_id = LEGACY_FINQUANT_RUN_LABEL;
     out.progress_percent = legacyFin.legacy_progress_percent ?? 0;
     out.current_status = "validation_failed";
-    return out;
+    return overlayFinquantLegacySystemPlane(out, legacyFin);
   }
 
   const fs = legacyFin.finquant_status;
 
   if (fs === "complete") {
     out.active_run_id = legacyFin.active_run_label;
+    out.featured_run_id = legacyFin.active_run_label;
     out.progress_percent = 100;
     out.current_status = "complete";
     out.finquant_legacy_complete = true;
     out.finquant_legacy_training = false;
-    return out;
+    return overlayFinquantLegacySystemPlane(out, legacyFin);
   }
   if (fs === "training") {
     out.active_run_id = legacyFin.active_run_label;
+    out.featured_run_id = legacyFin.active_run_label;
     out.progress_percent = legacyFin.legacy_progress_percent;
     out.current_status = "training";
     out.finquant_legacy_training = true;
-    return out;
+    return overlayFinquantLegacySystemPlane(out, legacyFin);
   }
   if (fs === "failed") {
     out.active_run_id = legacyFin.active_run_label;
+    out.featured_run_id = legacyFin.active_run_label;
     out.progress_percent = legacyFin.legacy_progress_percent;
     out.current_status = "failed";
-    return out;
+    return overlayFinquantLegacySystemPlane(out, legacyFin);
   }
   if (!base.latest_run_id) {
     out.active_run_id = null;
+    out.featured_run_id = null;
     out.current_status = "no_runs";
     out.progress_percent = 0;
   }
-  return out;
+  return overlayFinquantLegacySystemPlane(out, legacyFin);
 }
 
 function buildFinquantV02DashboardBlock(state) {
@@ -1950,7 +2116,10 @@ function buildDashboardPayload(domain) {
   const primary = resolveDashboardPrimaryRun(domain);
   const primaryRunId = primary.run_id;
   const primaryState = primary.state;
-  const pv = primaryRunId ? derivePipelineVisual(domain, primaryRunId) : null;
+  const pvFeatured = primaryRunId ? derivePipelineVisual(domain, primaryRunId) : null;
+  const executionRunId = resolveExecutionActiveRunId(domain);
+  const pvExecution = executionRunId ? derivePipelineVisual(domain, executionRunId) : null;
+  const pvProgress = pvExecution ?? pvFeatured;
 
   let certificateOnDisk = false;
   if (primaryRunId) {
@@ -1974,12 +2143,12 @@ function buildDashboardPayload(domain) {
 
   const stagingHint = extractStagingHintFromTrainingYaml(domain);
   const pipelineFields =
-    primaryRunId && pv
+    primaryRunId && pvFeatured
       ? buildPipelineDashboardFields(
           domain,
           primaryRunId,
           primaryState,
-          pv,
+          pvFeatured,
           tcSummary,
           primaryIsCycle,
           certificateOnDisk,
@@ -1987,20 +2156,41 @@ function buildDashboardPayload(domain) {
         )
       : emptyPipelineDashboardFields();
 
+  const systemSlice = buildSystemControlPlaneSlice(
+    domain,
+    executionRunId,
+    primaryRunId,
+    tcSummary,
+    stagingHint
+  );
+
+  const certified_feature_summary =
+    !executionRunId &&
+    primaryRunId &&
+    (pvFeatured?.dashboard_status === "CERTIFIED" ||
+      primaryState?.certified === true ||
+      certificateOnDisk)
+      ? buildCertifiedFeatureSummary(domain, primaryRunId, primaryState, certificateOnDisk)
+      : null;
+
   const base = {
     domain,
     selected_domain: domain,
     active_run_id: primaryRunId,
+    featured_run_id: primaryRunId,
     latest_run_id: primaryRunId,
     primary_run_is_cycle_candidate: primaryIsCycle,
     prior_certified_run_id: primaryIsCycle ? tcSummary.latest_certified_run_id : null,
     prior_certified_version: primaryIsCycle ? tcSummary.latest_certified_version : null,
-    progress_percent: pv?.progress_percent ?? 0,
-    progress_label: pv?.progress_label ?? null,
-    current_status: pv?.pipeline_status ?? (primaryState ? summarizeStatus(primaryState) : "no_runs"),
-    dashboard_status_label: pv?.dashboard_status ?? null,
-    latest_error: pv?.latest_error ?? null,
-    active_job: pv?.active_job ?? null,
+    progress_percent: pvProgress?.progress_percent ?? 0,
+    progress_label: pvProgress?.progress_label ?? null,
+    current_status:
+      pvProgress?.pipeline_status ??
+      (primaryState ? summarizeStatus(primaryState) : "no_runs"),
+    dashboard_status_label: pvProgress?.dashboard_status ?? null,
+    latest_error: pvProgress?.latest_error ?? null,
+    active_job: pvExecution?.active_job ?? null,
+    certified_feature_summary,
     certification_status: certificateOnDisk
       ? "issued"
       : primaryState?.certified
@@ -2015,6 +2205,7 @@ function buildDashboardPayload(domain) {
         ? buildFinquantV02DashboardBlock(finquantLegacyState)
         : undefined,
     training_cycle: tcSummary,
+    ...systemSlice,
     ...pipelineFields,
   };
 
