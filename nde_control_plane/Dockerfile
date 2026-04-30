@@ -29,7 +29,7 @@ COPY package.json ./
 RUN npm install --omit=dev --no-audit --no-fund express@^4.21.0 multer@^1.4.5-lts.2
 
 COPY --from=build /app/dist ./dist
-COPY server.mjs ./
+COPY server.mjs trainingTelemetryLib.mjs ./
 
 EXPOSE 3999
 CMD ["node", "server.mjs"]
