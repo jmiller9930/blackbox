@@ -6,9 +6,9 @@ React + Express under `nde_control_plane/`. Ops label: **finquantv1**.
 
 **Do not** rely on **Docker on your Mac** as the acceptance environment for this UI.
 
-**Canonical test host:** **trx40** = **`172.20.1.66`** (lab — same route). After you **push** code:
+**Canonical test host:** **trx40** = **`172.20.1.66`** (lab). SSH user: **`vanayr`**. After you **push** code:
 
-1. SSH to **`172.20.1.66`**, **`cd ~/blackbox`**, **`git pull origin main`**
+1. **`ssh vanayr@172.20.1.66`** → **`cd ~/blackbox`**, **`git pull origin main`**
 2. **`cd nde_control_plane && ./run-docker.sh`**
 3. Open **`http://127.0.0.1:3999`** **on that machine** (or via VPN/LAN as you expose it)
 
@@ -16,7 +16,9 @@ Local Mac: edit code, **`npm run build`** if you want — optional **`npm run de
 
 Rule: **`.cursor/rules/nde-studio-host-trx40.mdc`**
 
-## Quick run (on 172.20.1.66)
+## Quick run (on trx40 / 172.20.1.66)
+
+From your dev machine (after `ssh vanayr@172.20.1.66`):
 
 ```bash
 cd ~/blackbox/nde_control_plane

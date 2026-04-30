@@ -8,7 +8,13 @@ alwaysApply: false
 
 ## Canonical runtime
 
-**NDE Studio** (`nde_control_plane/`; ops label **finquantv1**) is validated **only** on the lab host (**trx40** / **`172.20.1.66`** for this project — same route).
+**NDE Studio** (`nde_control_plane/`; ops label **finquantv1**) is validated **only** on the lab host (**trx40**, **`172.20.1.66`**).
+
+### SSH (canonical)
+
+- **User:** **`vanayr`**
+- **Host:** **`172.20.1.66`** (machine hostname **`trx40`**)
+- **Example:** `ssh vanayr@172.20.1.66` — repo checkout **`~/blackbox`** on that host.
 
 - **Operator / acceptance testing:** **`git pull`** on that host → **`./run-docker.sh`** → hit **`http://127.0.0.1:3999`** (or LAN URL) **there**.
 - **Not** clawbot and **not** “any server” unless governance changes this.
@@ -23,7 +29,7 @@ Local Mac may be used to **edit code** and **run linters / `npm run build`** —
 ## Sync with dev (non-negotiable)
 
 1. **Commit + push** (`origin/main` or integration branch).
-2. **SSH to `172.20.1.66`** (trx40 checkout, e.g. `~/blackbox`).
+2. **SSH:** `ssh vanayr@172.20.1.66` (trx40; checkout e.g. `~/blackbox`).
 3. **`git pull`** → **`cd nde_control_plane && ./run-docker.sh`** (or rebuild/restart).
 4. Confirm **HTTP** on port **3999** **on that host**.
 
