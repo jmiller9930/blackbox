@@ -5,7 +5,7 @@ import express from "express";
 import fs from "fs";
 import multer from "multer";
 import path from "path";
-import { execFile } from "child_process";
+import { execFile, spawn } from "child_process";
 import { promisify } from "util";
 import { fileURLToPath } from "url";
 
@@ -507,6 +507,35 @@ function detectFinquantV02TrainingProof(text) {
   };
 }
 
+/** Host-installed script under mounted /data/NDE/tools (Python/GPU on host via PATH or TRAIN_PYTHON). */
+const HOST_FINQUANT_V02_EVAL = path.join(DATA_NDE, "tools", "run_finquant_v02_eval.sh");
+
+function runHostFinquantV02Eval() {
+  return new Promise((resolve, reject) => {
+    const out = [];
+    const err = [];
+    const child = spawn(HOST_FINQUANT_V02_EVAL, [], {
+      stdio: ["ignore", "pipe", "pipe"],
+      env: {
+        ...process.env,
+        REPO_ROOT: process.env.REPO_ROOT || REPO,
+        FINQUANT_BASE: process.env.FINQUANT_BASE || FINQUANT_LEGACY_ROOT,
+        TRAIN_PYTHON: process.env.TRAIN_PYTHON || "python3",
+      },
+    });
+    child.stdout.on("data", (c) => out.push(c));
+    child.stderr.on("data", (c) => err.push(c));
+    child.on("error", (e) => reject(e));
+    child.on("close", (code, signal) => {
+      resolve({
+        code: code == null ? (signal ? 1 : 0) : code,
+        stdout: Buffer.concat(out).toString("utf8"),
+        stderr: Buffer.concat(err).toString("utf8"),
+      });
+    });
+  });
+}
+
 function writeFinquantV02State(payload) {
   const { runDir, statePath, adapterPath, evalReport } = finquantV02Paths();
   fs.mkdirSync(runDir, { recursive: true });
@@ -579,7 +608,6 @@ app.get("/api/studio-version", (_req, res) => {
  */
 app.post("/api/finquant/validate-v02", async (_req, res) => {
   const { adapterPath, trainLog, evalReport, statePath } = finquantV02Paths();
-  const evalScript = path.join(REPO, "finquant", "evals", "eval_finquant.py");
 
   const reportExists = () =>
     finquantV02OptionalReportPaths().some((p) => {
@@ -663,59 +691,63 @@ app.post("/api/finquant/validate-v02", async (_req, res) => {
       });
     }
 
-    if (!fs.existsSync(evalScript)) {
+    if (!fs.existsSync(HOST_FINQUANT_V02_EVAL)) {
       writeFinquantV02State({
         train_ok: true,
         eval_passed: false,
-        last_error: "eval_script_missing_under_REPO_MOUNT",
+        last_error: `host_eval_script_missing:${HOST_FINQUANT_V02_EVAL}`,
       });
       return res.status(503).json({
         ok: false,
         step: "eval",
-        error: "eval_script_missing",
-        eval_script: evalScript,
+        error: "host_eval_script_missing",
+        hint: "Install on host: bash scripts/install_nde_data_layout.sh /data/NDE",
+        host_script: HOST_FINQUANT_V02_EVAL,
         state_path: statePath,
         ...proofFields,
       });
     }
 
-    const { stdout, stderr } = await execFileAsync(
-      "python3",
-      [
-        evalScript,
-        "--adapter",
-        adapterPath,
-        "--write-report",
-        "--report-path",
-        evalReport,
-      ],
-      {
-        cwd: REPO,
-        env: {
-          ...process.env,
-          FINQUANT_BASE: FINQUANT_LEGACY_ROOT,
-        },
-        maxBuffer: 64 * 1024 * 1024,
-        timeout: 3_600_000,
+    let evalResult;
+    try {
+      evalResult = await runHostFinquantV02Eval();
+    } catch (spawnErr) {
+      const msg = spawnErr?.message || String(spawnErr);
+      try {
+        writeFinquantV02State({
+          train_ok: true,
+          eval_passed: false,
+          last_error: `eval_spawn:${msg.slice(0, 1200)}`,
+        });
+      } catch {
+        /* ignore */
       }
-    );
+      return res.status(500).json({
+        ok: false,
+        step: "eval",
+        error: msg.slice(0, 8000),
+        state_path: statePath,
+        ...(proofFields ?? {}),
+      });
+    }
 
-    const parsed = parseEvalFinquantStdout(stdout);
+    const evalPassed = evalResult.code === 0;
+    const parsed = evalResult.stdout
+      ? parseEvalFinquantStdout(evalResult.stdout)
+      : null;
     const summary = parsed?.summary;
     const casesPass = Number(summary?.cases_pass ?? 0);
     const casesTotal = Number(summary?.cases_total ?? 0);
-    const evalPassed =
-      Number.isFinite(casesTotal) &&
-      casesTotal > 0 &&
-      casesPass === casesTotal;
-
-    const evalSummary = summary
-      ? {
-          cases_pass: casesPass,
-          cases_total: casesTotal,
-          adapter: summary.adapter,
-        }
-      : undefined;
+    const evalSummary = {
+      exit_code: evalResult.code,
+      ...(summary
+        ? {
+            cases_pass: casesPass,
+            cases_total: casesTotal,
+            adapter: summary.adapter,
+          }
+        : {}),
+    };
 
     const doc = writeFinquantV02State({
       train_ok: true,
@@ -723,17 +755,19 @@ app.post("/api/finquant/validate-v02", async (_req, res) => {
       eval_summary: evalSummary,
       last_error: evalPassed
         ? undefined
-        : `eval_cases:${casesPass}/${casesTotal}`,
+        : `eval_exit_${evalResult.code}:${evalResult.stderr.slice(0, 2000)}`,
     });
 
     return res.json({
-      ok: true,
+      ok: evalPassed,
       certified: doc.certified === true,
       eval_passed: doc.eval_passed,
+      exit_code: evalResult.code,
       state_path: statePath,
       eval_report: evalReport,
       summary: evalSummary,
-      stderr: stderr ? String(stderr).slice(-4000) : "",
+      stderr: evalResult.stderr ? evalResult.stderr.slice(-8000) : "",
+      stdout_tail: evalResult.stdout ? evalResult.stdout.slice(-4000) : "",
       ...proofFields,
     });
   } catch (err) {

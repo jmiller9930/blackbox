@@ -143,11 +143,10 @@ export default function Dashboard() {
         <section className="card mt">
           <h3>FinQuant v0.2 validation</h3>
           <p className="small muted">
-            Checks adapter <span className="mono">…/adapters/finquant-1-qwen7b-v0.2</span>, training
-            log for <span className="mono">3000/3000</span> and{" "}
-            <span className="mono">train_runtime</span>, then runs{" "}
-            <span className="mono">eval_finquant.py</span> (GPU + Python deps required on the host
-            running NDE Studio).
+            Checks adapter, training proof (<span className="mono">train_runtime</span> + steps), then
+            runs host script{" "}
+            <span className="mono">/data/NDE/tools/run_finquant_v02_eval.sh</span> (Python + GPU on
+            the host via <span className="mono">TRAIN_PYTHON</span>, not inside the Node container).
           </p>
           <p>
             <button
@@ -174,9 +173,9 @@ export default function Dashboard() {
               </strong>
             </li>
             <li>
-              Eval passed:{" "}
+              Eval:{" "}
               <strong className={fqV02.eval_passed ? "ok" : "danger"}>
-                {fqV02.eval_passed ? "yes" : "no"}
+                {fqV02.eval_passed ? "PASS" : "FAIL"}
               </strong>
             </li>
             <li>
