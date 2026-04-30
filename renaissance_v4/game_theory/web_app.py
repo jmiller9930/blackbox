@@ -2692,76 +2692,9 @@ def create_app() -> Flask:
                     )
                     return
 
-                if student_rm_wiring_mandate_active_v1(exam_req if isinstance(exam_req, dict) else None):
-                    trace_contract_audit = _validate_student_rm_trace_contract_bounded_v1(job_id)
-                    if not trace_contract_audit.get("ok_v1"):
-                        if trace_contract_audit.get("wall_timeout_v1"):
-                            _lim_rt = float(trace_contract_audit.get("limit_sec_v1") or 0)
-                            err_rt = (
-                                f"{STUDENT_RM_TRACE_VALIDATE_WALL_TIMEOUT_STATUS_V1}: "
-                                f"RM trace proof scan exceeded {_lim_rt:.0f}s "
-                                "(bounded wait — tune PATTERN_GAME_RM_TRACE_VALIDATE_MAX_SEC)."
-                            )
-                            _batch_term_rt = STUDENT_RM_TRACE_VALIDATE_WALL_TIMEOUT_STATUS_V1
-                            _status_v1_rt = STUDENT_RM_TRACE_VALIDATE_WALL_TIMEOUT_STATUS_V1
-                        else:
-                            err_rt = _student_rm_trace_contract_error_message_v1(trace_contract_audit)
-                            _batch_term_rt = FAILED_RUNTIME_STUDENT_RM_TRACE_CONTRACT_V1
-                            _status_v1_rt = FAILED_RUNTIME_STUDENT_RM_TRACE_CONTRACT_V1
-                        exam_line_rt = _exam_run_line_meta_for_parallel_job_v1(
-                            exam_req=exam_req if isinstance(exam_req, dict) else None,
-                            fingerprint_preview=fp_prev if isinstance(fp_prev, str) else None,
-                            operator_batch_audit=operator_batch_audit,
-                            results=results,
-                            job_id=job_id,
-                            seam_audit=seam_audit,
-                            error=err_rt,
-                        )
-                        if isinstance(exam_line_rt, dict):
-                            exam_line_rt["student_rm_trace_contract_audit_v1"] = trace_contract_audit
-                            exam_line_rt["batch_terminal_status_v1"] = _batch_term_rt
-                        timing_rt = record_parallel_batch_finished(
-                            job_id=job_id,
-                            started_at_utc=started_iso,
-                            start_unix=start_unix,
-                            total_scenarios=len(scenarios),
-                            workers_used=workers_used,
-                            results=results,
-                            session_log_batch_dir=session_batch_dir[0],
-                            error=err_rt,
-                            operator_batch_audit=operator_batch_audit,
-                            student_seam_observability_v1=seam_audit,
-                            exam_run_line_meta_v1=exam_line_rt,
-                        )
-                        rt_payload = {
-                            "ok": False,
-                            "job_id": job_id,
-                            "error": err_rt,
-                            "student_rm_trace_contract_audit_v1": trace_contract_audit,
-                            "batch_timing": timing_rt,
-                            "status_v1": _status_v1_rt,
-                            "results": results,
-                        }
-                        with _JOBS_LOCK:
-                            jrt = _JOBS.get(job_id)
-                            if jrt:
-                                jrt["status"] = "error"
-                                jrt["completed"] = len(results)
-                                jrt["error"] = err_rt
-                                jrt["batch_timing"] = timing_rt
-                                jrt["result"] = rt_payload
-                        _persist_parallel_terminal_v1(
-                            job_id,
-                            "error",
-                            rt_payload,
-                            session_log_batch_dir=session_batch_dir[0],
-                            telemetry_dir=telem_dir,
-                        )
-                        return
-
                 full_run_contract_v1: dict[str, Any] | None = None
                 if (
-                    profile_requires_student_behavior_probe_v1(exam_req if isinstance(exam_req, dict) else None)
+                    student_rm_wiring_mandate_active_v1(exam_req if isinstance(exam_req, dict) else None)
                     and not seam_audit.get("skipped")
                     and not seam_audit.get("fatal_authority_seal_mismatch_v1")
                 ):
@@ -2827,6 +2760,73 @@ def create_app() -> Flask:
                             job_id,
                             "error",
                             persisted_fc,
+                            session_log_batch_dir=session_batch_dir[0],
+                            telemetry_dir=telem_dir,
+                        )
+                        return
+
+                if student_rm_wiring_mandate_active_v1(exam_req if isinstance(exam_req, dict) else None):
+                    trace_contract_audit = _validate_student_rm_trace_contract_bounded_v1(job_id)
+                    if not trace_contract_audit.get("ok_v1"):
+                        if trace_contract_audit.get("wall_timeout_v1"):
+                            _lim_rt = float(trace_contract_audit.get("limit_sec_v1") or 0)
+                            err_rt = (
+                                f"{STUDENT_RM_TRACE_VALIDATE_WALL_TIMEOUT_STATUS_V1}: "
+                                f"RM trace proof scan exceeded {_lim_rt:.0f}s "
+                                "(bounded wait — tune PATTERN_GAME_RM_TRACE_VALIDATE_MAX_SEC)."
+                            )
+                            _batch_term_rt = STUDENT_RM_TRACE_VALIDATE_WALL_TIMEOUT_STATUS_V1
+                            _status_v1_rt = STUDENT_RM_TRACE_VALIDATE_WALL_TIMEOUT_STATUS_V1
+                        else:
+                            err_rt = _student_rm_trace_contract_error_message_v1(trace_contract_audit)
+                            _batch_term_rt = FAILED_RUNTIME_STUDENT_RM_TRACE_CONTRACT_V1
+                            _status_v1_rt = FAILED_RUNTIME_STUDENT_RM_TRACE_CONTRACT_V1
+                        exam_line_rt = _exam_run_line_meta_for_parallel_job_v1(
+                            exam_req=exam_req if isinstance(exam_req, dict) else None,
+                            fingerprint_preview=fp_prev if isinstance(fp_prev, str) else None,
+                            operator_batch_audit=operator_batch_audit,
+                            results=results,
+                            job_id=job_id,
+                            seam_audit=seam_audit,
+                            error=err_rt,
+                        )
+                        if isinstance(exam_line_rt, dict):
+                            exam_line_rt["student_rm_trace_contract_audit_v1"] = trace_contract_audit
+                            exam_line_rt["batch_terminal_status_v1"] = _batch_term_rt
+                        timing_rt = record_parallel_batch_finished(
+                            job_id=job_id,
+                            started_at_utc=started_iso,
+                            start_unix=start_unix,
+                            total_scenarios=len(scenarios),
+                            workers_used=workers_used,
+                            results=results,
+                            session_log_batch_dir=session_batch_dir[0],
+                            error=err_rt,
+                            operator_batch_audit=operator_batch_audit,
+                            student_seam_observability_v1=seam_audit,
+                            exam_run_line_meta_v1=exam_line_rt,
+                        )
+                        rt_payload = {
+                            "ok": False,
+                            "job_id": job_id,
+                            "error": err_rt,
+                            "student_rm_trace_contract_audit_v1": trace_contract_audit,
+                            "batch_timing": timing_rt,
+                            "status_v1": _status_v1_rt,
+                            "results": results,
+                        }
+                        with _JOBS_LOCK:
+                            jrt = _JOBS.get(job_id)
+                            if jrt:
+                                jrt["status"] = "error"
+                                jrt["completed"] = len(results)
+                                jrt["error"] = err_rt
+                                jrt["batch_timing"] = timing_rt
+                                jrt["result"] = rt_payload
+                        _persist_parallel_terminal_v1(
+                            job_id,
+                            "error",
+                            rt_payload,
                             session_log_batch_dir=session_batch_dir[0],
                             telemetry_dir=telem_dir,
                         )
@@ -3852,6 +3852,87 @@ def create_app() -> Flask:
                 )
                 return jsonify(asmb_body), 400
 
+            full_run_contract_block_v1: dict[str, Any] | None = None
+            if (
+                student_rm_wiring_mandate_active_v1(
+                    exam_req_block if isinstance(exam_req_block, dict) else None
+                )
+                and not seam_blocking.get("skipped")
+                and not seam_blocking.get("fatal_authority_seal_mismatch_v1")
+            ):
+                full_run_contract_block_v1 = evaluate_full_student_run_contract_v1(job_id, seam_blocking)
+                if full_run_contract_block_v1.get("student_full_run_contract_failed_v1"):
+                    err_fcb = (
+                        f"{FAILED_STUDENT_FULL_RUN_CONTRACT_STATUS_V1}: "
+                        + "; ".join(
+                            str(x)
+                            for x in (full_run_contract_block_v1.get("contract_failure_reasons_v1") or [])[:24]
+                        )
+                    )
+                    exam_line_fcb = _exam_run_line_meta_for_parallel_job_v1(
+                        exam_req=exam_req_block if isinstance(exam_req_block, dict) else None,
+                        fingerprint_preview=fp_prev_block if isinstance(fp_prev_block, str) else None,
+                        operator_batch_audit=operator_batch_audit,
+                        results=results,
+                        job_id=job_id,
+                        seam_audit=seam_blocking,
+                        error=err_fcb,
+                    )
+                    if isinstance(exam_line_fcb, dict):
+                        exam_line_fcb["student_full_run_contract_v1"] = full_run_contract_block_v1
+                        exam_line_fcb["batch_terminal_status_v1"] = FAILED_STUDENT_FULL_RUN_CONTRACT_STATUS_V1
+                    timing_fcb = record_parallel_batch_finished(
+                        job_id=job_id,
+                        started_at_utc=started_iso,
+                        start_unix=start_unix,
+                        total_scenarios=len(scenarios),
+                        workers_used=workers_used,
+                        results=results,
+                        session_log_batch_dir=session_batch_dir[0],
+                        error=err_fcb,
+                        operator_batch_audit=operator_batch_audit,
+                        student_seam_observability_v1=seam_blocking,
+                        exam_run_line_meta_v1=exam_line_fcb,
+                    )
+                    fcb_body: dict[str, Any] = {
+                        "ok": False,
+                        "error": err_fcb,
+                        "job_id": job_id,
+                        "results": results,
+                        "batch_timing": timing_fcb,
+                        "status_v1": FAILED_STUDENT_FULL_RUN_CONTRACT_STATUS_V1,
+                        "student_full_run_contract_v1": full_run_contract_block_v1,
+                        "operator_metrics_suppressed_v1": True,
+                        "student_loop_directive_09_v1": seam_blocking,
+                        "rm_preflight_audit_v1": pf_audit_block,
+                    }
+                    _pan_fcb = pf_audit_block.get("rm_preflight_results_panel_v1")
+                    if isinstance(_pan_fcb, dict):
+                        fcb_body["rm_preflight_results_panel_v1"] = copy.deepcopy(_pan_fcb)
+                    persisted_fcb = dict(fcb_body)
+                    with _JOBS_LOCK:
+                        jfcb = _JOBS.get(job_id)
+                        if isinstance(jfcb, dict):
+                            jfcb["status"] = "error"
+                            jfcb["error"] = err_fcb
+                            jfcb["batch_timing"] = timing_fcb
+                            try:
+                                jfcb["result"] = {
+                                    **fcb_body,
+                                    "operator_rm_gates_v1": _build_operator_rm_gates_v1(jfcb, job_id),
+                                }
+                            except Exception:
+                                jfcb["result"] = dict(fcb_body)
+                            persisted_fcb = jfcb["result"]
+                    _persist_parallel_terminal_v1(
+                        job_id,
+                        "error",
+                        persisted_fcb,
+                        session_log_batch_dir=session_batch_dir[0],
+                        telemetry_dir=telem_dir,
+                    )
+                    return jsonify(fcb_body), 400
+
             if student_rm_wiring_mandate_active_v1(
                 exam_req_block if isinstance(exam_req_block, dict) else None
             ):
@@ -3930,87 +4011,6 @@ def create_app() -> Flask:
                         telemetry_dir=telem_dir,
                     )
                     return jsonify(rt_body), 400
-
-            full_run_contract_block_v1: dict[str, Any] | None = None
-            if (
-                profile_requires_student_behavior_probe_v1(
-                    exam_req_block if isinstance(exam_req_block, dict) else None
-                )
-                and not seam_blocking.get("skipped")
-                and not seam_blocking.get("fatal_authority_seal_mismatch_v1")
-            ):
-                full_run_contract_block_v1 = evaluate_full_student_run_contract_v1(job_id, seam_blocking)
-                if full_run_contract_block_v1.get("student_full_run_contract_failed_v1"):
-                    err_fcb = (
-                        f"{FAILED_STUDENT_FULL_RUN_CONTRACT_STATUS_V1}: "
-                        + "; ".join(
-                            str(x)
-                            for x in (full_run_contract_block_v1.get("contract_failure_reasons_v1") or [])[:24]
-                        )
-                    )
-                    exam_line_fcb = _exam_run_line_meta_for_parallel_job_v1(
-                        exam_req=exam_req_block if isinstance(exam_req_block, dict) else None,
-                        fingerprint_preview=fp_prev_block if isinstance(fp_prev_block, str) else None,
-                        operator_batch_audit=operator_batch_audit,
-                        results=results,
-                        job_id=job_id,
-                        seam_audit=seam_blocking,
-                        error=err_fcb,
-                    )
-                    if isinstance(exam_line_fcb, dict):
-                        exam_line_fcb["student_full_run_contract_v1"] = full_run_contract_block_v1
-                        exam_line_fcb["batch_terminal_status_v1"] = FAILED_STUDENT_FULL_RUN_CONTRACT_STATUS_V1
-                    timing_fcb = record_parallel_batch_finished(
-                        job_id=job_id,
-                        started_at_utc=started_iso,
-                        start_unix=start_unix,
-                        total_scenarios=len(scenarios),
-                        workers_used=workers_used,
-                        results=results,
-                        session_log_batch_dir=session_batch_dir[0],
-                        error=err_fcb,
-                        operator_batch_audit=operator_batch_audit,
-                        student_seam_observability_v1=seam_blocking,
-                        exam_run_line_meta_v1=exam_line_fcb,
-                    )
-                    fcb_body: dict[str, Any] = {
-                        "ok": False,
-                        "error": err_fcb,
-                        "job_id": job_id,
-                        "results": results,
-                        "batch_timing": timing_fcb,
-                        "status_v1": FAILED_STUDENT_FULL_RUN_CONTRACT_STATUS_V1,
-                        "student_full_run_contract_v1": full_run_contract_block_v1,
-                        "operator_metrics_suppressed_v1": True,
-                        "student_loop_directive_09_v1": seam_blocking,
-                        "rm_preflight_audit_v1": pf_audit_block,
-                    }
-                    _pan_fcb = pf_audit_block.get("rm_preflight_results_panel_v1")
-                    if isinstance(_pan_fcb, dict):
-                        fcb_body["rm_preflight_results_panel_v1"] = copy.deepcopy(_pan_fcb)
-                    persisted_fcb = dict(fcb_body)
-                    with _JOBS_LOCK:
-                        jfcb = _JOBS.get(job_id)
-                        if isinstance(jfcb, dict):
-                            jfcb["status"] = "error"
-                            jfcb["error"] = err_fcb
-                            jfcb["batch_timing"] = timing_fcb
-                            try:
-                                jfcb["result"] = {
-                                    **fcb_body,
-                                    "operator_rm_gates_v1": _build_operator_rm_gates_v1(jfcb, job_id),
-                                }
-                            except Exception:
-                                jfcb["result"] = dict(fcb_body)
-                            persisted_fcb = jfcb["result"]
-                    _persist_parallel_terminal_v1(
-                        job_id,
-                        "error",
-                        persisted_fcb,
-                        session_log_batch_dir=session_batch_dir[0],
-                        telemetry_dir=telem_dir,
-                    )
-                    return jsonify(fcb_body), 400
 
             if seam_blocking.get("skipped"):
                 emit_seam_disabled_placeholder_events_v1(

@@ -144,6 +144,7 @@ def evaluate_full_student_run_contract_v1(
     sr = str((seam_audit or {}).get("student_seam_stop_reason_v1") or "") if isinstance(seam_audit, dict) else ""
     sr_terminal_ok_v1 = sr in (
         "completed_all_trades_v1",
+        "completed_bounded_seam_trades_v1",
         "rm_preflight_early_exit_first_seal_v1",
     )
     if not sr_terminal_ok_v1:

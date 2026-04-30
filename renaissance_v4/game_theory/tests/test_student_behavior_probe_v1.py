@@ -139,6 +139,16 @@ def test_full_run_contract_fails_when_stop_reason_not_completed_v1() -> None:
     assert r.get("student_full_run_contract_failed_v1") is True
 
 
+def test_full_run_contract_ok_when_bounded_seam_stop_reason_v1() -> None:
+    """GT067 — capped seam trades use completed_bounded_seam_trades_v1; must not fail contract on stop reason alone."""
+    r = evaluate_full_student_run_contract_v1(
+        "nonexistent_job_bounded_seam_contract_test_v1",
+        {"student_seam_stop_reason_v1": "completed_bounded_seam_trades_v1"},
+    )
+    reasons = list(r.get("contract_failure_reasons_v1") or [])
+    assert all(not str(x).startswith("student_seam_stop_reason_not_completed_v1") for x in reasons)
+
+
 def test_execute_probe_operator_cancel_before_seam_v1(monkeypatch: pytest.MonkeyPatch) -> None:
     """Operator cancel must resolve without waiting for subprocess wall SLA."""
     monkeypatch.setenv("PATTERN_GAME_STUDENT_PROBE_SUBPROCESS_ISOLATION", "1")
