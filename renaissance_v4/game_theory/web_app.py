@@ -386,7 +386,8 @@ from renaissance_v4.game_theory.scorecard_drill import (
 
 _JOBS_LOCK = threading.Lock()
 _JOBS: dict[str, dict[str, Any]] = {}
-_JOB_MAX_AGE_SEC = 7200
+# In-memory job entries; must exceed longest legitimate batch (watchdog + seam + replay margin).
+_JOB_MAX_AGE_SEC = 86400
 
 
 def _parallel_batch_watchdog_wall_sec_v1() -> int:
@@ -396,19 +397,19 @@ def _parallel_batch_watchdog_wall_sec_v1() -> int:
     When exceeded, the job is marked ``status: error`` with ``stuck_parallel_batch_watchdog_v1`` and a
     persisted terminal record so the scorecard / polling UI clear **without** restarting Flask.
 
-    ``PATTERN_GAME_BATCH_STUCK_AFTER_SEC`` — default **3600** (1 hour). Set **0** to disable.
-    Legitimate long batches: raise this (and ensure workers complete within it).
+    ``PATTERN_GAME_BATCH_STUCK_AFTER_SEC`` — default **14400** (4 hours). Set **0** to disable.
+    Full exams (long Student seam + replay) require this to exceed seam + parallel wall time.
 
     GT066 — Prefer explicit terminal errors from stage timeouts (Student seam wall, RM trace validate
     wall) configured **below** this ceiling so the watchdog is not the first terminal signal.
     """
     raw = (os.environ.get("PATTERN_GAME_BATCH_STUCK_AFTER_SEC") or "").strip()
     if not raw:
-        return 3600
+        return 14400
     try:
         n = int(raw)
     except ValueError:
-        return 3600
+        return 14400
     return max(0, n)
 
 
@@ -489,16 +490,18 @@ def _student_seam_after_parallel_max_sec_v1() -> float:
     """
     Wall clock for ``student_loop_seam_after_parallel_batch_v1`` (post-replay Directive 09 seam).
 
-    ``PATTERN_GAME_STUDENT_SEAM_AFTER_PARALLEL_MAX_SEC`` — default **600** (10 minutes). **0** = unlimited
-    (lab debugging only — can hang until batch watchdog).
+    ``PATTERN_GAME_STUDENT_SEAM_AFTER_PARALLEL_MAX_SEC`` — default **7200** (2 hours). Full exams often
+    exceed 10 minutes of post-replay seam work (LLM / retrieval). **0** = unlimited (lab debugging only).
+
+    Tune down only for fast CI or smoke runs via env.
     """
     raw = (os.environ.get("PATTERN_GAME_STUDENT_SEAM_AFTER_PARALLEL_MAX_SEC") or "").strip()
     if not raw:
-        return 600.0
+        return 7200.0
     try:
         n = float(raw)
     except ValueError:
-        return 600.0
+        return 7200.0
     return max(0.0, n)
 
 

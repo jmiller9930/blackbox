@@ -27,6 +27,6 @@ def test_student_seam_after_parallel_max_reads_env(monkeypatch) -> None:
     monkeypatch.setenv("PATTERN_GAME_STUDENT_SEAM_AFTER_PARALLEL_MAX_SEC", "120")
     assert web_app_mod._student_seam_after_parallel_max_sec_v1() == 120.0
     monkeypatch.delenv("PATTERN_GAME_STUDENT_SEAM_AFTER_PARALLEL_MAX_SEC", raising=False)
-    assert web_app_mod._student_seam_after_parallel_max_sec_v1() == 600.0
+    assert web_app_mod._student_seam_after_parallel_max_sec_v1() == 7200.0
     monkeypatch.setenv("PATTERN_GAME_STUDENT_SEAM_AFTER_PARALLEL_MAX_SEC", "0")
     assert web_app_mod._student_seam_after_parallel_max_sec_v1() == 0.0
