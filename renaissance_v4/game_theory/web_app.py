@@ -39,6 +39,7 @@ counts, **run_ok_pct**, **referee_win_pct**, **avg_trade_win_pct**) and expose `
 (includes embedded ``l1_road_v1`` overlay for L1 road columns + API legend),
 ``GET /api/student-panel/l1-road`` (**GT_DIRECTIVE_016** — full road payload, same aggregation),
 ``GET /api/student-panel/run/<job_id>/decisions``, ``GET /api/student-panel/run/<job_id>/l3?trade_id=`` (**GT_DIRECTIVE_017** — L3 envelope + structured ``data_gaps[]``),
+``GET /api/student-panel/run/<job_id>/l1-row-export`` — L1 row bundle for engineering (scorecard line + panel row + road overlay; optional ``?download=1``),
 ``GET /api/student-panel/run/<job_id>/learning`` (**GT_DIRECTIVE_018** — memory promotion / retrieval eligibility),
 ``GET /api/student-panel/run/<job_id>/learning-loop-trace`` — LangGraph-style **learning loop trace** JSON (nodes, edges, blunt health banner); **debug** fingerprint compare + breakpoints: ``GET /api/debug/learning-loop/trace/<job_id>``, ``GET /api/debug/learning-loop/trace-stream/<job_id>`` (NDJSON progress + payload), and ``GET /debug/learning-loop?job_id=…`` (legacy ``GET /learning-loop-trace`` redirects there); runtime handoffs append to ``learning_trace_events_v1.jsonl`` (see ``learning_trace_events_v1``) and merge into the debug payload when present,
 ``GET /api/training-exam-audit/<job_id>`` — deterministic ``training_exam_audit_v1`` for one scorecard line (learning vs harness vs missing seam; rebuilds from fields if older lines lack the block),
@@ -139,7 +140,7 @@ _PATTERN_BANNER_WEBP_PATH = _RV4_ROOT / "assets" / "pattern.webp"
 _PATTERN_GAME_BANNER_BOOT_JS = _GAME_THEORY / "static" / "pattern_game_banner_boot.js"
 
 # Operator-visible web UI bundle version — bump when changing PAGE_HTML (HTML/CSS/JS) so deploys are provable.
-PATTERN_GAME_WEB_UI_VERSION = "2.19.111"
+PATTERN_GAME_WEB_UI_VERSION = "2.19.112"
 
 _PATTERN_GAME_SERVER_GIT_SHA_RESOLVED: str | None = None
 
@@ -241,6 +242,7 @@ from renaissance_v4.game_theory.learning_loop_trace_v1 import (
     build_learning_loop_trace_v1,
     read_learning_loop_trace_page_html_v1,
 )
+from renaissance_v4.game_theory.student_panel_l1_export_v1 import build_student_panel_l1_row_export_v1
 from renaissance_v4.game_theory.student_panel_l1_road_v1 import build_l1_road_payload_v1
 from renaissance_v4.game_theory.student_panel_l3_datagap_matrix_v1 import build_student_panel_l3_payload_v1
 from renaissance_v4.game_theory.student_proctor.learning_memory_promotion_v1 import (
@@ -4471,6 +4473,40 @@ def create_app() -> Flask:
         """GT_DIRECTIVE_018 — run-level learning governance, store presence, retrieval eligibility."""
         return jsonify(build_student_panel_run_learning_payload_v1(job_id.strip())), 200
 
+    @app.get("/api/student-panel/run/<job_id>/l1-row-export")
+    def api_student_panel_run_l1_row_export(job_id: str) -> Any:
+        """Single-run L1 bundle: raw scorecard line + ``student_panel_run_row_v2`` + L1 road overlay.
+
+        Query ``download=1`` (or ``true`` / ``yes``) returns ``Content-Disposition: attachment``.
+        Uses the same scorecard + in-flight merge as ``GET /api/student-panel/runs`` when the job
+        is not found in the file-only slice.
+        """
+        jid = job_id.strip()
+        dl_raw = str(request.args.get("download") or "").strip().lower()
+        download = dl_raw in ("1", "true", "yes", "download")
+
+        def _respond(payload: dict[str, Any], status: int) -> Any:
+            if download and payload.get("ok") is True:
+                body = json.dumps(payload, indent=2, ensure_ascii=False, default=str) + "\n"
+                fn = f"l1-row-{jid}.json"
+                resp = Response(
+                    body,
+                    mimetype="application/json; charset=utf-8",
+                    status=status,
+                )
+                resp.headers["Content-Disposition"] = f'attachment; filename="{fn}"'
+                return resp
+            return jsonify(payload), status
+
+        first = build_student_panel_l1_row_export_v1(jid)
+        if first.get("ok"):
+            return _respond(first, 200)
+        p = default_batch_scorecard_jsonl()
+        file_rows = read_batch_scorecard_recent(500, path=p)
+        merged, _ = _merge_scorecard_with_inflight(file_rows, limit=500)
+        second = build_student_panel_l1_row_export_v1(jid, merged_entries_newest_first=merged)
+        return _respond(second, 200 if second.get("ok") else 404)
+
     @app.get("/api/student-panel/run/<job_id>/learning-loop-trace")
     def api_student_panel_learning_loop_trace_v1(job_id: str) -> Any:
         """Learning Loop Trace — graph-shaped JSON for operator engine-health (Student path)."""
@@ -6319,6 +6355,26 @@ PAGE_HTML = """<!DOCTYPE html>
     }
     .pg-student-d11-row-del:hover:not(:disabled) { border-color: #a32b2b; background: rgba(163, 43, 43, 0.22); }
     .pg-student-d11-row-del:disabled { opacity: 0.35; cursor: not-allowed; }
+    .pg-student-d11-row-export {
+      padding: 2px 6px;
+      font-size: 0.62rem;
+      font-weight: 600;
+      line-height: 1.15;
+      border-radius: 6px;
+      border: 1px solid rgba(74, 122, 176, 0.5);
+      background: rgba(74, 122, 176, 0.12);
+      color: var(--pg-ink);
+      cursor: pointer;
+    }
+    .pg-student-d11-row-export:hover { border-color: #4a7ab0; background: rgba(74, 122, 176, 0.22); }
+    .pg-student-d11-row-export-dl {
+      font-size: 0.62rem;
+      font-weight: 700;
+      margin-right: 4px;
+      color: #4a7ab0;
+      text-decoration: none;
+    }
+    .pg-student-d11-row-export-dl:hover { text-decoration: underline; }
     /* D13 — single horizontal run summary band; zebra cells for scanability */
     .pg-student-d13-run-summary {
       display: flex;
@@ -10377,7 +10433,9 @@ PAGE_HTML = """<!DOCTYPE html>
         (leg.band_a ? String(leg.band_a).slice(0, 220) : '') +
         (leg.band_b ? ' | ' + String(leg.band_b).slice(0, 160) : '');
       let scroll =
-        '<p class="pg-student-d11-legend" style="margin-top:0"><strong title="Level 1 (L1): list of exam runs from the scorecard">Level 1 — exam list</strong> — Each row is one exam attempt (<code title="API schema name for one run row">student_panel_run_row_v2</code> + <code title="D14 aggregate block on the same response">d14_run_row_v1</code>). Referee rollups and harness signals. Click a row (not ×) for Level 2. <strong title="Remove this scorecard line only">×</strong> removes this scorecard line only. <strong title="Sys BL: system baseline trade win percent — oldest same-fingerprint anchor">Sys BL %</strong> = system baseline trade win % (oldest same-fingerprint anchor). <strong title="Run TW: this run trade win percent from the Referee batch">Run TW %</strong> = this exam&rsquo;s trade win %. <strong title="Greater than baseline: strict beat vs Sys BL; not on anchor row">&gt;BL</strong> = strict beat vs Sys BL (not on anchor). <strong title="L1 road: fingerprint-group band vs baseline">Road</strong> / <strong title="Anchor: baseline ruler vs compare row role">Anchor</strong> / <strong title="Road gaps: merge-time data gap codes">Road gaps</strong> come from <code title="Embedded L1 road payload on this API response">l1_road_v1</code> on this response (same aggregation as <code>GET /api/student-panel/l1-road</code>). Full <code>l1_road_v1.legend</code> copy is in native browser tooltips (<code>title</code>) on column headers and on Profile / LLM / Road cells and the fingerprint table — not a separate on-page legend block. <a href="/docs/student-panel-dictionary" onclick="return pgOpenStudentPanelDictionaryPopout();" title="Glossary in a resizable pop-out">Dictionary</a> · <a href="/api/student-panel/l1-road" target="_blank" rel="noopener noreferrer">L1 road JSON</a></p>' +
+        '<p class="pg-student-d11-legend" style="margin-top:0"><strong title="Level 1 (L1): list of exam runs from the scorecard">Level 1 — exam list</strong> — Each row is one exam attempt (<code title="API schema name for one run row">student_panel_run_row_v2</code> + <code title="D14 aggregate block on the same response">d14_run_row_v1</code>). Referee rollups and harness signals. Click a row (not ×) for Level 2. <strong title="Remove this scorecard line only">×</strong> removes this scorecard line only.
+          <strong title="Clipboard JSON bundle for engineering">copy</strong> / <strong title="Download JSON file">dl</strong> — one run&rsquo;s L1 bundle (<code title="API">GET /api/student-panel/run/&lt;job_id&gt;/l1-row-export</code>).
+          <strong title="Sys BL: system baseline trade win percent — oldest same-fingerprint anchor">Sys BL %</strong> = system baseline trade win % (oldest same-fingerprint anchor). <strong title="Run TW: this run trade win percent from the Referee batch">Run TW %</strong> = this exam&rsquo;s trade win %. <strong title="Greater than baseline: strict beat vs Sys BL; not on anchor row">&gt;BL</strong> = strict beat vs Sys BL (not on anchor). <strong title="L1 road: fingerprint-group band vs baseline">Road</strong> / <strong title="Anchor: baseline ruler vs compare row role">Anchor</strong> / <strong title="Road gaps: merge-time data gap codes">Road gaps</strong> come from <code title="Embedded L1 road payload on this API response">l1_road_v1</code> on this response (same aggregation as <code>GET /api/student-panel/l1-road</code>). Full <code>l1_road_v1.legend</code> copy is in native browser tooltips (<code>title</code>) on column headers and on Profile / LLM / Road cells and the fingerprint table — not a separate on-page legend block. <a href="/docs/student-panel-dictionary" onclick="return pgOpenStudentPanelDictionaryPopout();" title="Glossary in a resizable pop-out">Dictionary</a> · <a href="/api/student-panel/l1-road" target="_blank" rel="noopener noreferrer">L1 road JSON</a></p>' +
         '<div class="pg-student-d11-table-wrap" title="Drag the green grip on the right edge of each column header to widen (table scrolls horizontally). Double-click grip to reset that column.">' +
         '<table class="pg-student-d11-table pg-student-d11-table--l1-exam"><thead><tr>' +
         '<th title="Run id: unique parallel batch job identifier">run_id</th>' +
@@ -10417,7 +10475,7 @@ PAGE_HTML = """<!DOCTYPE html>
         '<th title="SH: student handoff — YES if learning rows were appended or retrieval matched this run">SH</th>' +
         '<th title="outΔ: outcome improved — YES/NO if L1 economic scalar (exam E or batch expectancy) vs prior same-fingerprint run">outΔ</th>' +
         '<th title="PM: memory / recall tier for attribution">PM</th>' +
-        '<th class="pg-student-d11-sticky-actions" title="Remove run from scorecard only (D14)">×</th>' +
+        '<th class="pg-student-d11-sticky-actions" title="copy = L1 row JSON to clipboard; dl = download .json; × = remove scorecard line">⋯</th>' +
         '</tr></thead><tbody>';
       for (let i = 0; i < rows.length; i++) {
         const row = rows[i] || {};
@@ -10584,8 +10642,20 @@ PAGE_HTML = """<!DOCTYPE html>
               '" title="Stop running exam (same as batch cancel — pending scenarios will not start)">⛔</button>';
           }
           scroll +=
+            '<button type="button" class="pg-student-d11-row-export" data-run-id="' +
+            escapeHtml(rid) +
+            '" title="Copy L1 row JSON (scorecard + panel row + road overlay) for engineering">copy</button>';
+          scroll +=
             '<button type="button" class="pg-student-d11-row-del" disabled title="Cannot delete until this exam completes">×</button></span>';
         } else {
+          scroll +=
+            '<a class="pg-student-d11-row-export-dl" href="/api/student-panel/run/' +
+            encodeURIComponent(rid) +
+            '/l1-row-export?download=1" download title="Download L1 row JSON file">dl</a>';
+          scroll +=
+            '<button type="button" class="pg-student-d11-row-export" data-run-id="' +
+            escapeHtml(rid) +
+            '" title="Copy L1 row JSON (scorecard + panel row + road overlay) for engineering">copy</button>';
           scroll +=
             '<button type="button" class="pg-student-d11-row-del" data-run-id="' +
             escapeHtml(rid) +
@@ -10619,6 +10689,8 @@ PAGE_HTML = """<!DOCTYPE html>
           if (ev && ev.target && ev.target.closest) {
             if (ev.target.closest('.pg-student-d11-row-del')) return;
             if (ev.target.closest('.pg-student-d11-row-stop')) return;
+            if (ev.target.closest('.pg-student-d11-row-export')) return;
+            if (ev.target.closest('.pg-student-d11-row-export-dl')) return;
           }
           const id = tr.getAttribute('data-run-id');
           if (id) {
@@ -10689,6 +10761,41 @@ PAGE_HTML = """<!DOCTYPE html>
               btn.classList.remove('pg-student-d11-row-stop-muted');
               btn.textContent = prevText;
               btn.title = prevTitle;
+            });
+        });
+      });
+      root.querySelectorAll('.pg-student-d11-row-export').forEach(function (btn) {
+        btn.addEventListener('click', function (ev) {
+          ev.preventDefault();
+          ev.stopPropagation();
+          const rid = btn.getAttribute('data-run-id');
+          if (!rid) return;
+          const url = '/api/student-panel/run/' + encodeURIComponent(rid) + '/l1-row-export';
+          fetch(url)
+            .then(function (r) {
+              return r.json();
+            })
+            .then(function (payload) {
+              if (!payload || !payload.ok) {
+                alert(
+                  'L1 export failed: ' + (payload && payload.error ? String(payload.error) : 'unknown')
+                );
+                return;
+              }
+              const text = JSON.stringify(payload, null, 2);
+              if (navigator.clipboard && navigator.clipboard.writeText) {
+                return navigator.clipboard.writeText(text).then(function () {
+                  const prev = btn.textContent;
+                  btn.textContent = 'copied';
+                  setTimeout(function () {
+                    btn.textContent = prev;
+                  }, 1600);
+                });
+              }
+              window.prompt('Copy JSON:', text);
+            })
+            .catch(function (e) {
+              alert('L1 export request failed: ' + String(e));
             });
         });
       });
