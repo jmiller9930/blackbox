@@ -25,7 +25,13 @@ export default function AppShell() {
         <div className="banner-overlay banner-dark">
           <div className="banner-titles">
             <h1>NDE Studio</h1>
-            <p>Control Plane</p>
+            <p
+              className="banner-version mono"
+              title="Bump package.json version when shipping UI changes; build ID is set each vite build."
+            >
+              {studioVersionLabel()}
+            </p>
+            <p className="banner-tagline">Control Plane</p>
           </div>
           <div className="user-box">
             <div>operator@local</div>
@@ -72,9 +78,6 @@ export default function AppShell() {
           <main className="page-main">
             <Outlet />
           </main>
-          <footer className="app-version-footer" title="Bump package.json version when shipping UI changes; build ID is set each vite build.">
-            <span className="mono">{studioVersionLabel()}</span>
-          </footer>
         </div>
       </div>
     </div>

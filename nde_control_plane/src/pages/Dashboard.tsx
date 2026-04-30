@@ -30,6 +30,8 @@ export default function Dashboard() {
   const [advancing, setAdvancing] = useState(false);
   const [advanceMsg, setAdvanceMsg] = useState<string | null>(null);
   const [fullAdminOk, setFullAdminOk] = useState(false);
+  /** Operator directive: pipeline trace collapsed by default. */
+  const [pipelineDetailOpen, setPipelineDetailOpen] = useState(false);
 
   const tc = dashboard?.training_cycle;
   const aj = dashboard?.active_job;
@@ -177,83 +179,98 @@ export default function Dashboard() {
       dashboard &&
       (dashboard.pipeline_steps?.length ?? 0) > 0 ? (
         <section className="card mt wide pipeline-detail-card">
-          <h3 style={{ marginTop: 0 }}>Pipeline detail</h3>
-          {dashboard.version_flow ? (
-            <p className="small mono accent wrap" style={{ marginBottom: "0.75rem" }}>
-              {dashboard.version_flow}
-            </p>
-          ) : null}
-          <p className="mono small" style={{ marginBottom: "0.75rem" }}>
-            <strong>{dashboard.pipeline_focus_label ?? "—"}</strong>
-          </p>
-
-          <h4 className="small muted" style={{ marginBottom: "0.35rem" }}>
-            Node timeline
-          </h4>
-          <ul className="small mono validate-list pipeline-timeline">
-            {(dashboard.pipeline_timeline_lines ?? []).map((line, i) => (
-              <li key={`${i}-${line}`}>{line}</li>
-            ))}
-          </ul>
-
-          {(dashboard.pipeline_timing_lines?.length ?? 0) > 0 ? (
-            <>
-              <h4 className="small muted mt" style={{ marginBottom: "0.35rem" }}>
-                Node timing
-              </h4>
-              <ul className="small mono validate-list">
-                {(dashboard.pipeline_timing_lines ?? []).map((line, i) => (
-                  <li key={`${i}-${line}`}>{line}</li>
-                ))}
-              </ul>
-            </>
-          ) : null}
-
-          {dashboard.actionable_error ? (
-            <>
-              <h4 className="small muted mt" style={{ marginBottom: "0.35rem" }}>
-                Actionable guidance
-              </h4>
-              <dl className="actionable-dl small">
-                <dt className="muted">Problem</dt>
-                <dd>{dashboard.actionable_error.problem}</dd>
-                {dashboard.actionable_error.expected ? (
-                  <>
-                    <dt className="muted">Expected</dt>
-                    <dd className="mono wrap">{dashboard.actionable_error.expected}</dd>
-                  </>
-                ) : null}
-                <dt className="muted">Fix</dt>
-                <dd>{dashboard.actionable_error.fix}</dd>
-                <dt className="muted">Next action</dt>
-                <dd>{dashboard.actionable_error.next_action}</dd>
-              </dl>
-            </>
-          ) : null}
-
-          {dashboard.current_node_artifacts ? (
-            <>
-              <h4 className="small muted mt" style={{ marginBottom: "0.35rem" }}>
-                Current / failed node artifacts (
-                {dashboard.current_node_artifacts.graph_node})
-              </h4>
-              <p className="small muted" style={{ marginBottom: "0.25rem" }}>
-                Inputs
+          <button
+            type="button"
+            className="collapse-panel-header"
+            aria-expanded={pipelineDetailOpen}
+            onClick={() => setPipelineDetailOpen((o) => !o)}
+          >
+            <span className="collapse-caret" aria-hidden>
+              {pipelineDetailOpen ? "▼" : "▶"}
+            </span>
+            Pipeline detail
+          </button>
+          {pipelineDetailOpen ? (
+            <div className="collapse-panel-body">
+              {dashboard.version_flow ? (
+                <p
+                  className="small mono accent wrap"
+                  style={{ marginBottom: "0.75rem", marginTop: 0 }}
+                >
+                  {dashboard.version_flow}
+                </p>
+              ) : null}
+              <p className="mono small" style={{ marginBottom: "0.75rem" }}>
+                <strong>{dashboard.pipeline_focus_label ?? "—"}</strong>
               </p>
-              <ul className="small mono validate-list">
-                {dashboard.current_node_artifacts.inputs.map((x) => (
-                  <li key={x}>{x}</li>
-                ))}
-              </ul>
-              <p className="small muted mt" style={{ marginBottom: "0.25rem" }}>
-                Outputs
-              </p>
-              <ul className="small mono validate-list">
-                {dashboard.current_node_artifacts.outputs.map((x) => (
-                  <li key={x}>{x}</li>
-                ))}
-              </ul>
-            </>
+
+              <details className="collapse-details">
+                <summary className="collapse-summary">Node timeline</summary>
+                <ul className="small mono validate-list pipeline-timeline">
+                  {(dashboard.pipeline_timeline_lines ?? []).map((line, i) => (
+                    <li key={`${i}-${line}`}>{line}</li>
+                  ))}
+                </ul>
+              </details>
+
+              {(dashboard.pipeline_timing_lines?.length ?? 0) > 0 ? (
+                <details className="collapse-details">
+                  <summary className="collapse-summary">Node timing</summary>
+                  <ul className="small mono validate-list">
+                    {(dashboard.pipeline_timing_lines ?? []).map((line, i) => (
+                      <li key={`${i}-${line}`}>{line}</li>
+                    ))}
+                  </ul>
+                </details>
+              ) : null}
+
+              {dashboard.actionable_error ? (
+                <>
+                  <h4 className="small muted mt" style={{ marginBottom: "0.35rem" }}>
+                    Actionable guidance
+                  </h4>
+                  <dl className="actionable-dl small">
+                    <dt className="muted">Problem</dt>
+                    <dd>{dashboard.actionable_error.problem}</dd>
+                    {dashboard.actionable_error.expected ? (
+                      <>
+                        <dt className="muted">Expected</dt>
+                        <dd className="mono wrap">{dashboard.actionable_error.expected}</dd>
+                      </>
+                    ) : null}
+                    <dt className="muted">Fix</dt>
+                    <dd>{dashboard.actionable_error.fix}</dd>
+                    <dt className="muted">Next action</dt>
+                    <dd>{dashboard.actionable_error.next_action}</dd>
+                  </dl>
+                </>
+              ) : null}
+
+              {dashboard.current_node_artifacts ? (
+                <details className="collapse-details">
+                  <summary className="collapse-summary">
+                    Current / failed node artifacts (
+                    {dashboard.current_node_artifacts.graph_node})
+                  </summary>
+                  <p className="small muted" style={{ marginBottom: "0.25rem" }}>
+                    Inputs
+                  </p>
+                  <ul className="small mono validate-list">
+                    {dashboard.current_node_artifacts.inputs.map((x) => (
+                      <li key={x}>{x}</li>
+                    ))}
+                  </ul>
+                  <p className="small muted mt" style={{ marginBottom: "0.25rem" }}>
+                    Outputs
+                  </p>
+                  <ul className="small mono validate-list">
+                    {dashboard.current_node_artifacts.outputs.map((x) => (
+                      <li key={x}>{x}</li>
+                    ))}
+                  </ul>
+                </details>
+              ) : null}
+            </div>
           ) : null}
         </section>
       ) : null}
