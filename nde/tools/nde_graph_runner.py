@@ -382,10 +382,13 @@ def validate_training_dataset(state: NDEState) -> dict[str, Any]:
         and any("staging JSONL not found" in str(e) for e in errs)
     ):
         fb = nde / "finquant" / "datasets" / "staging" / "v0.2c_combined.jsonl"
-        if fb.is_file():
-            ok, detail, errs = validate_training_dataset_for_domain(
-                nde, domain, staging_path=fb
-            )
+        legacy_fb = Path("/data/finquant-1/datasets/staging/v0.2c_combined.jsonl")
+        for alt in (fb, legacy_fb):
+            if alt.is_file():
+                ok, detail, errs = validate_training_dataset_for_domain(
+                    nde, domain, staging_path=alt
+                )
+                break
     staging_s = detail.get("staging_path")
     ds_hash = ""
     if ok and staging_s and sha256_file:

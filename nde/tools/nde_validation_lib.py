@@ -88,6 +88,8 @@ def _training_yaml_staging_candidates(domain_base: Path, tc: Path) -> list[Path]
 
 # Canonical progressive baseline when no newer processed staging exists (FinQuant v0.3+).
 FINQUANT_PROGRESSIVE_BASELINE = "v0.2c_combined.jsonl"
+# Certified v0.2 corpus on legacy FinQuant-1 tree (single source until copied into NDE staging).
+FINQUANT_LEGACY_PROGRESSIVE_BASELINE = Path("/data/finquant-1/datasets/staging/v0.2c_combined.jsonl")
 
 
 def resolve_staging_jsonl(domain: str, nde: Path, domain_cfg: dict[str, Any]) -> Path | None:
@@ -112,6 +114,8 @@ def resolve_staging_jsonl(domain: str, nde: Path, domain_cfg: dict[str, Any]) ->
         fb = base / "datasets" / "staging" / FINQUANT_PROGRESSIVE_BASELINE
         if fb.is_file():
             return fb
+        if FINQUANT_LEGACY_PROGRESSIVE_BASELINE.is_file():
+            return FINQUANT_LEGACY_PROGRESSIVE_BASELINE.resolve()
         for name in ("finquant_v0.3_from_sources.jsonl", "finquant_staging_v0.1.jsonl"):
             p = base / "datasets" / "staging" / name
             if p.is_file():
