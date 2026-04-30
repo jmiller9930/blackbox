@@ -2354,6 +2354,11 @@ async function buildTrainingTelemetry(domain, runId, state) {
     gpu_utilization,
     elapsed,
     eta,
+    /** So UI can show “out of N” before tqdm lines appear in logs */
+    config_max_steps_full:
+      hints.full_max_steps != null && Number.isFinite(hints.full_max_steps)
+        ? hints.full_max_steps
+        : null,
     log_tail: logTail.slice(-32000),
   };
 }

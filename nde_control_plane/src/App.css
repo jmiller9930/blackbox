@@ -1,3 +1,25 @@
+.training-steps-hero {
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 0.85rem 1.1rem;
+  margin-bottom: 1rem;
+  background: var(--surface);
+}
+
+.training-steps-hero-title {
+  margin: 0 0 0.5rem;
+  font-size: 0.82rem;
+  font-weight: 600;
+  color: var(--muted);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+.training-steps-hero-main {
+  font-size: 1.12rem;
+  line-height: 1.35;
+}
+
 :root {
   --bg: #0b0d11;
   --surface: #13161d;

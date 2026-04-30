@@ -168,6 +168,60 @@ function renderTelemetryRows(tt: TrainingTelemetryPayload) {
   );
 }
 
+/** Always-visible strip: same step / total / % as terminal tqdm when logs parse. */
+function TrainingStepsHero({ tt }: { tt: TrainingTelemetryPayload }) {
+  const cur = tt.train_step_current;
+  const tot = tt.train_step_total;
+  const pct =
+    tt.progress_percent ??
+    (cur != null && tot != null && tot > 0
+      ? Math.round((cur / tot) * 10000) / 100
+      : null);
+  const cfgMax = tt.config_max_steps_full;
+
+  if (cur != null && tot != null && tot > 0) {
+    return (
+      <>
+        <div className="training-steps-hero-main mono">
+          Step <strong className="accent">{cur}</strong> / <strong>{tot}</strong>
+          {pct != null ? (
+            <>
+              {" "}
+              · <strong>{pct}%</strong> complete
+            </>
+          ) : null}
+        </div>
+        <p className="small muted mono" style={{ margin: "0.4rem 0 0" }}>
+          Parsed from live trainer logs (same style as{" "}
+          <span className="accent">123/3000</span> in the terminal).
+        </p>
+      </>
+    );
+  }
+
+  return (
+    <>
+      <div className="training-steps-hero-main mono">
+        Step <strong className="accent">—</strong> / <strong>—</strong>
+        {cfgMax != null ? (
+          <>
+            {" "}
+            <span className="muted">
+              (full run <strong>max_steps</strong> in config:{" "}
+              <strong className="accent">{cfgMax}</strong>)
+            </span>
+          </>
+        ) : null}
+      </div>
+      <p className="small muted mono wrap" style={{ margin: "0.4rem 0 0" }}>
+        Percent and exact position appear here once stdout/stderr contains a fraction like{" "}
+        <span className="accent">2097/3000</span>. Also open{" "}
+        <strong>Training telemetry</strong> (below) for the full list + log tail.
+      </p>
+    </>
+  );
+}
+
 function systemPostureHeading(posture: SystemPosture | undefined): string {
   switch (posture) {
     case "RUNNING":
@@ -615,22 +669,31 @@ export default function Dashboard() {
                 ) : null}
               </p>
               {execId ? (
-                isTrainingPhase &&
-                aj?.pipeline_stage_label &&
-                aj?.training_progress_detail != null ? (
+                isTrainingPhase && aj ? (
                   <>
                     {aj.operator_headline ? (
                       <p className="mono small accent wrap" style={{ marginBottom: "0.35rem" }}>
                         {aj.operator_headline}
                       </p>
                     ) : null}
-                    <p className="mono small" style={{ marginBottom: "0.35rem" }}>
-                      Pipeline stage:{" "}
-                      <strong className="accent">{aj.pipeline_stage_label}</strong>
-                    </p>
+                    {aj.pipeline_stage_label ? (
+                      <p className="mono small" style={{ marginBottom: "0.35rem" }}>
+                        Pipeline stage:{" "}
+                        <strong className="accent">{aj.pipeline_stage_label}</strong>
+                      </p>
+                    ) : null}
                     <p className="mono small" style={{ marginBottom: "0.5rem" }}>
                       Training progress:{" "}
-                      <strong className="accent">{aj.training_progress_detail}</strong>
+                      <strong className="accent">
+                        {aj.training_progress_detail ?? "—"}
+                      </strong>
+                      {aj.training_progress_bar_percent != null &&
+                      !aj.training_progress_indeterminate ? (
+                        <span className="muted">
+                          {" "}
+                          ({aj.training_progress_bar_percent}%)
+                        </span>
+                      ) : null}
                     </p>
                     {aj.training_progress_indeterminate ? (
                       <div
@@ -957,6 +1020,15 @@ export default function Dashboard() {
         Drag ⠿ on each section to reorder. Layout is saved per domain in this browser.
       </p>
       {dashboardErr && <p className="err">{dashboardErr}</p>}
+
+      {execId &&
+      dashboard?.dashboard_status_label === "TRAINING" &&
+      dashboard.training_telemetry ? (
+        <section className="training-steps-hero" aria-label="Trainer step counter">
+          <h3 className="training-steps-hero-title">Trainer steps</h3>
+          <TrainingStepsHero tt={dashboard.training_telemetry} />
+        </section>
+      ) : null}
 
       <DndContext
         sensors={sensors}

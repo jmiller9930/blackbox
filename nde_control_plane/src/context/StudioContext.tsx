@@ -133,6 +133,8 @@ export type TrainingTelemetryPayload = {
   train_step_current: number | null;
   train_step_total: number | null;
   progress_percent: number | null;
+  /** From domain training YAML (`full.max_steps`) when present */
+  config_max_steps_full?: number | null;
   training_initializing?: boolean;
   gpu_util_pct?: number | null;
   train_log_bytes?: number;

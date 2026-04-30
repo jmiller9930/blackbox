@@ -397,11 +397,14 @@ export function extractTrainingConfigHints(ndeRoot, repoRoot, domain) {
       ""
     ) || null;
   let adapter = null;
+  let full_max_steps = null;
   const fi = txt.search(/^\s*full\s*:/im);
   if (fi >= 0) {
-    const sub = txt.slice(fi, fi + 4000);
+    const sub = txt.slice(fi, fi + 8000);
     const om = sub.match(/^\s*output_dir\s*:\s*([^\n#]+)/im);
     if (om) adapter = om[1].trim().replace(/^["']|["']$/g, "");
+    const mm = sub.match(/^\s*max_steps\s*:\s*(\d+)/im);
+    if (mm) full_max_steps = parseInt(mm[1], 10);
   }
-  return { base_model: base, adapter_output_full: adapter };
+  return { base_model: base, adapter_output_full: adapter, full_max_steps };
 }
