@@ -13,6 +13,8 @@ Usage::
         [--trace PATH] [--student-learning-store PATH]
 
 Outputs JSON on stdout.
+
+Pairwise per-trade digest vs LLM seam triage: ``gt069_per_trade_determinism_compare_v1``.
 """
 
 from __future__ import annotations
