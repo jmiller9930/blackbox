@@ -297,6 +297,17 @@ export function StudioProvider({ children }: { children: ReactNode }) {
     void refresh();
   }, [refresh]);
 
+  /** Deep-link e.g. /?domain=finquant for operators & automation (labs block keyboard select). */
+  useEffect(() => {
+    try {
+      const want = new URLSearchParams(window.location.search).get("domain");
+      if (!want || !domains.includes(want)) return;
+      setDomain((cur) => (cur === want ? cur : want));
+    } catch {
+      /* ignore */
+    }
+  }, [domains]);
+
   useEffect(() => {
     const fastPoll =
       dashboard?.execution_active_run_id &&
