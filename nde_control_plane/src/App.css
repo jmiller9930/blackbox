@@ -347,6 +347,25 @@ body {
   transition: width 0.35s ease;
 }
 
+/* No in-flight job: do not use a filled “active” bar (avoids 100% blue + “no job running”). */
+.progress-bar-idle {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: rgba(19, 22, 29, 0.85);
+  border-style: dashed;
+  border-color: var(--border);
+  min-height: 12px;
+}
+
+.progress-bar-idle .progress-idle-inner {
+  font-size: 0.65rem;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--muted);
+  font-weight: 600;
+}
+
 .log-pre,
 .json-pre {
   font-family: ui-monospace, SFMono-Regular, Menlo, monospace;

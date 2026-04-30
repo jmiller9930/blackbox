@@ -320,24 +320,51 @@ export default function Dashboard() {
               </>
             ) : null}
           </p>
-          <div className="progress-bar">
-            <div className="progress-fill" style={{ width: `${pct}%` }} />
-          </div>
-          <p className="mono small">
-            {pct}% ·{" "}
-            {stepLabel ? (
-              <>
-                step <strong className="accent">{stepLabel}</strong>
-                {pollLive ? " · syncing…" : ""}
-              </>
-            ) : pollLive ? (
-              "syncing…"
-            ) : execId ? (
-              "—"
-            ) : (
-              "no job running"
-            )}
-          </p>
+          {execId ? (
+            <>
+              <div className="progress-bar">
+                <div className="progress-fill" style={{ width: `${pct}%` }} />
+              </div>
+              <p className="mono small">
+                {pct}% ·{" "}
+                {stepLabel ? (
+                  <>
+                    step <strong className="accent">{stepLabel}</strong>
+                    {pollLive ? " · syncing…" : ""}
+                  </>
+                ) : pollLive ? (
+                  "syncing…"
+                ) : (
+                  "—"
+                )}
+              </p>
+            </>
+          ) : (
+            <>
+              <div
+                className="progress-bar progress-bar-idle"
+                role="img"
+                aria-label="Standing by — no job executing"
+              >
+                <span className="progress-idle-inner">Standing by</span>
+              </div>
+              <p className="mono small muted">
+                No job executing.
+                {featuredId && dashboard?.dashboard_status_label ? (
+                  <>
+                    {" "}
+                    Last featured snapshot:{" "}
+                    <strong className="accent">
+                      {jobStatusLabel(dashboard.dashboard_status_label)}
+                    </strong>
+                    {dashboard.dashboard_status_label === "CERTIFIED" ? (
+                      <span> — run complete (historical)</span>
+                    ) : null}
+                  </>
+                ) : null}
+              </p>
+            </>
+          )}
         </section>
         <section className="card">
           <h3>Eval status</h3>
