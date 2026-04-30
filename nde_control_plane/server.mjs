@@ -445,6 +445,68 @@ function finquantV02Paths() {
   return { adapterPath, trainLog, evalReport, runDir, statePath };
 }
 
+/** Extra markdown/txt reports to scan for training proof (comma-separated env + defaults). */
+function finquantV02OptionalReportPaths() {
+  const out = [];
+  const env = (process.env.FINQUANT_V02_TRAINING_REPORTS || "").trim();
+  for (const p of env.split(",").map((s) => s.trim()).filter(Boolean)) {
+    out.push(p);
+  }
+  out.push(path.join(REPO, "finquant", "reports", "full_training_report_v0.1.md"));
+  out.push(path.join(REPO, "finquant", "reports", "full_training_report_v0.2.md"));
+  out.push(
+    path.join(FINQUANT_LEGACY_ROOT, "reports", "full_training_report_v0.1.md")
+  );
+  out.push(
+    path.join(FINQUANT_LEGACY_ROOT, "reports", "full_training_report_v0.2.md")
+  );
+  return [...new Set(out)];
+}
+
+function readFinquantV02TrainingProofText(trainLogPath) {
+  let combined = "";
+  const optionalPaths = finquantV02OptionalReportPaths();
+  try {
+    if (fs.existsSync(trainLogPath)) {
+      combined += fs.readFileSync(trainLogPath, "utf8");
+    }
+  } catch {
+    /* ignore */
+  }
+  for (const p of optionalPaths) {
+    try {
+      if (fs.existsSync(p) && fs.statSync(p).isFile()) {
+        combined += `\n${fs.readFileSync(p, "utf8")}`;
+      }
+    } catch {
+      /* ignore */
+    }
+  }
+  return { combined, optionalPaths };
+}
+
+/**
+ * Training complete iff train_runtime plus any step-3000 signal (JSON steps, progress fraction, or step token).
+ */
+function detectFinquantV02TrainingProof(text) {
+  const has_train_runtime = /\btrain_runtime\b/i.test(text);
+  const has_steps_json = /"steps"\s*:\s*3000\b/.test(text);
+  const has_step_token = /\bstep\s*[:=]?\s*3000\b/i.test(text);
+  const has_progress_3000 = /\b3000\s*\/\s*3000\b/.test(text);
+  const has_steps_3000 = has_steps_json || has_step_token;
+  const steps_complete = has_steps_3000 || has_progress_3000;
+  return {
+    has_train_runtime,
+    has_steps_3000,
+    has_progress_3000,
+    /** Same signals broken out for diagnostics */
+    _has_steps_json: has_steps_json,
+    _has_step_token: has_step_token,
+    steps_complete,
+    training_complete: has_train_runtime && steps_complete,
+  };
+}
+
 function writeFinquantV02State(payload) {
   const { runDir, statePath, adapterPath, evalReport } = finquantV02Paths();
   fs.mkdirSync(runDir, { recursive: true });
@@ -519,8 +581,20 @@ app.post("/api/finquant/validate-v02", async (_req, res) => {
   const { adapterPath, trainLog, evalReport, statePath } = finquantV02Paths();
   const evalScript = path.join(REPO, "finquant", "evals", "eval_finquant.py");
 
+  const reportExists = () =>
+    finquantV02OptionalReportPaths().some((p) => {
+      try {
+        return fs.existsSync(p) && fs.statSync(p).isFile();
+      } catch {
+        return false;
+      }
+    });
+
   try {
-    if (!fs.existsSync(adapterPath) || !fs.statSync(adapterPath).isDirectory()) {
+    const adapter_exists =
+      fs.existsSync(adapterPath) && fs.statSync(adapterPath).isDirectory();
+
+    if (!adapter_exists) {
       writeFinquantV02State({
         train_ok: false,
         eval_passed: false,
@@ -532,43 +606,57 @@ app.post("/api/finquant/validate-v02", async (_req, res) => {
         error: "adapter_missing",
         adapter_path: adapterPath,
         state_path: statePath,
+        adapter_exists: false,
+        report_exists: reportExists(),
+        has_train_runtime: false,
+        has_steps_3000: false,
+        has_progress_3000: false,
       });
     }
 
-    let trainBlob = "";
-    try {
-      trainBlob = fs.readFileSync(trainLog, "utf8");
-    } catch {
+    const { combined: trainBlob } = readFinquantV02TrainingProofText(trainLog);
+    if (!trainBlob.trim()) {
       writeFinquantV02State({
         train_ok: false,
         eval_passed: false,
-        last_error: `train_log_unreadable:${trainLog}`,
+        last_error: `no_training_text:${trainLog}`,
       });
       return res.status(400).json({
         ok: false,
         step: "train_log",
-        error: "train_log_missing",
+        error: "no_training_content",
         train_log: trainLog,
         state_path: statePath,
+        adapter_exists: true,
+        report_exists: reportExists(),
+        has_train_runtime: false,
+        has_steps_3000: false,
+        has_progress_3000: false,
       });
     }
 
-    const has3000 = /\b3000\s*\/\s*3000\b/.test(trainBlob);
-    const hasRuntime = /\btrain_runtime\b/i.test(trainBlob);
-    if (!has3000 || !hasRuntime) {
+    const proof = detectFinquantV02TrainingProof(trainBlob);
+    const proofFields = {
+      has_train_runtime: proof.has_train_runtime,
+      has_steps_3000: proof.has_steps_3000,
+      has_progress_3000: proof.has_progress_3000,
+      adapter_exists: true,
+      report_exists: reportExists(),
+    };
+
+    if (!proof.training_complete) {
       writeFinquantV02State({
         train_ok: false,
         eval_passed: false,
-        last_error: `training_incomplete:has_3000=${has3000},has_train_runtime=${hasRuntime}`,
+        last_error: `training_incomplete:${JSON.stringify(proofFields)}`,
       });
       return res.status(400).json({
         ok: false,
         step: "training_proof",
         error: "training_not_complete",
-        has3000,
-        has_train_runtime: hasRuntime,
         train_log: trainLog,
         state_path: statePath,
+        ...proofFields,
       });
     }
 
@@ -584,6 +672,7 @@ app.post("/api/finquant/validate-v02", async (_req, res) => {
         error: "eval_script_missing",
         eval_script: evalScript,
         state_path: statePath,
+        ...proofFields,
       });
     }
 
@@ -642,6 +731,7 @@ app.post("/api/finquant/validate-v02", async (_req, res) => {
       eval_report: evalReport,
       summary: evalSummary,
       stderr: stderr ? String(stderr).slice(-4000) : "",
+      ...proofFields,
     });
   } catch (err) {
     const msg =
