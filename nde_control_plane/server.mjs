@@ -532,6 +532,14 @@ function trainStepDisplayName(state) {
   return state?.mode === "full" ? "full_train" : "smoke_train";
 }
 
+/** Graph node id → short operator phrase (avoid repeating raw node ids). */
+function trainPhaseHumanLabel(graphNodeName) {
+  const n = String(graphNodeName || "");
+  if (n === "full_train") return "full training";
+  if (n === "smoke_train") return "smoke training";
+  return n.replace(/_/g, " ") || "training";
+}
+
 const FINQUANT_V02_STEPS = 3000;
 
 function readUtf8Safe(p) {
@@ -1021,7 +1029,8 @@ function derivePipelineVisual(domain, runId) {
 
   if (!tOk) {
     const displayTrainNode = trainStepDisplayName(state);
-    const pipelineStageStr = `Step 3 / 7 — ${displayTrainNode}`;
+    /** "Pipeline 3/7" = LangGraph stages; not the same as optimizer loop (e.g. /3000). */
+    const pipelineStageStr = `Pipeline 3 / 7 · ${trainPhaseHumanLabel(displayTrainNode)}`;
 
     if (state?.mode === "full") {
       const parsed = parseTrainerFromLog(trainLog);
@@ -1034,10 +1043,10 @@ function derivePipelineVisual(domain, runId) {
         : null;
       const trainingDetail = hasTrainerSteps
         ? `${parsed.train_step_current} / ${parsed.train_step_total}`
-        : "waiting for first step log";
+        : "loop counter not in logs yet";
       const liveSummary = hasTrainerSteps
-        ? `${pipelineStageStr} · ${trainingDetail}`
-        : `Step 3 / 7 · ${displayTrainNode} · initializing`;
+        ? `${pipelineStageStr} · loop ${parsed.train_step_current}/${parsed.train_step_total}`
+        : `${pipelineStageStr} · loop counter pending`;
       return activeJobBase(
         barPct,
         "TRAINING",
@@ -1064,10 +1073,10 @@ function derivePipelineVisual(domain, runId) {
       : null;
     const trainingDetailSmoke = hasFrac
       ? `${frac.cur} / ${frac.tot}`
-      : "waiting for first step log";
+      : "loop counter not in logs yet";
     const liveSummarySmoke = hasFrac
-      ? `${pipelineStageStr} · ${frac.cur} / ${frac.tot}`
-      : `Step 3 / 7 · smoke_train · initializing`;
+      ? `${pipelineStageStr} · loop ${frac.cur}/${frac.tot}`
+      : `${pipelineStageStr} · loop counter pending`;
     return activeJobBase(
       p,
       "TRAINING",
@@ -1126,7 +1135,7 @@ function derivePipelineVisual(domain, runId) {
   return activeJobBase(100, "CERTIFIED", "certified", "certify", null, null);
 }
 
-/** Operator-facing 7-step pipeline (smoke_eval shown as run_eval). Step 3 label reflects mode. */
+/** Operator-facing 7-node LangGraph pipeline (index 3 = train node; not the same as optimizer loop /3000). */
 function pipelineOperatorSteps(modeFull) {
   const trainLabel = modeFull ? "full_train" : "smoke_train";
   return [
@@ -2294,8 +2303,8 @@ async function buildTrainingTelemetry(domain, runId, state) {
   let operator_headline = "";
   let operator_detail = "";
   if (parsed.train_step_current != null && parsed.train_step_total != null) {
-    operator_headline = `Training: step ${parsed.train_step_current} / ${parsed.train_step_total}`;
-    operator_detail = `About ${parsed.progress_percent ?? "—"}% through the configured training steps (from live trainer logs).`;
+    operator_headline = `Training loop ${parsed.train_step_current} / ${parsed.train_step_total}`;
+    operator_detail = `${parsed.progress_percent ?? "—"}% of optimizer steps (from trainer logs — same as terminal tqdm).`;
   } else if (gpuEngaged) {
     operator_headline = `Training on GPU (${gpu_util_pct ?? "?"}% util${vram_used_mb != null ? `, ${Math.round(vram_used_mb)} MiB VRAM` : ""})`;
     operator_detail =
@@ -2507,7 +2516,9 @@ async function buildDashboardPayload(domain) {
       aj.training_progress_indeterminate = false;
       aj.training_progress_detail = `${tt.train_step_current} / ${tt.train_step_total}`;
       aj.training_progress_bar_percent = bar;
-      aj.training_live_summary = `${aj.pipeline_stage_label ?? "Training"} · ${tt.operator_headline}`;
+      const pipeLbl = (aj.pipeline_stage_label || "").trim();
+      const loopLbl = `loop ${tt.train_step_current}/${tt.train_step_total}`;
+      aj.training_live_summary = pipeLbl ? `${pipeLbl} · ${loopLbl}` : loopLbl;
       base.progress_percent = bar;
       if (tt.eta && tt.eta !== "ETA: calculating") {
         base.progress_label = tt.eta;
@@ -2517,7 +2528,7 @@ async function buildDashboardPayload(domain) {
       aj.training_progress_detail = tt.operator_headline;
       aj.training_progress_bar_percent = null;
       const stage = aj.pipeline_stage_label ?? "";
-      aj.training_live_summary = [stage, tt.operator_headline].filter(Boolean).join(" · ");
+      aj.training_live_summary = [stage, tt.operator_headline].filter(Boolean).join(" · ").trim();
     }
     base.active_job = aj;
   }

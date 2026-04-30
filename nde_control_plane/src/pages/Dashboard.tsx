@@ -26,6 +26,7 @@ import { SortableDashboardBlock } from "../SortableDashboardBlock";
 import { CollapsibleDashboardSection } from "../CollapsibleDashboardSection";
 import {
   useStudio,
+  type ActiveJobPayload,
   type SystemPosture,
   type TrainingTelemetryPayload,
 } from "../context/StudioContext";
@@ -100,34 +101,34 @@ function renderTelemetryRows(tt: TrainingTelemetryPayload) {
       {hasParsedSteps ? (
         <>
           <li>
-            Step:{" "}
+            Training loop (optimizer steps):{" "}
             <strong>
               {tt.train_step_current} / {tt.train_step_total}
             </strong>
           </li>
           <li>
-            Progress:{" "}
+            Loop complete:{" "}
             <strong>
-              {tt.progress_percent != null ? `${tt.progress_percent}%` : "calculating"}
+              {tt.progress_percent != null ? `${tt.progress_percent}%` : "—"}
             </strong>
           </li>
         </>
       ) : tt.training_initializing === true ? (
         <>
           <li>
-            Step: <strong>waiting for trainer output</strong>
+            Training loop: <strong>waiting for trainer output</strong>
           </li>
           <li>
-            Progress: <strong>—</strong>
+            Loop complete: <strong>—</strong>
           </li>
         </>
       ) : (
         <>
           <li>
-            Step: <strong>not yet parsed from logs</strong>
+            Training loop: <strong>not parsed from logs yet</strong>
           </li>
           <li>
-            Progress: <strong>—</strong>
+            Loop complete: <strong>—</strong>
           </li>
         </>
       )}
@@ -168,8 +169,15 @@ function renderTelemetryRows(tt: TrainingTelemetryPayload) {
   );
 }
 
-/** Always-visible strip: same step / total / % as terminal tqdm when logs parse. */
-function TrainingStepsHero({ tt }: { tt: TrainingTelemetryPayload }) {
+/** One place: LangGraph pipeline position vs Hugging Face / trainer loop (terminal tqdm). */
+function TrainingStatusUnified({
+  tt,
+  aj,
+}: {
+  tt: TrainingTelemetryPayload;
+  aj: ActiveJobPayload;
+}) {
+  const pipe = aj.pipeline_stage_label ?? "—";
   const cur = tt.train_step_current;
   const tot = tt.train_step_total;
   const pct =
@@ -177,48 +185,28 @@ function TrainingStepsHero({ tt }: { tt: TrainingTelemetryPayload }) {
     (cur != null && tot != null && tot > 0
       ? Math.round((cur / tot) * 10000) / 100
       : null);
-  const cfgMax = tt.config_max_steps_full;
-
-  if (cur != null && tot != null && tot > 0) {
-    return (
-      <>
-        <div className="training-steps-hero-main mono">
-          Step <strong className="accent">{cur}</strong> / <strong>{tot}</strong>
-          {pct != null ? (
-            <>
-              {" "}
-              · <strong>{pct}%</strong> complete
-            </>
-          ) : null}
-        </div>
-        <p className="small muted mono" style={{ margin: "0.4rem 0 0" }}>
-          Parsed from live trainer logs (same style as{" "}
-          <span className="accent">123/3000</span> in the terminal).
-        </p>
-      </>
-    );
-  }
 
   return (
-    <>
-      <div className="training-steps-hero-main mono">
-        Step <strong className="accent">—</strong> / <strong>—</strong>
-        {cfgMax != null ? (
+    <dl className="training-unified-dl">
+      <dt className="muted">LangGraph pipeline</dt>
+      <dd className="mono">{pipe}</dd>
+      <dt className="muted">Training loop</dt>
+      <dd className="mono">
+        {cur != null && tot != null && tot > 0 ? (
           <>
-            {" "}
-            <span className="muted">
-              (full run <strong>max_steps</strong> in config:{" "}
-              <strong className="accent">{cfgMax}</strong>)
-            </span>
+            <strong className="accent">{cur}</strong> / <strong>{tot}</strong>
+            {pct != null ? <> · {pct}%</> : null}
           </>
-        ) : null}
-      </div>
-      <p className="small muted mono wrap" style={{ margin: "0.4rem 0 0" }}>
-        Percent and exact position appear here once stdout/stderr contains a fraction like{" "}
-        <span className="accent">2097/3000</span>. Also open{" "}
-        <strong>Training telemetry</strong> (below) for the full list + log tail.
-      </p>
-    </>
+        ) : tt.config_max_steps_full != null ? (
+          <>
+            — / — · YAML <strong className="accent">max_steps</strong>{" "}
+            <strong className="accent">{tt.config_max_steps_full}</strong>
+          </>
+        ) : (
+          <>— / —</>
+        )}
+      </dd>
+    </dl>
   );
 }
 
@@ -445,19 +433,19 @@ export default function Dashboard() {
                 <strong>{jobStatusLabel(dashboard.dashboard_status_label || aj.status)}</strong>
               </li>
               <li>
-                Pipeline stage:{" "}
+                LangGraph pipeline:{" "}
                 <strong>{aj.pipeline_stage_label ?? dashboard.pipeline_focus_label ?? "—"}</strong>
               </li>
               {aj.operator_headline ? (
                 <li className="wrap">
-                  Status: <strong className="accent">{aj.operator_headline}</strong>
+                  Activity: <strong className="accent">{aj.operator_headline}</strong>
                 </li>
               ) : null}
               {aj.operator_detail ? (
                 <li className="muted wrap">{aj.operator_detail}</li>
               ) : null}
               <li>
-                Training progress:{" "}
+                Training loop (detail):{" "}
                 <strong>{aj.training_progress_detail ?? "—"}</strong>
               </li>
               <li>
@@ -678,12 +666,12 @@ export default function Dashboard() {
                     ) : null}
                     {aj.pipeline_stage_label ? (
                       <p className="mono small" style={{ marginBottom: "0.35rem" }}>
-                        Pipeline stage:{" "}
+                        LangGraph pipeline:{" "}
                         <strong className="accent">{aj.pipeline_stage_label}</strong>
                       </p>
                     ) : null}
                     <p className="mono small" style={{ marginBottom: "0.5rem" }}>
-                      Training progress:{" "}
+                      Training loop:{" "}
                       <strong className="accent">
                         {aj.training_progress_detail ?? "—"}
                       </strong>
@@ -716,8 +704,8 @@ export default function Dashboard() {
                         {aj.training_progress_bar_percent != null ? (
                           <p className="mono small muted" style={{ marginTop: "0.35rem" }}>
                             Percent:{" "}
-                            <strong>{aj.training_progress_bar_percent}%</strong> (from trainer
-                            steps)
+                            <strong>{aj.training_progress_bar_percent}%</strong> (from training
+                            loop)
                           </p>
                         ) : null}
                       </>
@@ -1023,10 +1011,11 @@ export default function Dashboard() {
 
       {execId &&
       dashboard?.dashboard_status_label === "TRAINING" &&
-      dashboard.training_telemetry ? (
-        <section className="training-steps-hero" aria-label="Trainer step counter">
-          <h3 className="training-steps-hero-title">Trainer steps</h3>
-          <TrainingStepsHero tt={dashboard.training_telemetry} />
+      dashboard.training_telemetry &&
+      aj ? (
+        <section className="training-steps-hero" aria-label="Training status">
+          <h3 className="training-steps-hero-title">Training status</h3>
+          <TrainingStatusUnified tt={dashboard.training_telemetry} aj={aj} />
         </section>
       ) : null}
 

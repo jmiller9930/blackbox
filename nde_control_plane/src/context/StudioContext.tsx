@@ -64,7 +64,7 @@ export type ActiveJobPayload = {
   elapsed_display: string;
   elapsed_ms: number;
   derived_started_from_folder?: boolean;
-  /** LangGraph stage label e.g. Step 3 / 7 — full_train */
+  /** LangGraph position e.g. "Pipeline 3 / 7 · full training" (factory stages, not optimizer /3000). */
   pipeline_stage_label?: string | null;
   /** Trainer-derived detail e.g. waiting for first step log or N / 3000 */
   training_progress_detail?: string | null;
