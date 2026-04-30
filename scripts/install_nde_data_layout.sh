@@ -41,5 +41,17 @@ else
   echo "Installed tools under ${DEST}/tools/ (Python, shell helpers, HOWTO_SECOPS_NDE.md)"
 fi
 
+# FinQuant progressive baseline: copy certified v0.2 combined corpus into NDE staging when legacy tree exists.
+# nde_validation_lib.resolve_staging_jsonl falls back to this file when newer staging is absent.
+FINQUANT_STAGING="${DEST}/finquant/datasets/staging"
+LEGACY_FINQUANT_BASELINE="/data/finquant-1/datasets/staging/v0.2c_combined.jsonl"
+mkdir -p "${FINQUANT_STAGING}"
+if [[ -f "${LEGACY_FINQUANT_BASELINE}" ]]; then
+  cp -f "${LEGACY_FINQUANT_BASELINE}" "${FINQUANT_STAGING}/v0.2c_combined.jsonl"
+  echo "FinQuant: synced progressive baseline ${LEGACY_FINQUANT_BASELINE} -> ${FINQUANT_STAGING}/v0.2c_combined.jsonl"
+else
+  echo "warning: FinQuant baseline missing at ${LEGACY_FINQUANT_BASELINE}; NDE dataset validation may fail until copied" >&2
+fi
+
 echo "Done. Top-level README: ${DEST}/README.md"
 echo "Verify: ls -ld ${DEST}/tools ${DEST}/secops ${DEST}/finquant"

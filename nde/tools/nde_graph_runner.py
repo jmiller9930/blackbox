@@ -374,6 +374,18 @@ def validate_training_dataset(state: NDEState) -> dict[str, Any]:
         return {"dataset_ok": False, "last_error": err}
 
     ok, detail, errs = validate_training_dataset_for_domain(nde, domain)
+    # Belt-and-suspenders: hosts with stale nde_validation_lib still get baseline if present.
+    if (
+        not ok
+        and domain == "finquant"
+        and errs
+        and any("staging JSONL not found" in str(e) for e in errs)
+    ):
+        fb = nde / "finquant" / "datasets" / "staging" / "v0.2c_combined.jsonl"
+        if fb.is_file():
+            ok, detail, errs = validate_training_dataset_for_domain(
+                nde, domain, staging_path=fb
+            )
     staging_s = detail.get("staging_path")
     ds_hash = ""
     if ok and staging_s and sha256_file:

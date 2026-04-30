@@ -60,17 +60,44 @@ def _load_yaml(path: Path) -> dict[str, Any]:
     return raw if isinstance(raw, dict) else {}
 
 
+def _resolve_user_data_path(spec: str, domain_base: Path) -> Path:
+    """Absolute path as-is; relative path resolved under domain base (…/NDE/<domain>/)."""
+    s = spec.strip()
+    if not s:
+        return domain_base / "__invalid_empty__"
+    p = Path(s)
+    if p.is_absolute():
+        return p.resolve()
+    return (domain_base / p).resolve()
+
+
+def _training_yaml_staging_candidates(domain_base: Path, tc: Path) -> list[Path]:
+    """Order: explicit ``dataset`` (operator override), then ``data.staging_jsonl``."""
+    out: list[Path] = []
+    if not tc.is_file():
+        return out
+    tr = _load_yaml(tc)
+    ds = tr.get("dataset")
+    if isinstance(ds, str) and ds.strip():
+        out.append(_resolve_user_data_path(ds, domain_base))
+    rel = ((tr.get("data") or {}) or {}).get("staging_jsonl")
+    if isinstance(rel, str) and rel.strip():
+        out.append(_resolve_user_data_path(rel, domain_base))
+    return out
+
+
+# Canonical progressive baseline when no newer processed staging exists (FinQuant v0.3+).
+FINQUANT_PROGRESSIVE_BASELINE = "v0.2c_combined.jsonl"
+
+
 def resolve_staging_jsonl(domain: str, nde: Path, domain_cfg: dict[str, Any]) -> Path | None:
-    """Resolve primary staging JSONL from training/config.yaml data.staging_jsonl."""
+    """Resolve staging JSONL: training config paths first, then domain-specific fallbacks."""
     base = nde / domain
     tc = base / "training" / "config.yaml"
-    if tc.is_file():
-        tr = _load_yaml(tc)
-        rel = ((tr.get("data") or {}) or {}).get("staging_jsonl")
-        if isinstance(rel, str) and rel.strip():
-            p = (base / rel).resolve()
-            return p
-    # Fallback order (SecOps)
+    for cand in _training_yaml_staging_candidates(base, tc):
+        if cand.is_file():
+            return cand
+
     if domain == "secops":
         for name in (
             "secops_nist_v0.3_from_sources.jsonl",
@@ -80,11 +107,16 @@ def resolve_staging_jsonl(domain: str, nde: Path, domain_cfg: dict[str, Any]) ->
             p = nde / "secops" / "datasets" / "staging" / name
             if p.is_file():
                 return p
+
     if domain == "finquant":
+        fb = base / "datasets" / "staging" / FINQUANT_PROGRESSIVE_BASELINE
+        if fb.is_file():
+            return fb
         for name in ("finquant_v0.3_from_sources.jsonl", "finquant_staging_v0.1.jsonl"):
-            p = nde / "finquant" / "datasets" / "staging" / name
+            p = base / "datasets" / "staging" / name
             if p.is_file():
                 return p
+
     out_fn = (domain_cfg.get("output") or {}).get("staging_filename")
     if isinstance(out_fn, str) and out_fn.strip():
         p = base / "datasets" / "staging" / out_fn

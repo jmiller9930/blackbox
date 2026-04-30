@@ -1031,12 +1031,21 @@ function extractStagingHintFromTrainingYaml(domain) {
   const txt = readUtf8Safe(configPath).slice(0, 48000);
   let resolved = null;
   for (const line of txt.split("\n")) {
-    const m = line.match(
-      /^\s*(staging[_a-z]*path|dataset[_a-z]*path|train[_a-z]*file|jsonl[_a-z]*path)\s*:\s*["']?([^"'\n#]+)/i
-    );
-    if (m) {
-      resolved = m[2].trim().replace(/["']\s*$/, "");
+    const md = line.match(/^\s*dataset\s*:\s*["']?([^"'\n#]+)/i);
+    if (md) {
+      resolved = md[1].trim().replace(/["']\s*$/, "");
       break;
+    }
+  }
+  if (!resolved) {
+    for (const line of txt.split("\n")) {
+      const m = line.match(
+        /^\s*(staging[_a-z]*path|dataset[_a-z]*path|train[_a-z]*file|jsonl[_a-z]*path)\s*:\s*["']?([^"'\n#]+)/i
+      );
+      if (m) {
+        resolved = m[2].trim().replace(/["']\s*$/, "");
+        break;
+      }
     }
   }
   if (!resolved) {
