@@ -10,16 +10,19 @@ COPY public ./public
 COPY src ./src
 RUN npm run build
 
-# Trixie glibc aligns with Ubuntu 24.04+ training hosts; bookworm's glibc is too old for host-built --copies Python.
-FROM node:24-trixie-slim AS runtime
+# Ubuntu 24.04: Python 3.12 layout matches typical GPU hosts; bind-mounted .venv-train symlinks to /usr/bin/python3.
+FROM ubuntu:24.04 AS runtime
+ENV DEBIAN_FRONTEND=noninteractive
 WORKDIR /app
 ENV NODE_ENV=production
 ENV PORT=3999
 ENV NDE_DATA_ROOT=/data/NDE
 ENV REPO_MOUNT=/repo
 
-# Host-copied /data/NDE/.venv-train/bin/python is invoked from this container; slim omits libexpat.
-RUN apt-get update && apt-get install -y --no-install-recommends libexpat1 \
+RUN apt-get update && apt-get install -y --no-install-recommends ca-certificates curl gnupg \
+  && curl -fsSL https://deb.nodesource.com/setup_20.x | bash - \
+  && apt-get install -y --no-install-recommends nodejs \
+  && apt-get install -y --no-install-recommends python3 libexpat1 \
   && rm -rf /var/lib/apt/lists/*
 
 COPY package.json ./
