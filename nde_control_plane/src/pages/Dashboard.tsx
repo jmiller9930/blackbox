@@ -23,6 +23,7 @@ import {
   type DashboardBlockId,
 } from "../dashboardBlockOrder";
 import { SortableDashboardBlock } from "../SortableDashboardBlock";
+import { CollapsibleDashboardSection } from "../CollapsibleDashboardSection";
 import {
   useStudio,
   type SystemPosture,
@@ -52,12 +53,20 @@ function renderTelemetryRows(tt: TrainingTelemetryPayload) {
     "GPU telemetry unavailable";
   const vramLine = tt.vram_used?.trim() || "—";
   const utilLine = tt.gpu_utilization?.trim() || "—";
-  const initializing =
-    tt.training_initializing === true ||
-    (tt.train_step_current == null && tt.train_step_total == null);
+  const hasParsedSteps =
+    tt.train_step_current != null &&
+    tt.train_step_total != null;
 
   return (
     <ul className="small mono validate-list" style={{ marginBottom: 0 }}>
+      {tt.operator_headline ? (
+        <li className="wrap">
+          <strong className="accent">{tt.operator_headline}</strong>
+        </li>
+      ) : null}
+      {tt.operator_detail ? (
+        <li className="muted wrap">{tt.operator_detail}</li>
+      ) : null}
       <li>
         Run mode: <strong>FULL</strong>
       </li>
@@ -88,19 +97,7 @@ function renderTelemetryRows(tt: TrainingTelemetryPayload) {
           {tt.checkpoint_shards_loaded} / {tt.checkpoint_shards_total}
         </strong>
       </li>
-      {initializing ? (
-        <>
-          <li>
-            <strong className="accent">Training initializing</strong>
-          </li>
-          <li>
-            Step: <strong>waiting for trainer output</strong>
-          </li>
-          <li>
-            Progress: <strong>calculating</strong>
-          </li>
-        </>
-      ) : (
+      {hasParsedSteps ? (
         <>
           <li>
             Step:{" "}
@@ -113,6 +110,24 @@ function renderTelemetryRows(tt: TrainingTelemetryPayload) {
             <strong>
               {tt.progress_percent != null ? `${tt.progress_percent}%` : "calculating"}
             </strong>
+          </li>
+        </>
+      ) : tt.training_initializing === true ? (
+        <>
+          <li>
+            Step: <strong>waiting for trainer output</strong>
+          </li>
+          <li>
+            Progress: <strong>—</strong>
+          </li>
+        </>
+      ) : (
+        <>
+          <li>
+            Step: <strong>not yet parsed from logs</strong>
+          </li>
+          <li>
+            Progress: <strong>—</strong>
           </li>
         </>
       )}
@@ -172,7 +187,6 @@ export default function Dashboard() {
   const [advancing, setAdvancing] = useState(false);
   const [advanceMsg, setAdvanceMsg] = useState<string | null>(null);
   const [fullAdminOk, setFullAdminOk] = useState(false);
-  const [pipelineDetailOpen, setPipelineDetailOpen] = useState(false);
   const [orderedBlockIds, setOrderedBlockIds] = useState<DashboardBlockId[]>([]);
 
   const tc = dashboard?.training_cycle;
@@ -281,9 +295,12 @@ export default function Dashboard() {
     switch (blockId) {
       case "system-status":
         return (
-          <section className="card wide system-status-card">
-            <h3 style={{ marginTop: 0 }}>System status</h3>
-            <p className="mono accent" style={{ marginBottom: "0.5rem" }}>
+          <CollapsibleDashboardSection
+            panelKey={`${domain}:system-status`}
+            title="System status"
+            className="card wide system-status-card"
+          >
+            <p className="mono accent" style={{ marginBottom: "0.5rem", marginTop: 0 }}>
               {systemPostureHeading(posture)}
             </p>
             {statusLines.length > 0 ? (
@@ -293,7 +310,7 @@ export default function Dashboard() {
                 ))}
               </ul>
             ) : null}
-          </section>
+          </CollapsibleDashboardSection>
         );
 
       case "training-telemetry": {
@@ -306,9 +323,12 @@ export default function Dashboard() {
           return null;
         }
         return (
-          <section className="card wide training-telemetry-card">
-            <h3 style={{ marginTop: 0 }}>Training telemetry</h3>
-            <p className="mono accent" style={{ marginBottom: "0.5rem" }}>
+          <CollapsibleDashboardSection
+            panelKey={`${domain}:training-telemetry`}
+            title="Training telemetry"
+            className="card wide training-telemetry-card"
+          >
+            <p className="mono accent" style={{ marginBottom: "0.5rem", marginTop: 0 }}>
               Live full-training metrics (updates every ~2s)
             </p>
             {renderTelemetryRows(tt)}
@@ -318,16 +338,19 @@ export default function Dashboard() {
                 <pre className="mono small log-tail-pre wrap">{tt.log_tail}</pre>
               </details>
             ) : null}
-          </section>
+          </CollapsibleDashboardSection>
         );
       }
 
       case "certified-summary":
         if (!dashboard?.certified_feature_summary) return null;
         return (
-          <section className="card wide certified-summary-card">
-            <h3 style={{ marginTop: 0 }}>Latest certified run</h3>
-            <ul className="small mono validate-list" style={{ marginBottom: 0 }}>
+          <CollapsibleDashboardSection
+            panelKey={`${domain}:certified-summary`}
+            title="Latest certified run"
+            className="card wide certified-summary-card"
+          >
+            <ul className="small mono validate-list" style={{ marginBottom: 0, marginTop: 0 }}>
               <li>
                 Run ID:{" "}
                 <strong className="accent">
@@ -348,15 +371,18 @@ export default function Dashboard() {
                 </span>
               </li>
             </ul>
-          </section>
+          </CollapsibleDashboardSection>
         );
 
       case "job-in-progress":
         if (!execId || !aj || !dashboard) return null;
         return (
-          <section className="card wide active-job-card">
-            <h3 style={{ marginTop: 0 }}>Job in progress</h3>
-            <ul className="small mono validate-list" style={{ marginBottom: 0 }}>
+          <CollapsibleDashboardSection
+            panelKey={`${domain}:job-in-progress`}
+            title="Job in progress"
+            className="card wide active-job-card"
+          >
+            <ul className="small mono validate-list" style={{ marginBottom: 0, marginTop: 0 }}>
               <li>
                 Run ID: <strong className="accent">{aj.run_id}</strong>
               </li>
@@ -368,6 +394,14 @@ export default function Dashboard() {
                 Pipeline stage:{" "}
                 <strong>{aj.pipeline_stage_label ?? dashboard.pipeline_focus_label ?? "—"}</strong>
               </li>
+              {aj.operator_headline ? (
+                <li className="wrap">
+                  Status: <strong className="accent">{aj.operator_headline}</strong>
+                </li>
+              ) : null}
+              {aj.operator_detail ? (
+                <li className="muted wrap">{aj.operator_detail}</li>
+              ) : null}
               <li>
                 Training progress:{" "}
                 <strong>{aj.training_progress_detail ?? "—"}</strong>
@@ -376,15 +410,18 @@ export default function Dashboard() {
                 Training bar:{" "}
                 <strong>
                   {aj.training_progress_indeterminate
-                    ? "initializing (no measured steps yet)"
+                    ? "indeterminate (GPU / logs active, or waiting for step lines)"
                     : aj.training_progress_bar_percent != null
                       ? `${aj.training_progress_bar_percent}%`
                       : aj.progress_percent != null
                         ? `${aj.progress_percent}%`
                         : "—"}
                 </strong>
-                {aj.progress_label ? (
-                  <span className="muted"> · log {aj.progress_label}</span>
+                {(aj.training_eta_hint ?? aj.progress_label) ? (
+                  <span className="muted">
+                    {" "}
+                    · ETA / pace: {aj.training_eta_hint ?? aj.progress_label}
+                  </span>
                 ) : null}
               </li>
               <li>
@@ -415,7 +452,7 @@ export default function Dashboard() {
                 </span>
               </li>
             </ul>
-          </section>
+          </CollapsibleDashboardSection>
         );
 
       case "pipeline-detail":
@@ -427,20 +464,11 @@ export default function Dashboard() {
           return null;
         }
         return (
-          <section className="card wide pipeline-detail-card">
-            <button
-              type="button"
-              className="collapse-panel-header"
-              aria-expanded={pipelineDetailOpen}
-              onClick={() => setPipelineDetailOpen((o) => !o)}
-            >
-              <span className="collapse-caret" aria-hidden>
-                {pipelineDetailOpen ? "▼" : "▶"}
-              </span>
-              Pipeline detail
-            </button>
-            {pipelineDetailOpen ? (
-              <div className="collapse-panel-body">
+          <CollapsibleDashboardSection
+            panelKey={`${domain}:pipeline-detail`}
+            title="Pipeline detail"
+            className="card wide pipeline-detail-card"
+          >
                 {dashboard.version_flow ? (
                   <p
                     className="small mono accent wrap"
@@ -519,9 +547,7 @@ export default function Dashboard() {
                     </ul>
                   </details>
                 ) : null}
-              </div>
-            ) : null}
-          </section>
+          </CollapsibleDashboardSection>
         );
 
       case "prior-baseline":
@@ -532,19 +558,28 @@ export default function Dashboard() {
           return null;
         }
         return (
-          <div className="card wide" style={{ padding: "0.85rem 1rem" }}>
+          <CollapsibleDashboardSection
+            panelKey={`${domain}:prior-baseline`}
+            title="Prior certified baseline"
+            className="card wide"
+          >
             <p className="small muted wrap" style={{ margin: 0 }}>
-              Prior certified baseline (unchanged on disk):{" "}
+              Unchanged on disk:{" "}
               <span className="mono">
                 {dashboard.prior_certified_version ?? "—"} (
                 {dashboard.prior_certified_run_id ?? "—"})
               </span>
             </p>
-          </div>
+          </CollapsibleDashboardSection>
         );
 
       case "summary-grid":
         return (
+          <CollapsibleDashboardSection
+            panelKey={`${domain}:summary-grid`}
+            title="Summary & progress"
+            className="card wide"
+          >
           <div className="grid-cards">
             <section className="card">
               <h3>Selected domain</h3>
@@ -584,6 +619,11 @@ export default function Dashboard() {
                 aj?.pipeline_stage_label &&
                 aj?.training_progress_detail != null ? (
                   <>
+                    {aj.operator_headline ? (
+                      <p className="mono small accent wrap" style={{ marginBottom: "0.35rem" }}>
+                        {aj.operator_headline}
+                      </p>
+                    ) : null}
                     <p className="mono small" style={{ marginBottom: "0.35rem" }}>
                       Pipeline stage:{" "}
                       <strong className="accent">{aj.pipeline_stage_label}</strong>
@@ -596,7 +636,9 @@ export default function Dashboard() {
                       <div
                         className="progress-bar progress-bar-indeterminate"
                         role="progressbar"
-                        aria-valuetext="Training initializing"
+                        aria-valuetext={
+                          aj.operator_headline ?? "Training in progress"
+                        }
                       />
                     ) : (
                       <>
@@ -621,6 +663,12 @@ export default function Dashboard() {
                       {aj.training_live_summary ?? "—"}
                       {pollLive ? <span className="muted"> · syncing…</span> : null}
                     </p>
+                    {dashboard?.progress_label &&
+                    dashboard.progress_label !== "ETA: calculating" ? (
+                      <p className="mono small muted" style={{ marginTop: "0.35rem" }}>
+                        ETA: <strong>{dashboard.progress_label}</strong>
+                      </p>
+                    ) : null}
                   </>
                 ) : (
                   <>
@@ -708,14 +756,18 @@ export default function Dashboard() {
               </p>
             </section>
           </div>
+          </CollapsibleDashboardSection>
         );
 
       case "advance-training":
         if (!tc) return null;
         return (
-          <section className="card wide">
-            <h3>Advance Training Cycle</h3>
-            <p className="small muted">
+          <CollapsibleDashboardSection
+            panelKey={`${domain}:advance-training`}
+            title="Advance Training Cycle"
+            className="card wide"
+          >
+            <p className="small muted" style={{ marginTop: 0 }}>
               Reads certified runs from{" "}
               <span className="mono">/data/NDE/{domain}/runs/*/state.json</span>, bumps{" "}
               <span className="mono">vX.Y → vX.(Y+1)</span>, then invokes{" "}
@@ -877,19 +929,20 @@ export default function Dashboard() {
               </button>
             </div>
             {advanceMsg ? <p className="small mono wrap">{advanceMsg}</p> : null}
-          </section>
+          </CollapsibleDashboardSection>
         );
 
       case "staging":
         if (!st?.staging_path) return null;
         return (
-          <section className="card">
-            <h3>Staging</h3>
-            <p className="mono small">{String(st.staging_path)}</p>
+          <CollapsibleDashboardSection panelKey={`${domain}:staging`} title="Staging" className="card">
+            <p className="mono small" style={{ marginTop: 0 }}>
+              {String(st.staging_path)}
+            </p>
             <p className="small muted">
               Dataset ok: {String(st.dataset_ok)} · Train ok: {String(st.train_ok)}
             </p>
-          </section>
+          </CollapsibleDashboardSection>
         );
 
       default:

@@ -2244,12 +2244,68 @@ async function buildTrainingTelemetry(domain, runId, state) {
   let gpu_name = null;
   let vram_used = null;
   let gpu_utilization = null;
+  let gpu_util_pct = null;
+  let vram_used_mb = null;
   if (gpu?.gpu_name) {
     gpu_name = gpu.gpu_name;
+    gpu_util_pct = gpu.gpu_util_pct ?? null;
+    vram_used_mb = gpu.vram_used_mb ?? null;
     if (gpu.vram_used_mb != null && gpu.vram_total_mb != null) {
       vram_used = `${gpu.vram_used_mb} MiB / ${gpu.vram_total_mb} MiB`;
     }
     if (gpu.gpu_util_pct != null) gpu_utilization = `${gpu.gpu_util_pct}%`;
+  }
+
+  const trainStdout = path.join(
+    DATA_NDE,
+    domain,
+    "runs",
+    runId,
+    "nodes",
+    "smoke_train",
+    "stdout.log"
+  );
+  let train_log_bytes = 0;
+  try {
+    if (fs.existsSync(trainStdout)) train_log_bytes = fs.statSync(trainStdout).size;
+  } catch {
+    train_log_bytes = 0;
+  }
+
+  const gpuEngaged =
+    (gpu_util_pct != null && gpu_util_pct >= 15) ||
+    (vram_used_mb != null && vram_used_mb >= 4000);
+
+  let operator_headline = "";
+  let operator_detail = "";
+  if (parsed.train_step_current != null && parsed.train_step_total != null) {
+    operator_headline = `Training: step ${parsed.train_step_current} / ${parsed.train_step_total}`;
+    operator_detail = `About ${parsed.progress_percent ?? "—"}% through the configured training steps (from live trainer logs).`;
+  } else if (gpuEngaged) {
+    operator_headline = `Training on GPU (${gpu_util_pct ?? "?"}% util${vram_used_mb != null ? `, ${Math.round(vram_used_mb)} MiB VRAM` : ""})`;
+    operator_detail =
+      train_log_bytes > 400
+        ? "Trainer process is writing logs; step counts appear when the library prints N/3000-style lines."
+        : "GPU is busy — loading weights or running the training loop; detailed steps will appear as logs grow.";
+  } else if (train_log_bytes > 400) {
+    operator_headline = `Trainer running (${Math.max(1, Math.round(train_log_bytes / 1024))} KB log output)`;
+    operator_detail = "Subprocess is emitting output; GPU metrics may lag briefly.";
+  } else {
+    operator_headline = "Starting trainer…";
+    operator_detail = "Waiting for GPU activity or trainer log output.";
+  }
+
+  const training_initializing = !(
+    parsed.train_step_current != null ||
+    gpuEngaged ||
+    train_log_bytes > 400
+  );
+
+  let gpu_status_hint = null;
+  if (gpu?.gpu_name) {
+    if (parsed.train_step_current != null) gpu_status_hint = "GPU — training loop (steps in logs)";
+    else if (gpuEngaged) gpu_status_hint = "GPU engaged — load or train";
+    else gpu_status_hint = "GPU idle / preparing";
   }
 
   const verRaw = state?.version || parseSemverFromRunId(runId, domain) || "—";
@@ -2268,16 +2324,12 @@ async function buildTrainingTelemetry(domain, runId, state) {
     train_step_current: parsed.train_step_current,
     train_step_total: parsed.train_step_total,
     progress_percent: parsed.progress_percent,
-    training_initializing: parsed.train_step_current == null,
-    gpu_status_hint:
-      gpu?.gpu_name &&
-      parsed.train_step_current != null &&
-      gpu.gpu_util_pct != null &&
-      gpu.gpu_util_pct >= 5
-        ? "GPU active"
-        : gpu?.gpu_name
-          ? "GPU detected / warmup"
-          : null,
+    training_initializing,
+    gpu_util_pct,
+    train_log_bytes,
+    operator_headline,
+    operator_detail,
+    gpu_status_hint,
     epoch: parsed.epoch ?? null,
     loss: parsed.loss ?? null,
     learning_rate: parsed.learning_rate ?? null,
@@ -2407,6 +2459,48 @@ async function buildDashboardPayload(domain) {
     ...systemSlice,
     ...pipelineFields,
   };
+
+  if (
+    training_telemetry &&
+    executionRunId &&
+    pvExecution?.dashboard_status === "TRAINING" &&
+    base.active_job
+  ) {
+    const tt = training_telemetry;
+    const hasSteps =
+      tt.train_step_current != null &&
+      tt.train_step_total != null &&
+      tt.train_step_total > 0;
+    const gpuEngaged =
+      (tt.gpu_util_pct != null && tt.gpu_util_pct >= 15) ||
+      (typeof tt.train_log_bytes === "number" && tt.train_log_bytes > 400);
+    const aj = { ...base.active_job };
+    aj.operator_headline = tt.operator_headline;
+    aj.operator_detail = tt.operator_detail;
+    aj.training_eta_hint = tt.eta;
+    aj.training_elapsed_display = tt.elapsed;
+    if (hasSteps) {
+      const bar =
+        tt.progress_percent != null
+          ? tt.progress_percent
+          : Math.round((tt.train_step_current / tt.train_step_total) * 1000) / 10;
+      aj.training_progress_indeterminate = false;
+      aj.training_progress_detail = `${tt.train_step_current} / ${tt.train_step_total}`;
+      aj.training_progress_bar_percent = bar;
+      aj.training_live_summary = `${aj.pipeline_stage_label ?? "Training"} · ${tt.operator_headline}`;
+      base.progress_percent = bar;
+      if (tt.eta && tt.eta !== "ETA: calculating") {
+        base.progress_label = tt.eta;
+      }
+    } else {
+      aj.training_progress_indeterminate = !gpuEngaged;
+      aj.training_progress_detail = tt.operator_headline;
+      aj.training_progress_bar_percent = null;
+      const stage = aj.pipeline_stage_label ?? "";
+      aj.training_live_summary = [stage, tt.operator_headline].filter(Boolean).join(" · ");
+    }
+    base.active_job = aj;
+  }
 
   if (tcSummary.active_cycle && tcSummary.active_run_id === primaryRunId) {
     base.training_log_tail =

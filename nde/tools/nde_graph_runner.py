@@ -161,6 +161,7 @@ def _write_node_proof(
     failure_reason: str | None = None,
     stdout: str = "",
     stderr: str = "",
+    preserve_log_files: bool = False,
 ) -> None:
     nd = _node_dir(run_root, name)
     payload = {
@@ -175,8 +176,59 @@ def _write_node_proof(
         "failure_reason": failure_reason,
     }
     (nd / "node_status.json").write_text(json.dumps(payload, indent=2), encoding="utf-8")
-    (nd / "stdout.log").write_text(stdout or "", encoding="utf-8")
-    (nd / "stderr.log").write_text(stderr or "", encoding="utf-8")
+    if not preserve_log_files:
+        (nd / "stdout.log").write_text(stdout or "", encoding="utf-8")
+        (nd / "stderr.log").write_text(stderr or "", encoding="utf-8")
+
+
+def _read_file_tail_bytes(path: Path, max_bytes: int) -> str:
+    try:
+        data = path.read_bytes()
+    except OSError:
+        return ""
+    if len(data) <= max_bytes:
+        return data.decode("utf-8", errors="replace")
+    return data[-max_bytes:].decode("utf-8", errors="replace")
+
+
+def _run_train_subprocess_with_streaming_logs(
+    cmd: list[str],
+    *,
+    run_root: Path,
+    node_name: str,
+    cwd: str,
+    env: dict[str, str],
+    timeout: int,
+) -> tuple[int, str, str]:
+    """
+    Run the training subprocess with stdout/stderr written to node logs live so operators
+    (NDE Studio tail) see tqdm/step lines during multi-hour runs — not only after completion.
+    """
+    nd = _node_dir(run_root, node_name)
+    nd.mkdir(parents=True, exist_ok=True)
+    out_path = nd / "stdout.log"
+    err_path = nd / "stderr.log"
+    with open(out_path, "w", encoding="utf-8") as out_f, open(err_path, "w", encoding="utf-8") as err_f:
+        proc = subprocess.Popen(
+            cmd,
+            stdout=out_f,
+            stderr=err_f,
+            text=True,
+            cwd=cwd,
+            env=env,
+        )
+        try:
+            rc = proc.wait(timeout=timeout)
+        except subprocess.TimeoutExpired:
+            proc.kill()
+            try:
+                proc.wait(timeout=60)
+            except subprocess.TimeoutExpired:
+                pass
+            rc = -9
+    stdout_tail = _read_file_tail_bytes(out_path, 48000)
+    stderr_tail = _read_file_tail_bytes(err_path, 48000)
+    return rc, stdout_tail, stderr_tail
 
 
 def _sync_state_json(run_root: Path, state: dict[str, Any]) -> None:
@@ -557,26 +609,32 @@ def smoke_train(state: NDEState) -> dict[str, Any]:
         return {"train_ok": False, "last_error": msg}
 
     cmd = [exe, str(train_py), train_mode, "--config", str(cfg), "--base", str(base)]
-    proc = subprocess.run(
+    train_env = {
+        **os.environ,
+        "FINQUANT_BASE": str(base),
+        "NDE_ROOT": str(nde),
+        "PYTHONUNBUFFERED": "1",
+    }
+    rc, stdout_tail, stderr_tail = _run_train_subprocess_with_streaming_logs(
         cmd,
-        capture_output=True,
-        text=True,
-        timeout=86400,
-        env={**os.environ, "FINQUANT_BASE": str(base), "NDE_ROOT": str(nde)},
+        run_root=run_root,
+        node_name="smoke_train",
         cwd=str(repo_root),
+        env=train_env,
+        timeout=86400,
     )
-    ok = proc.returncode == 0
+    ok = rc == 0
     _write_node_proof(
         run_root,
         "smoke_train",
         status="ok" if ok else "failed",
         inputs=inputs,
-        outputs=[{"cmd": cmd, "exit_code": proc.returncode}],
-        errors=[] if ok else [proc.stderr[:2000] or "training failed"],
+        outputs=[{"cmd": cmd, "exit_code": rc}],
+        errors=[] if ok else [stderr_tail[:2000] or stdout_tail[:2000] or "training failed"],
         next_node="smoke_eval" if ok else "END",
-        failure_reason=None if ok else (proc.stderr[:8000] or proc.stdout[:8000]),
-        stdout=(proc.stdout or "")[-48000:],
-        stderr=(proc.stderr or "")[-48000:],
+        failure_reason=None if ok else (stderr_tail[:8000] or stdout_tail[:8000]),
+        stdout=stdout_tail,
+        stderr=stderr_tail,
         artifacts={
             "cmd": cmd,
             "train_mode": train_mode,
@@ -584,7 +642,9 @@ def smoke_train(state: NDEState) -> dict[str, Any]:
             "repo_root": str(repo_root),
             "training_script": str(train_py),
             "train_python": exe,
+            "streaming_logs": True,
         },
+        preserve_log_files=True,
     )
     return {"train_ok": ok, "last_error": "" if ok else "training subprocess failed"}
 

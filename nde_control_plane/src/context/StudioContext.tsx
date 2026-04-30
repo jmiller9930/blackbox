@@ -74,6 +74,11 @@ export type ActiveJobPayload = {
   training_progress_indeterminate?: boolean;
   /** One-line summary for live progress */
   training_live_summary?: string | null;
+  /** Ground-truth operator line from telemetry merge (GPU / steps / logs). */
+  operator_headline?: string | null;
+  operator_detail?: string | null;
+  training_eta_hint?: string | null;
+  training_elapsed_display?: string | null;
 };
 
 export type SystemPosture = "NO_ACTIVE_JOB" | "RUNNING" | "BLOCKED" | "FAILED";
@@ -129,6 +134,10 @@ export type TrainingTelemetryPayload = {
   train_step_total: number | null;
   progress_percent: number | null;
   training_initializing?: boolean;
+  gpu_util_pct?: number | null;
+  train_log_bytes?: number;
+  operator_headline?: string;
+  operator_detail?: string;
   gpu_status_hint?: string | null;
   epoch: number | null;
   loss: number | null;
