@@ -88,10 +88,12 @@ def make_decision(
     thesis_v1: str,
     invalidation_v1: str,
     risk_state_v1: str = "undefined",
+    confidence_band_v1: str = "low",
     observed_context_v1: dict | None = None,
     memory_used_v1: list | None = None,
     llm_used_v1: bool = False,
     decision_source_v1: str = "deterministic_stub_v1",
+    causal_context_only_v1: bool = True,
 ) -> dict[str, Any]:
     decision = {
         "schema": SCHEMA_LIFECYCLE_DECISION,
@@ -102,10 +104,12 @@ def make_decision(
         "thesis_v1": thesis_v1,
         "invalidation_v1": invalidation_v1,
         "risk_state_v1": risk_state_v1,
+        "confidence_band_v1": confidence_band_v1,
         "observed_context_v1": observed_context_v1 or {},
         "memory_used_v1": memory_used_v1 or [],
         "llm_used_v1": llm_used_v1,
         "decision_source_v1": decision_source_v1,
+        "causal_context_only_v1": causal_context_only_v1,
     }
     validate_decision(decision)
     return decision
