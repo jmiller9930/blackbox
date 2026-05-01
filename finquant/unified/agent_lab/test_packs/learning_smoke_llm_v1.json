@@ -1,0 +1,14 @@
+{
+  "schema": "finquant_test_pack_v1",
+  "pack_id": "learning_smoke_llm_v1",
+  "description": "LLM-backed learning smoke test. Seed uses a flat/chop case the LLM should correctly abstain on (no-trade discipline). Candidate uses the near-threshold case where memory influence should trigger a bounded entry.",
+  "tests": [
+    {
+      "test_id": "llm_memory_threshold_cycle",
+      "seed_case_path": "../cases/chop_no_trade_v1.json",
+      "candidate_case_path": "../cases/memory_candidate_threshold_v1.json",
+      "expected_verdicts_v1": ["LEARNED_BEHAVIOR_PROVEN", "MEMORY_MATCH_NO_IMPACT", "BEHAVIOR_CHANGED_NOT_PROVEN_BETTER"],
+      "expected_min_retrieval_matches_v1": 0
+    }
+  ]
+}
