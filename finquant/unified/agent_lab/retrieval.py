@@ -1,55 +1,90 @@
 """
-FinQuant Unified Agent Lab — Retrieval
+FinQuant Unified Agent Lab — Retrieval.
 
-Retrieves eligible prior learning records for a given case.
+Reads shared learning records JSONL and filters retrieval eligibility.
 
-Governance rule:
-  Only records with retrieval_enabled_v1 == True may be returned.
-  Rejected records (promotion_eligible_v1 == False, retrieval_enabled_v1 == False)
-  must never surface to the agent without explicit governance override.
+MANDATORY RULE: records with retrieval_enabled_v1=false must NEVER be returned.
+This is critical — storing rejected/early records must not contaminate future agent reasoning.
 """
 
 from __future__ import annotations
 import json
 from pathlib import Path
-from typing import TYPE_CHECKING, Any
-
-if TYPE_CHECKING:
-    from memory_store import MemoryStore
+from typing import Any
 
 
 def retrieve_eligible(
-    store: "MemoryStore",
+    shared_store_path: str | Path | None,
     case: dict[str, Any],
+    config: dict[str, Any],
     max_records: int = 5,
-) -> list[dict[str, Any]]:
-    """Return prior learning records eligible for retrieval for this case.
-
-    In scaffold phase: always returns empty list (no prior runs exist yet).
+) -> tuple[list[dict[str, Any]], list[dict[str, Any]]]:
     """
-    run_dir = store.get_run_dir().parent
+    Return (eligible_records, retrieval_trace_entries).
+
+    Only records where retrieval_enabled_v1=True and symbol matches are returned.
+    All filtered-out records are captured in the trace for auditability.
+    """
+    if not shared_store_path or not config.get("retrieval_enabled_default_v1", False):
+        return [], [_trace_entry(reason="retrieval_disabled_by_config")]
+
+    store_path = Path(shared_store_path)
+    if not store_path.exists():
+        return [], [_trace_entry(reason="shared_store_not_found", path=str(store_path))]
+
     eligible: list[dict] = []
+    trace: list[dict] = []
+    symbol = case.get("symbol", "")
 
-    # Scan all prior run directories for matching eligible records
-    for run_folder in sorted(run_dir.iterdir()):
-        lr_file = run_folder / "learning_records.jsonl"
-        if not lr_file.exists():
-            continue
-        with open(lr_file, "r") as f:
-            for line in f:
-                line = line.strip()
-                if not line:
-                    continue
-                try:
-                    record = json.loads(line)
-                except json.JSONDecodeError:
-                    continue
-                if not record.get("retrieval_enabled_v1", False):
-                    continue
-                if record.get("symbol") != case.get("symbol"):
-                    continue
-                eligible.append(record)
-                if len(eligible) >= max_records:
-                    return eligible
+    with open(store_path, "r") as f:
+        for line in f:
+            line = line.strip()
+            if not line:
+                continue
+            try:
+                rec = json.loads(line)
+            except json.JSONDecodeError:
+                trace.append(_trace_entry(reason="parse_error"))
+                continue
 
-    return eligible
+            if not rec.get("retrieval_enabled_v1", False):
+                trace.append(_trace_entry(
+                    reason="retrieval_disabled",
+                    record_id=rec.get("record_id"),
+                ))
+                continue
+
+            if rec.get("symbol") != symbol:
+                trace.append(_trace_entry(
+                    reason="symbol_mismatch",
+                    record_id=rec.get("record_id"),
+                    detail=f"wanted={symbol} got={rec.get('symbol')}",
+                ))
+                continue
+
+            eligible.append(rec)
+            trace.append(_trace_entry(
+                reason="retrieved",
+                record_id=rec.get("record_id"),
+            ))
+
+            if len(eligible) >= max_records:
+                break
+
+    return eligible, trace
+
+
+def _trace_entry(
+    reason: str,
+    record_id: str | None = None,
+    path: str | None = None,
+    detail: str | None = None,
+) -> dict[str, Any]:
+    entry: dict[str, Any] = {"reason": reason}
+    if record_id:
+        entry["record_id"] = record_id
+    if path:
+        entry["path"] = path
+    if detail:
+        entry["detail"] = detail
+    return entry

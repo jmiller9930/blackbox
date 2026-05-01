@@ -1,52 +1,46 @@
 {
   "schema": "finquant_lifecycle_case_v1",
   "case_id": "lifecycle_basic_v1",
-  "symbol": "SYNTH-PERP",
-  "timeframe": "1h",
-  "description": "Simple lifecycle: FinQuant must make one entry or no-trade decision, then process the outcome. Minimal candle context provided.",
-  "expected_behavior": {
-    "entry_expected": false,
-    "exit_expected": false,
-    "no_trade_expected": true,
-    "notes": "With only two low-momentum candles and no clear trend, the correct behavior is stand-down."
-  },
-  "steps": [
+  "symbol": "SOL-PERP",
+  "timeframe_minutes": 60,
+  "description": "Simple lifecycle. Two flat candles, no trend conviction. Expected: NO_TRADE. Proves the runner executes and artifacts are written.",
+  "decision_start_index": 0,
+  "decision_end_index": 1,
+  "hidden_future_start_index": 2,
+  "expected_learning_focus_v1": ["no_trade_quality"],
+  "candles": [
     {
-      "step_index": 0,
-      "context_notes": "Two candles of context. Price flat, volume low.",
-      "visible_bars": [
-        {
-          "timestamp": "2024-01-01T10:00:00Z",
-          "open": 100.0,
-          "high": 101.5,
-          "low": 99.5,
-          "close": 100.8,
-          "volume": 1200
-        },
-        {
-          "timestamp": "2024-01-01T11:00:00Z",
-          "open": 100.8,
-          "high": 101.2,
-          "low": 100.2,
-          "close": 100.5,
-          "volume": 900
-        }
-      ],
-      "indicators": {
-        "rsi_14": 48.2,
-        "ema_20": 100.6,
-        "atr_14": 1.8
-      }
-    }
-  ],
-  "outcome_candles": [
+      "timestamp": "2024-01-01T10:00:00Z",
+      "open": 100.0,
+      "high": 101.5,
+      "low": 99.5,
+      "close": 100.8,
+      "volume": 1200,
+      "rsi_14": 48.2,
+      "ema_20": 100.6,
+      "atr_14": 1.8
+    },
+    {
+      "timestamp": "2024-01-01T11:00:00Z",
+      "open": 100.8,
+      "high": 101.2,
+      "low": 100.2,
+      "close": 100.5,
+      "volume": 900,
+      "rsi_14": 46.9,
+      "ema_20": 100.6,
+      "atr_14": 1.7
+    },
     {
       "timestamp": "2024-01-01T12:00:00Z",
       "open": 100.5,
       "high": 101.0,
       "low": 100.0,
       "close": 100.3,
-      "volume": 800
+      "volume": 800,
+      "rsi_14": 45.5,
+      "ema_20": 100.5,
+      "atr_14": 1.6
     }
   ]
 }

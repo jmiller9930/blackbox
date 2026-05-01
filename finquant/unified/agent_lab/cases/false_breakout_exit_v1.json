@@ -1,65 +1,61 @@
 {
   "schema": "finquant_lifecycle_case_v1",
   "case_id": "false_breakout_exit_v1",
-  "symbol": "SYNTH-PERP",
-  "timeframe": "1h",
-  "description": "False breakout case. Price breaks above resistance with volume but immediately reverses. FinQuant must identify that the thesis has failed and punch out.",
-  "expected_behavior": {
-    "entry_expected": true,
-    "exit_expected": true,
-    "no_trade_expected": false,
-    "notes": "Step 0: breakout with volume — reasonable to enter long. Step 1: immediate reversal below breakout level — thesis failed, invalidation triggered, exit required."
-  },
-  "steps": [
+  "symbol": "SOL-PERP",
+  "timeframe_minutes": 60,
+  "description": "False breakout. Step 0: price breaks above 105.0 resistance with volume — entry triggered. Step 1: immediate collapse below resistance — thesis invalidated, exit required.",
+  "decision_start_index": 0,
+  "decision_end_index": 2,
+  "hidden_future_start_index": 3,
+  "expected_learning_focus_v1": ["entry_quality", "exit_quality", "invalidated_thesis"],
+  "candles": [
     {
-      "step_index": 0,
-      "context_notes": "Price breaks above 105.0 resistance with expanding volume. Apparent breakout.",
-      "visible_bars": [
-        {
-          "timestamp": "2024-01-04T10:00:00Z",
-          "open": 104.5,
-          "high": 106.5,
-          "low": 104.2,
-          "close": 106.2,
-          "volume": 5200
-        }
-      ],
-      "indicators": {
-        "rsi_14": 62.5,
-        "ema_20": 103.8,
-        "atr_14": 2.1,
-        "resistance_level": 105.0
-      }
+      "timestamp": "2024-01-04T10:00:00Z",
+      "open": 104.5,
+      "high": 106.5,
+      "low": 104.2,
+      "close": 106.2,
+      "volume": 5200,
+      "rsi_14": 62.5,
+      "ema_20": 103.8,
+      "atr_14": 2.1,
+      "resistance_level": 105.0
     },
     {
-      "step_index": 1,
-      "context_notes": "Next candle: price collapses back below resistance. Breakout failed. Volume fades.",
-      "visible_bars": [
-        {
-          "timestamp": "2024-01-04T11:00:00Z",
-          "open": 106.2,
-          "high": 106.4,
-          "low": 103.8,
-          "close": 104.1,
-          "volume": 2100
-        }
-      ],
-      "indicators": {
-        "rsi_14": 44.2,
-        "ema_20": 103.9,
-        "atr_14": 2.4,
-        "resistance_level": 105.0
-      }
-    }
-  ],
-  "outcome_candles": [
+      "timestamp": "2024-01-04T11:00:00Z",
+      "open": 106.2,
+      "high": 106.4,
+      "low": 103.8,
+      "close": 104.1,
+      "volume": 2100,
+      "rsi_14": 44.2,
+      "ema_20": 103.9,
+      "atr_14": 2.4,
+      "resistance_level": 105.0
+    },
     {
       "timestamp": "2024-01-04T12:00:00Z",
       "open": 104.1,
       "high": 104.5,
       "low": 102.0,
       "close": 102.5,
-      "volume": 3100
+      "volume": 3100,
+      "rsi_14": 38.7,
+      "ema_20": 103.8,
+      "atr_14": 2.6,
+      "resistance_level": 105.0
+    },
+    {
+      "timestamp": "2024-01-04T13:00:00Z",
+      "open": 102.5,
+      "high": 103.0,
+      "low": 101.0,
+      "close": 101.5,
+      "volume": 2800,
+      "rsi_14": 34.1,
+      "ema_20": 103.5,
+      "atr_14": 2.7,
+      "resistance_level": 105.0
     }
   ]
 }

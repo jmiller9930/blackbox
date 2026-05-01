@@ -1,93 +1,230 @@
 """
-FinQuant Unified Agent Lab — Lifecycle Engine
+FinQuant Unified Agent Lab — Lifecycle Engine.
 
-Steps through case candles one at a time (no lookahead).
-Emits finquant_decision_v1 objects at each step.
+Core FinQuant trader loop for the lab.
+Processes candles in order; produces one decision event per step.
+Future candles (>= hidden_future_start_index) are never visible during decisions.
 
-Phase 0: rule-based stub decisions. LLM wiring is a later phase.
+Phase 0: deterministic stub logic. LLM wiring is a later directive.
 """
 
 from __future__ import annotations
 from typing import Any
 
-from decision_contracts import make_decision
+from schemas import make_decision, VALID_ACTIONS
 
 
 class LifecycleEngine:
     def __init__(self, config: dict[str, Any]) -> None:
         self.config = config
+        self.mode = config.get("mode", "deterministic_stub_v1")
 
     def run_case(
         self,
         case: dict[str, Any],
         prior_records: list[dict] | None = None,
     ) -> list[dict[str, Any]]:
-        """Process all steps in a case, returning one decision per step."""
+        """
+        Process all decision steps in a case.
+
+        Returns one decision dict per step in [decision_start_index, decision_end_index].
+        Candles at or after hidden_future_start_index are never passed to the decision logic.
+        """
         case_id = case["case_id"]
         symbol = case["symbol"]
-        steps = case["steps"]
+        candles = case["candles"]
+        start = case["decision_start_index"]
+        end = case["decision_end_index"]
+        hide_from = case["hidden_future_start_index"]
+
         decisions: list[dict[str, Any]] = []
-
         position_open = False
+        entry_price: float | None = None
+        entry_volume: float | None = None
+        prior_rsi: float | None = None
 
-        for i, step in enumerate(steps):
-            visible_bars = step.get("visible_bars", [])
-            indicators = step.get("indicators", {})
+        for step_index in range(start, end + 1):
+            # Only candles up to (and including) step_index, capped at hide_from
+            visible_end = min(step_index + 1, hide_from)
+            visible_bars = candles[:visible_end]
 
-            action, thesis, invalidation = self._decide(
-                step_index=i,
+            action, thesis, invalidation, risk_state = self._decide(
+                step_index=step_index,
                 visible_bars=visible_bars,
-                indicators=indicators,
                 position_open=position_open,
+                entry_price=entry_price,
+                entry_volume=entry_volume,
+                prior_rsi=prior_rsi,
                 prior_records=prior_records or [],
             )
 
             decision = make_decision(
                 case_id=case_id,
-                step_index=i,
+                step_index=step_index,
                 symbol=symbol,
                 action=action,
-                thesis=thesis,
-                invalidation=invalidation,
-                confidence_band="low",
-                decision_source_v1="rule",
-                causal_context_only_v1=True,
+                thesis_v1=thesis,
+                invalidation_v1=invalidation,
+                risk_state_v1=risk_state,
+                observed_context_v1=self._summarize_context(visible_bars),
+                memory_used_v1=[r["record_id"] for r in (prior_records or [])],
+                llm_used_v1=False,
+                decision_source_v1="deterministic_stub_v1",
             )
             decisions.append(decision)
 
+            # Update position state
             if action in ("ENTER_LONG", "ENTER_SHORT"):
                 position_open = True
+                entry_price = visible_bars[-1]["close"] if visible_bars else None
+                entry_volume = visible_bars[-1].get("volume") if visible_bars else None
             elif action == "EXIT":
                 position_open = False
+                entry_price = None
+                entry_volume = None
+
+            if visible_bars:
+                prior_rsi = visible_bars[-1].get("rsi_14")
 
         return decisions
+
+    # ------------------------------------------------------------------
+    # Deterministic stub decision logic
+    # ------------------------------------------------------------------
 
     def _decide(
         self,
         step_index: int,
-        visible_bars: list,
-        indicators: dict,
+        visible_bars: list[dict],
         position_open: bool,
+        entry_price: float | None,
+        entry_volume: float | None,
+        prior_rsi: float | None,
         prior_records: list,
-    ) -> tuple[str, str, str]:
-        """Stub rule-based decision logic. Replace with LLM call in later phase."""
+    ) -> tuple[str, str, str, str]:
+        """Return (action, thesis, invalidation, risk_state)."""
+
         if not visible_bars:
             return (
                 "NO_TRADE",
-                "No candle data visible at this step.",
-                "Insufficient data.",
+                "No candles visible at this step.",
+                "Insufficient data — cannot form a thesis.",
+                "no_data",
             )
 
-        if position_open:
+        current = visible_bars[-1]
+        rsi = current.get("rsi_14")
+        atr = current.get("atr_14")
+        close = current.get("close", 0.0)
+
+        rsi_str = f"{rsi:.1f}" if rsi is not None else "N/A"
+
+        # -- If in a position, evaluate hold vs exit --
+        if position_open and entry_price is not None:
+            # Hard exit conditions
+            rsi_low = rsi is not None and rsi < 45.0
+            price_retreat = close < entry_price * 0.995          # 0.5% below entry
+            # Momentum decay: RSI dropped 5+ pts from prior step
+            rsi_decay = (
+                rsi is not None and prior_rsi is not None
+                and (prior_rsi - rsi) >= 5.0
+            )
+            # Volume collapse vs entry volume
+            vol_collapse = (
+                entry_volume is not None
+                and current.get("volume", 0) < entry_volume * 0.60
+            )
+            # Resistance level invalidation: close fell back below resistance
+            res = current.get("resistance_level")
+            resistance_break_fail = res is not None and close < res
+
+            if rsi_low or price_retreat or resistance_break_fail or (rsi_decay and vol_collapse):
+                reasons = []
+                if rsi_low:
+                    reasons.append(f"RSI={rsi_str}<45")
+                if price_retreat:
+                    reasons.append(f"close={close:.2f}<entry*0.995={entry_price*0.995:.2f}")
+                if resistance_break_fail:
+                    reasons.append(f"close={close:.2f} fell back below resistance={res}")
+                if rsi_decay and vol_collapse:
+                    reasons.append(f"RSI decayed {prior_rsi:.1f}→{rsi_str}, volume collapsed")
+                return (
+                    "EXIT",
+                    f"Thesis invalidated: {'; '.join(reasons)}.",
+                    "RSI reclaims prior level or price clears resistance.",
+                    f"exit_triggered {' '.join(reasons)}",
+                )
             return (
                 "HOLD",
-                "Position open; monitoring for exit condition.",
-                "Exit if thesis invalidates.",
+                f"Position open. RSI={rsi_str}, close={close:.2f}. No exit signal.",
+                "Exit if RSI < 45, price retreats 0.5%, or resistance recaptured.",
+                f"holding entry={entry_price:.2f}",
             )
 
-        # Stub: always NO_TRADE in scaffold phase
+        # -- No position — evaluate entry --
+
+        # Single-candle breakout detection (resistance level case)
+        res = current.get("resistance_level")
+        if res is not None and close > res and rsi is not None and rsi > 58 and atr is not None and atr > 1.5:
+            vol_ok = current.get("volume", 0) > 3000
+            if vol_ok:
+                return (
+                    "ENTER_LONG",
+                    f"Breakout above resistance={res}: close={close:.2f}, RSI={rsi_str}, ATR={atr:.2f}, vol={current.get('volume')}.",
+                    f"Exit if close falls back below resistance {res} on next candle.",
+                    f"breakout_long res={res} rsi={rsi_str}",
+                )
+
+        if len(visible_bars) < 2:
+            return (
+                "NO_TRADE",
+                "Only one candle visible; insufficient context for trend entry.",
+                "Need at least 2 candles to form a thesis.",
+                "insufficient_context",
+            )
+
+        prev = visible_bars[-2]
+        price_up = close > prev["close"]
+        rsi_ok = rsi is not None and 50 < rsi < 70
+        volume_expand = current.get("volume", 0) > prev.get("volume", 0)
+        atr_expand = atr is not None and atr > 1.5
+
+        # Trend entry: price rising, RSI mid-range, volume expanding
+        if price_up and rsi_ok and volume_expand and atr_expand:
+            return (
+                "ENTER_LONG",
+                f"Uptrend: close {prev['close']:.2f}→{close:.2f}, RSI={rsi_str}, volume expanding, ATR={atr:.2f}.",
+                f"Exit if close drops below {close * 0.995:.2f} or RSI decays with volume collapse.",
+                f"entry_long rsi={rsi_str} atr={atr:.2f}",
+            )
+
+        # Chop / ranging: price not moving decisively
+        avg_move = abs(close - prev["close"])
+        is_chop = avg_move < 0.5 or (atr is not None and atr < 1.0)
+        if is_chop:
+            return (
+                "NO_TRADE",
+                f"Market choppy: avg_move={avg_move:.2f}, ATR={atr}. No edge.",
+                "Stand down until ATR > 1.0 and directional conviction appears.",
+                "chop_no_edge",
+            )
+
         return (
             "NO_TRADE",
-            "Scaffold stub: no entry conditions evaluated yet.",
-            "Scaffold stub: no invalidation logic yet.",
+            f"Conditions not met: price_up={price_up}, rsi_ok={rsi_ok}, volume_expand={volume_expand}.",
+            "Require price uptick, RSI 50-70, expanding volume.",
+            "wait",
         )
+
+    def _summarize_context(self, visible_bars: list[dict]) -> dict[str, Any]:
+        if not visible_bars:
+            return {}
+        bar = visible_bars[-1]
+        return {
+            "candles_visible": len(visible_bars),
+            "last_close": bar.get("close"),
+            "last_rsi_14": bar.get("rsi_14"),
+            "last_ema_20": bar.get("ema_20"),
+            "last_atr_14": bar.get("atr_14"),
+            "last_volume": bar.get("volume"),
+        }

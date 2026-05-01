@@ -1,0 +1,9 @@
+{
+  "schema": "finquant_agent_lab_config_v1",
+  "agent_id": "finquant",
+  "mode": "deterministic_stub_v1",
+  "use_llm_v1": false,
+  "memory_store_path": "finquant/unified/agent_lab/outputs/shared_learning_records.jsonl",
+  "retrieval_enabled_default_v1": false,
+  "write_outputs_v1": true
+}

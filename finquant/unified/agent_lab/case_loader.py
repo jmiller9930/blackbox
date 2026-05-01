@@ -1,49 +1,52 @@
 """
-FinQuant Unified Agent Lab — Case Loader
+FinQuant Unified Agent Lab — Case Loader.
 
-Loads and minimally validates lifecycle case packs.
+Loads and validates lifecycle case JSON files.
+Rejects malformed cases with clear errors.
 No app imports.
 """
 
+from __future__ import annotations
 import json
-from pathlib import Path
 from typing import Any
+
+from schemas import validate_case
+
+
+def load_case(path: str) -> dict[str, Any]:
+    """Load a single case from a JSON file and validate it."""
+    with open(path, "r") as f:
+        case = json.load(f)
+    if not isinstance(case, dict):
+        raise ValueError(f"case file must be a JSON object: {path}")
+    validate_case(case)
+    return case
 
 
 def load_cases(path: str) -> list[dict[str, Any]]:
-    """Load cases from a JSON file.
+    """Load one or more cases from a JSON file.
 
-    Accepts either:
-      - a top-level list of case objects
-      - a wrapper object: { "cases": [...] }
+    Accepts:
+      - A single case object.
+      - A list of case objects.
+      - A wrapper: { "cases": [...] }.
     """
     with open(path, "r") as f:
         raw = json.load(f)
 
-    if isinstance(raw, list):
-        cases = raw
-    elif isinstance(raw, dict) and "cases" in raw:
+    if isinstance(raw, dict) and "cases" in raw:
         cases = raw["cases"]
+    elif isinstance(raw, dict):
+        cases = [raw]
+    elif isinstance(raw, list):
+        cases = raw
     else:
-        raise ValueError(f"case pack must be a list or {{\"cases\": [...]}} object: {path}")
+        raise ValueError(f"unrecognized case pack format in {path}")
 
     if not cases:
-        raise ValueError(f"case pack contains no cases: {path}")
+        raise ValueError(f"case file contains no cases: {path}")
 
-    for i, case in enumerate(cases):
-        _validate_case_minimal(case, index=i)
+    for case in cases:
+        validate_case(case)
 
     return cases
-
-
-def _validate_case_minimal(case: dict[str, Any], index: int) -> None:
-    required_fields = ["case_id", "schema", "symbol", "steps"]
-    missing = [f for f in required_fields if f not in case]
-    if missing:
-        raise ValueError(
-            f"case at index {index} missing required fields: {missing}"
-        )
-    if not isinstance(case["steps"], list):
-        raise ValueError(
-            f"case '{case['case_id']}' steps must be a list"
-        )
