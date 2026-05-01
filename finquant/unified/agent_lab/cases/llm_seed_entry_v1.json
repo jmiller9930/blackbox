@@ -1,0 +1,38 @@
+{
+  "schema": "finquant_lifecycle_case_v1",
+  "case_id": "llm_seed_entry_v1",
+  "symbol": "SOL-PERP",
+  "timeframe_minutes": 15,
+  "description": "Strong unambiguous uptrend seed case for LLM. RSI bullish range, ATR expanded, price well above EMA, volume accelerating. Any reasonably-trained LLM should enter long. Only entry_quality in focus — no exit required. Designed to produce a PROMOTED learning record that can seed future runs.",
+  "decision_start_index": 2,
+  "decision_end_index": 2,
+  "hidden_future_start_index": 3,
+  "expected_learning_focus_v1": ["entry_quality"],
+  "candles": [
+    {
+      "timestamp": "2024-03-01T08:00:00Z",
+      "open": 96.0, "high": 97.5, "low": 95.8, "close": 97.2,
+      "volume": 1800, "rsi_14": 52.0, "ema_20": 95.8, "atr_14": 1.6
+    },
+    {
+      "timestamp": "2024-03-01T08:15:00Z",
+      "open": 97.2, "high": 99.5, "low": 97.0, "close": 99.1,
+      "volume": 2600, "rsi_14": 58.0, "ema_20": 96.5, "atr_14": 2.0
+    },
+    {
+      "timestamp": "2024-03-01T08:30:00Z",
+      "open": 99.1, "high": 102.5, "low": 98.9, "close": 102.0,
+      "volume": 4200, "rsi_14": 64.0, "ema_20": 97.8, "atr_14": 2.6
+    },
+    {
+      "timestamp": "2024-03-01T08:45:00Z",
+      "open": 102.0, "high": 104.8, "low": 101.8, "close": 104.3,
+      "volume": 3800, "rsi_14": 66.0, "ema_20": 99.4, "atr_14": 2.7
+    },
+    {
+      "timestamp": "2024-03-01T09:00:00Z",
+      "open": 104.3, "high": 107.0, "low": 104.1, "close": 106.8,
+      "volume": 5100, "rsi_14": 70.0, "ema_20": 101.5, "atr_14": 2.9
+    }
+  ]
+}
