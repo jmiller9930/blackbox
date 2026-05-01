@@ -6,11 +6,12 @@ RM preflight — in-memory wiring validation before parallel batch (Directive: r
   runs ``run_entry_reasoning_pipeline_preflight_v1`` (tail-capped bars, router local-only) → authority →
   deterministic stub seal — **no** Referee replay worker
   and **no** wait for closed trades. In-process mode still uses ``PATTERN_GAME_RM_PREFLIGHT_DECISION_SNAPSHOT_TIMEOUT_S``
-  (default **5**; fail ``preflight_timeout_decision_snapshot_v1``) as a monotonic inner deadline.
+  (default **30**; fail ``preflight_timeout_decision_snapshot_v1``) as a monotonic inner deadline.
   Entry reasoning uses a tail slice (``PATTERN_GAME_RM_PREFLIGHT_ENTRY_MAX_BARS``, default **64**).
 * **Hard wall (default on):** decision-snapshot preflight runs in a **spawn** subprocess and the parent
   ``terminate()``/``kill()`` the child if ``time.time()`` exceeds ``PATTERN_GAME_RM_PREFLIGHT_HARD_TIMEOUT_S``
-  (defaults to the decision-snapshot timeout). Failure code: ``preflight_hard_timeout_v1``. Set
+  (when unset, defaults to **max(45s, decision-snapshot budget)** so the outer wall is not tighter than inner).
+  Failure code: ``preflight_hard_timeout_v1``. Set
   ``PATTERN_GAME_RM_PREFLIGHT_SUBPROCESS_ISOLATION=0`` for in-process mode (e.g. tests that patch the snapshot).
 * Bounded replay + ``_worker_run_one`` remain available for full exam / grading flows elsewhere; preflight does
   not depend on them.
@@ -483,22 +484,24 @@ def map_rm_preflight_missing_to_operator_display_v1(missing: list[str]) -> list[
 
 
 def _rm_preflight_decision_snapshot_timeout_s_v1() -> float:
-    raw = (os.environ.get("PATTERN_GAME_RM_PREFLIGHT_DECISION_SNAPSHOT_TIMEOUT_S") or "5").strip()
+    raw = (os.environ.get("PATTERN_GAME_RM_PREFLIGHT_DECISION_SNAPSHOT_TIMEOUT_S") or "30").strip()
     try:
         t = float(raw)
     except (TypeError, ValueError):
-        t = 5.0
+        t = 30.0
     return max(2.0, min(t, 30.0))
 
 
 def _rm_preflight_hard_timeout_s_v1() -> float:
     """
     Wall-clock envelope for **entire** decision-snapshot preflight when subprocess isolation is on.
-    Defaults to the decision-snapshot timeout if ``PATTERN_GAME_RM_PREFLIGHT_HARD_TIMEOUT_S`` unset.
+    When ``PATTERN_GAME_RM_PREFLIGHT_HARD_TIMEOUT_S`` is unset, defaults to at least **45s** and never
+    below the decision-snapshot budget (subprocess overhead / SQLite / model cold start on lab hosts).
     """
     raw = (os.environ.get("PATTERN_GAME_RM_PREFLIGHT_HARD_TIMEOUT_S") or "").strip()
     if not raw:
-        return float(_rm_preflight_decision_snapshot_timeout_s_v1())
+        inner = float(_rm_preflight_decision_snapshot_timeout_s_v1())
+        return max(45.0, inner)
     try:
         t = float(raw)
     except (TypeError, ValueError):

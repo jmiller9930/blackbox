@@ -37,6 +37,8 @@ RM preflight proves **before** `run_scenarios_parallel` that the Student RM wiri
 | Replay tail bars | `PATTERN_GAME_RM_PREFLIGHT_REPLAY_TAIL_BARS` | 80 |
 | Worker wall-clock wait | `PATTERN_GAME_RM_PREFLIGHT_WORKER_TIMEOUT_S` | 10s (clamped 3–120) |
 | Heartbeat interval | `PATTERN_GAME_RM_PREFLIGHT_HEARTBEAT_INTERVAL_S` | 1.25s |
+| Decision-snapshot SLA (inner) | `PATTERN_GAME_RM_PREFLIGHT_DECISION_SNAPSHOT_TIMEOUT_S` | 30s (clamped 2–30) |
+| Hard wall (subprocess isolation) | `PATTERN_GAME_RM_PREFLIGHT_HARD_TIMEOUT_S` | 45s when unset (≥ inner, clamped 1–120) |
 
 On worker timeout, audit includes **`preflight_timeout_waiting_for_trade_v1`**. If the worker returns **zero** closed trades in `replay_outcomes_json`, preflight fails **`no_replay_outcomes_for_preflight_v1`** (not an infinite wait).
 
