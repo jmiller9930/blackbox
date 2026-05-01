@@ -13,6 +13,7 @@ from __future__ import annotations
 import argparse
 import copy
 import datetime
+from datetime import timezone
 import json
 import sys
 import uuid
@@ -37,7 +38,7 @@ def run_training_cycle(
     from runtime_flags import apply_runtime_overrides_v1
 
     cycle_id = (
-        f"cycle_{datetime.datetime.utcnow().strftime('%Y%m%dT%H%M%SZ')}"
+        f"cycle_{datetime.datetime.now(timezone.utc).strftime('%Y%m%dT%H%M%SZ')}"
         f"_{uuid.uuid4().hex[:8]}"
     )
     cycle_dir = Path(output_dir) / cycle_id
@@ -182,7 +183,7 @@ def build_referee_report(
 
     return {
         "schema": "student_learning_referee_report_v1",
-        "created_at_utc": datetime.datetime.utcnow().strftime("%Y-%m-%dT%H:%M:%SZ"),
+        "created_at_utc": datetime.datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ"),
         "scenario_id": candidate_result["case"]["case_id"],
         "student_id": candidate_result["config"].get("agent_id"),
         "seed_run_id": seed_result["run_id"],

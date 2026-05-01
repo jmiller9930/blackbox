@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import argparse
 import datetime
+from datetime import timezone
 import json
 import sys
 import uuid
@@ -43,7 +44,7 @@ def run_test_pack(
     pack, resolved_pack_path = load_test_pack(pack_path)
 
     run_id = (
-        f"test_run_{datetime.datetime.utcnow().strftime('%Y%m%dT%H%M%SZ')}"
+        f"test_run_{datetime.datetime.now(timezone.utc).strftime('%Y%m%dT%H%M%SZ')}"
         f"_{uuid.uuid4().hex[:8]}"
     )
     run_dir = Path(output_dir) / run_id
@@ -93,7 +94,7 @@ def run_test_pack(
     overall_status = "PASS" if tests_passed == len(results) else "FAIL"
     summary = {
         "schema": TEST_SUMMARY_SCHEMA,
-        "created_at_utc": datetime.datetime.utcnow().strftime("%Y-%m-%dT%H:%M:%SZ"),
+        "created_at_utc": datetime.datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ"),
         "test_run_id": run_id,
         "pack_id": pack["pack_id"],
         "pack_path": str(resolved_pack_path),

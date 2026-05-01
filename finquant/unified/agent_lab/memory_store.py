@@ -14,6 +14,7 @@ from __future__ import annotations
 import json
 import uuid
 import datetime
+from datetime import timezone
 from pathlib import Path
 from typing import Any
 
@@ -26,7 +27,7 @@ class MemoryStore:
         self._config = config
         self._base = Path(base_output_dir)
         self._run_id = (
-            f"run_{datetime.datetime.utcnow().strftime('%Y%m%dT%H%M%SZ')}"
+            f"run_{datetime.datetime.now(timezone.utc).strftime('%Y%m%dT%H%M%SZ')}"
             f"_{uuid.uuid4().hex[:8]}"
         )
         self._run_dir = self._base / self._run_id
