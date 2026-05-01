@@ -32,20 +32,31 @@ def _scaffold_check() -> None:
         _LAB_ROOT / "schemas.py",
         _LAB_ROOT / "config.py",
         _LAB_ROOT / "case_loader.py",
+        _LAB_ROOT / "data_contracts.py",
+        _LAB_ROOT / "decision_contracts.py",
         _LAB_ROOT / "lifecycle_engine.py",
+        _LAB_ROOT / "execution_flow.py",
         _LAB_ROOT / "evaluation.py",
+        _LAB_ROOT / "learning_governance.py",
         _LAB_ROOT / "memory_store.py",
         _LAB_ROOT / "retrieval.py",
+        _LAB_ROOT / "training_cycle.py",
+        _LAB_ROOT / "test_framework.py",
         _LAB_ROOT / "configs" / "default_lab_config.json",
         _LAB_ROOT / "cases" / "lifecycle_basic_v1.json",
         _LAB_ROOT / "cases" / "trend_entry_exit_v1.json",
         _LAB_ROOT / "cases" / "chop_no_trade_v1.json",
         _LAB_ROOT / "cases" / "false_breakout_exit_v1.json",
+        _LAB_ROOT / "cases" / "memory_candidate_threshold_v1.json",
+        _LAB_ROOT / "test_packs" / "learning_smoke_v1.json",
         _LAB_ROOT / "outputs" / ".gitkeep",
         _LAB_ROOT / "tests" / "test_case_loader.py",
+        _LAB_ROOT / "tests" / "test_data_contracts.py",
         _LAB_ROOT / "tests" / "test_memory_store.py",
         _LAB_ROOT / "tests" / "test_retrieval_filter.py",
         _LAB_ROOT / "tests" / "test_lifecycle_engine_smoke.py",
+        _LAB_ROOT / "tests" / "test_training_cycle.py",
+        _LAB_ROOT / "tests" / "test_test_framework.py",
     ]
     missing = [str(p) for p in required if not p.exists()]
     if missing:
@@ -60,46 +71,52 @@ def _scaffold_check() -> None:
     print("lab scaffold ready")
 
 
-def run(case_path: str, config_path: str, output_dir: str) -> int:
+def run(
+    case_path: str,
+    config_path: str,
+    output_dir: str,
+    *,
+    data_window_months: int | None = None,
+    interval: str | None = None,
+) -> int:
     from config import load_config
-    from case_loader import load_case
-    from lifecycle_engine import LifecycleEngine
-    from evaluation import evaluate_lifecycle
-    from memory_store import MemoryStore
-    from retrieval import retrieve_eligible
+    from execution_flow import execute_case
+    from runtime_flags import apply_runtime_overrides_v1
 
     print(f"[runner] loading config      : {config_path}")
     config = load_config(config_path)
+    config = apply_runtime_overrides_v1(
+        config,
+        data_window_months=data_window_months,
+        interval=interval,
+    )
+    req = config.get("runtime_request_v1") if isinstance(config.get("runtime_request_v1"), dict) else {}
+    if req:
+        print(
+            "[runner] runtime request    : "
+            f"months={req.get('data_window_months_v1')} "
+            f"interval={req.get('interval_v1')} "
+            f"interval_minutes={req.get('interval_minutes_v1')}"
+        )
 
     print(f"[runner] loading case        : {case_path}")
-    case = load_case(case_path)
-    print(f"[runner] case loaded         : {case['case_id']} ({case['symbol']})")
-
-    store = MemoryStore(config=config, base_output_dir=output_dir)
-
-    print(f"[runner] retrieval check     : enabled={config.get('retrieval_enabled_default_v1')}")
-    prior_records, retrieval_trace = retrieve_eligible(
-        shared_store_path=config.get("memory_store_path"),
-        case=case,
+    result = execute_case(
+        case_path=case_path,
         config=config,
+        output_dir=output_dir,
     )
-    store.append_retrieval_trace(retrieval_trace)
-    print(f"[runner] prior records used  : {len(prior_records)}")
-
-    engine = LifecycleEngine(config=config)
+    case = result["case"]
+    print(f"[runner] case loaded         : {case['case_id']} ({case['symbol']})")
+    print(f"[runner] retrieval check     : enabled={config.get('retrieval_enabled_default_v1')}")
+    print(f"[runner] prior records used  : {len(result['prior_records'])}")
     print(f"[runner] started lifecycle   : {case['case_id']}")
-    decisions = engine.run_case(case, prior_records=prior_records)
-    store.append_decisions(decisions)
-    print(f"[runner] decisions emitted   : {len(decisions)}")
-
-    evaluation = evaluate_lifecycle(case=case, decisions=decisions)
+    print(f"[runner] decisions emitted   : {len(result['decisions'])}")
+    evaluation = result["evaluation"]
     print(f"[runner] outcome graded      : {evaluation['final_status_v1']}")
-
-    record = store.write_learning_record(case=case, evaluation=evaluation)
+    record = result["learning_record"]
     print(f"[runner] learning record     : {record['record_id']}")
-
-    run_id = store.finalize(case=case, evaluation=evaluation)
-    run_dir = store.get_run_dir()
+    run_id = result["run_id"]
+    run_dir = Path(result["run_dir"])
     print(f"[runner] output dir          : {run_dir}")
     print(f"[runner] artifacts written   : {', '.join(evaluation.get('notes', [])[:0] or ['decision_trace.json', 'learning_records.jsonl', 'retrieval_trace.json', 'evaluation.json', 'run_summary.json'])}")
 
@@ -145,6 +162,18 @@ def main() -> None:
         help="Base output directory (default: agent_lab/outputs/)",
     )
     parser.add_argument(
+        "--data-window-months",
+        type=int,
+        default=None,
+        help="Runtime data window in months (examples: 12, 18, 25). Persisted into run artifacts.",
+    )
+    parser.add_argument(
+        "--interval",
+        type=str,
+        default=None,
+        help="Runtime candle interval selector: 5/5m, 15/15m, 45/45m, 1h/1hour. Persisted into run artifacts.",
+    )
+    parser.add_argument(
         "--scaffold-check",
         action="store_true",
         help="Verify all scaffold files exist and exit",
@@ -167,7 +196,13 @@ def main() -> None:
             )
             _json.dump(c, tmp)
             tmp.close()
-            code = run(tmp.name, args.config, args.output_dir)
+            code = run(
+                tmp.name,
+                args.config,
+                args.output_dir,
+                data_window_months=args.data_window_months,
+                interval=args.interval,
+            )
             os.unlink(tmp.name)
             exit_codes.append(code)
         sys.exit(1 if any(c != 0 for c in exit_codes) else 0)
@@ -175,7 +210,13 @@ def main() -> None:
     if not args.case:
         parser.error("--case (or --case-pack or --scaffold-check) is required")
 
-    code = run(args.case, args.config, args.output_dir)
+    code = run(
+        args.case,
+        args.config,
+        args.output_dir,
+        data_window_months=args.data_window_months,
+        interval=args.interval,
+    )
     sys.exit(code)
 
 

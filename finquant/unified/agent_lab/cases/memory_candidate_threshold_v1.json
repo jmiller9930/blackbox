@@ -1,0 +1,57 @@
+{
+  "schema": "finquant_lifecycle_case_v1",
+  "case_id": "memory_candidate_threshold_v1",
+  "symbol": "SOL-PERP",
+  "timeframe_minutes": 60,
+  "description": "Near-threshold trend continuation. Without memory the student should stand down; with promoted memory/context the student should allow a bounded ENTER_LONG.",
+  "decision_start_index": 1,
+  "decision_end_index": 1,
+  "hidden_future_start_index": 2,
+  "expected_learning_focus_v1": ["entry_quality"],
+  "candles": [
+    {
+      "timestamp": "2024-01-05T08:00:00Z",
+      "open": 100.0,
+      "high": 100.8,
+      "low": 99.6,
+      "close": 100.3,
+      "volume": 1000,
+      "rsi_14": 50.5,
+      "ema_20": 100.0,
+      "atr_14": 1.2
+    },
+    {
+      "timestamp": "2024-01-05T09:00:00Z",
+      "open": 100.3,
+      "high": 101.5,
+      "low": 100.1,
+      "close": 101.0,
+      "volume": 1080,
+      "rsi_14": 53.2,
+      "ema_20": 100.4,
+      "atr_14": 1.3
+    },
+    {
+      "timestamp": "2024-01-05T10:00:00Z",
+      "open": 101.0,
+      "high": 103.1,
+      "low": 100.9,
+      "close": 102.8,
+      "volume": 1500,
+      "rsi_14": 59.0,
+      "ema_20": 101.0,
+      "atr_14": 1.7
+    },
+    {
+      "timestamp": "2024-01-05T11:00:00Z",
+      "open": 102.8,
+      "high": 104.2,
+      "low": 102.6,
+      "close": 103.9,
+      "volume": 1600,
+      "rsi_14": 62.1,
+      "ema_20": 101.8,
+      "atr_14": 1.8
+    }
+  ]
+}

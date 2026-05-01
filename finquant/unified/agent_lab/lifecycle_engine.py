@@ -11,13 +11,17 @@ Phase 0: deterministic stub logic. LLM wiring is a later directive.
 from __future__ import annotations
 from typing import Any
 
-from schemas import make_decision, VALID_ACTIONS
+from data_contracts import build_input_packet
+from decision_contracts import make_decision
 
 
 class LifecycleEngine:
     def __init__(self, config: dict[str, Any]) -> None:
         self.config = config
         self.mode = config.get("mode", "deterministic_stub_v1")
+        self._rule_source = (
+            "deterministic_stub_v1" if self.mode == "deterministic_stub_v1" else "rule"
+        )
 
     def run_case(
         self,
@@ -47,8 +51,25 @@ class LifecycleEngine:
             # Only candles up to (and including) step_index, capped at hide_from
             visible_end = min(step_index + 1, hide_from)
             visible_bars = candles[:visible_end]
+            input_packet = build_input_packet(
+                case=case,
+                step_index=step_index,
+                visible_bars=visible_bars,
+                config=self.config,
+                prior_records=prior_records or [],
+            )
 
-            action, thesis, invalidation, risk_state = self._decide(
+            (
+                action,
+                thesis,
+                invalidation,
+                risk_state,
+                decision_source,
+                confidence_band,
+                supporting_indicators,
+                conflicting_indicators,
+                risk_notes,
+            ) = self._decide(
                 step_index=step_index,
                 visible_bars=visible_bars,
                 position_open=position_open,
@@ -56,6 +77,7 @@ class LifecycleEngine:
                 entry_volume=entry_volume,
                 prior_rsi=prior_rsi,
                 prior_records=prior_records or [],
+                input_packet=input_packet,
             )
 
             decision = make_decision(
@@ -67,9 +89,14 @@ class LifecycleEngine:
                 invalidation_v1=invalidation,
                 risk_state_v1=risk_state,
                 observed_context_v1=self._summarize_context(visible_bars),
+                input_packet_v1=input_packet,
+                confidence_band_v1=confidence_band,
+                supporting_indicators_v1=supporting_indicators,
+                conflicting_indicators_v1=conflicting_indicators,
+                risk_notes_v1=risk_notes,
                 memory_used_v1=[r["record_id"] for r in (prior_records or [])],
                 llm_used_v1=False,
-                decision_source_v1="deterministic_stub_v1",
+                decision_source_v1=decision_source,
             )
             decisions.append(decision)
 
@@ -101,8 +128,9 @@ class LifecycleEngine:
         entry_volume: float | None,
         prior_rsi: float | None,
         prior_records: list,
-    ) -> tuple[str, str, str, str]:
-        """Return (action, thesis, invalidation, risk_state)."""
+        input_packet: dict[str, Any],
+    ) -> tuple[str, str, str, str, str, str, list[str], list[str], str]:
+        """Return decision fields for the governed contract."""
 
         if not visible_bars:
             return (
@@ -110,14 +138,22 @@ class LifecycleEngine:
                 "No candles visible at this step.",
                 "Insufficient data — cannot form a thesis.",
                 "no_data",
+                self._rule_source,
+                "low",
+                [],
+                ["no_visible_bars"],
+                "No risk can be defined without visible data.",
             )
 
         current = visible_bars[-1]
         rsi = current.get("rsi_14")
         atr = current.get("atr_14")
         close = current.get("close", 0.0)
+        ema = current.get("ema_20")
 
         rsi_str = f"{rsi:.1f}" if rsi is not None else "N/A"
+        support: list[str] = []
+        conflicts: list[str] = []
 
         # -- If in a position, evaluate hold vs exit --
         if position_open and entry_price is not None:
@@ -153,12 +189,22 @@ class LifecycleEngine:
                     f"Thesis invalidated: {'; '.join(reasons)}.",
                     "RSI reclaims prior level or price clears resistance.",
                     f"exit_triggered {' '.join(reasons)}",
+                    self._rule_source,
+                    "high",
+                    reasons,
+                    [],
+                    "Exit was triggered by explicit invalidation rules.",
                 )
             return (
                 "HOLD",
                 f"Position open. RSI={rsi_str}, close={close:.2f}. No exit signal.",
                 "Exit if RSI < 45, price retreats 0.5%, or resistance recaptured.",
                 f"holding entry={entry_price:.2f}",
+                self._rule_source,
+                "medium",
+                [f"RSI={rsi_str}", f"close={close:.2f}"],
+                [],
+                "Hold while thesis remains intact.",
             )
 
         # -- No position — evaluate entry --
@@ -173,6 +219,11 @@ class LifecycleEngine:
                     f"Breakout above resistance={res}: close={close:.2f}, RSI={rsi_str}, ATR={atr:.2f}, vol={current.get('volume')}.",
                     f"Exit if close falls back below resistance {res} on next candle.",
                     f"breakout_long res={res} rsi={rsi_str}",
+                    self._rule_source,
+                    "high",
+                    [f"breakout_above_resistance={res}", f"RSI={rsi_str}", f"ATR={atr:.2f}"],
+                    [],
+                    "ATR-based risk geometry should be applied if opened.",
                 )
 
         if len(visible_bars) < 2:
@@ -181,6 +232,11 @@ class LifecycleEngine:
                 "Only one candle visible; insufficient context for trend entry.",
                 "Need at least 2 candles to form a thesis.",
                 "insufficient_context",
+                self._rule_source,
+                "low",
+                [],
+                ["insufficient_context"],
+                "Do not size risk from a one-candle view.",
             )
 
         prev = visible_bars[-2]
@@ -188,6 +244,17 @@ class LifecycleEngine:
         rsi_ok = rsi is not None and 50 < rsi < 70
         volume_expand = current.get("volume", 0) > prev.get("volume", 0)
         atr_expand = atr is not None and atr > 1.5
+        price_above_ema = ema is not None and close > ema
+        memory = input_packet.get("memory_context_v1") or {}
+        memory_long = int(memory.get("long_bias_count_v1", 0))
+        memory_available = bool(memory.get("memory_influence_available_v1"))
+        near_threshold_long = (
+            price_up
+            and price_above_ema
+            and rsi is not None and rsi >= 52
+            and atr is not None and atr >= 1.2
+            and current.get("volume", 0) >= prev.get("volume", 0) * 1.05
+        )
 
         # Trend entry: price rising, RSI mid-range, volume expanding
         if price_up and rsi_ok and volume_expand and atr_expand:
@@ -196,6 +263,24 @@ class LifecycleEngine:
                 f"Uptrend: close {prev['close']:.2f}→{close:.2f}, RSI={rsi_str}, volume expanding, ATR={atr:.2f}.",
                 f"Exit if close drops below {close * 0.995:.2f} or RSI decays with volume collapse.",
                 f"entry_long rsi={rsi_str} atr={atr:.2f}",
+                self._rule_source,
+                "high",
+                [f"close_up={price_up}", f"rsi_midrange={rsi_ok}", f"volume_expand={volume_expand}", f"atr_expand={atr_expand}"],
+                [],
+                "Strong trend-continuation evidence.",
+            )
+
+        if memory_available and memory_long > 0 and near_threshold_long:
+            return (
+                "ENTER_LONG",
+                f"Memory-backed long: similar promoted long pattern(s)={memory_long}; close={close:.2f}, RSI={rsi_str}, ATR={atr:.2f}.",
+                f"Exit if close drops below {close * 0.995:.2f} or memory thesis is contradicted by RSI < 45.",
+                f"memory_backed_entry long_bias={memory_long}",
+                "hybrid",
+                "medium",
+                [f"memory_long_bias={memory_long}", f"close_above_ema={price_above_ema}", f"rsi={rsi_str}"],
+                ["direct_rule_threshold_not_fully_met"],
+                "Memory/context promoted a near-threshold trend setup into an allowed entry.",
             )
 
         # Chop / ranging: price not moving decisively
@@ -207,6 +292,11 @@ class LifecycleEngine:
                 f"Market choppy: avg_move={avg_move:.2f}, ATR={atr}. No edge.",
                 "Stand down until ATR > 1.0 and directional conviction appears.",
                 "chop_no_edge",
+                self._rule_source,
+                "medium",
+                [],
+                [f"avg_move={avg_move:.2f}", f"atr={atr}"],
+                "No-trade is the best bounded action under chop.",
             )
 
         return (
@@ -214,6 +304,11 @@ class LifecycleEngine:
             f"Conditions not met: price_up={price_up}, rsi_ok={rsi_ok}, volume_expand={volume_expand}.",
             "Require price uptick, RSI 50-70, expanding volume.",
             "wait",
+                self._rule_source,
+                "low",
+            [],
+            [f"price_up={price_up}", f"rsi_ok={rsi_ok}", f"volume_expand={volume_expand}"],
+            "Wait for a stronger bounded setup.",
         )
 
     def _summarize_context(self, visible_bars: list[dict]) -> dict[str, Any]:

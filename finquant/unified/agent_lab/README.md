@@ -43,9 +43,35 @@ python finquant/unified/agent_lab/runner.py --scaffold-check
 
 # Run the basic lifecycle case
 python finquant/unified/agent_lab/runner.py \
-  --case-pack finquant/unified/agent_lab/cases/lifecycle_basic_v1.json \
-  --config finquant/unified/agent_lab/configs/agent_lab_config_v1.json \
+  --case finquant/unified/agent_lab/cases/lifecycle_basic_v1.json \
+  --config finquant/unified/agent_lab/configs/default_lab_config.json \
   --output-dir finquant/unified/agent_lab/outputs
+
+# Same runner with script-friendly runtime selectors
+python finquant/unified/agent_lab/runner.py \
+  --case finquant/unified/agent_lab/cases/lifecycle_basic_v1.json \
+  --config finquant/unified/agent_lab/configs/default_lab_config.json \
+  --data-window-months 12 \
+  --interval 15
+
+# Observable training cycle:
+# seed memory -> control run -> memory/context run -> referee report
+python finquant/unified/agent_lab/training_cycle.py \
+  --seed-case finquant/unified/agent_lab/cases/trend_entry_exit_v1.json \
+  --candidate-case finquant/unified/agent_lab/cases/memory_candidate_threshold_v1.json \
+  --config finquant/unified/agent_lab/configs/default_lab_config.json \
+  --output-dir finquant/unified/agent_lab/outputs \
+  --data-window-months 12 \
+  --interval 1hour
+
+# Named test pack:
+# runs one or more isolated tests and writes a pack summary
+python finquant/unified/agent_lab/test_framework.py \
+  --test-pack finquant/unified/agent_lab/test_packs/learning_smoke_v1.json \
+  --config finquant/unified/agent_lab/configs/default_lab_config.json \
+  --output-dir finquant/unified/agent_lab/outputs \
+  --data-window-months 12 \
+  --interval 1hour
 ```
 
 ---
@@ -56,13 +82,19 @@ python finquant/unified/agent_lab/runner.py \
 |-----------|------|
 | `runner.py` | Entry point — orchestrates case loading, lifecycle, evaluation, output |
 | `case_loader.py` | Loads and validates case packs |
+| `data_contracts.py` | Builds the causal input packet with math features, context, hypotheses, and memory summary |
 | `lifecycle_engine.py` | Steps through candle context; hides future bars; emits decisions |
 | `decision_contracts.py` | `finquant_decision_v1` schema enforcement |
+| `execution_flow.py` | Shared execution path used by runner and training cycle |
 | `evaluation.py` | Grades outcome; writes learning records |
+| `learning_governance.py` | Governs whether a run can become retrievable memory |
 | `memory_store.py` | Durable JSONL store for learning records |
 | `retrieval.py` | Retrieves eligible prior records for a new run |
+| `training_cycle.py` | Seed/train -> control -> memory/context -> referee artifact |
+| `test_framework.py` | Runs named test packs and writes a top-level test summary |
 | `schemas/` | JSON Schema definitions for all contracts |
 | `cases/` | Case pack JSON files |
+| `test_packs/` | Named isolated test packs |
 | `configs/` | Agent lab configuration |
 | `outputs/` | Per-run output artifacts (gitignored contents, `.gitkeep` only) |
 | `docs/` | Architecture notes |
@@ -78,4 +110,24 @@ decisions_emitted > 0
 learning_records_written == cases_processed
 leakage_audit.pass == true
 outputs_written == true
+```
+
+For the observable learning cycle, the expected end-state is:
+
+```
+seed_memory_written > 0
+control_run_present == true
+candidate_run_present == true
+retrieval_match_count > 0
+referee_report_exists == true
+verdict_v1 in {"LEARNED_BEHAVIOR_PROVEN", "MEMORY_MATCH_NO_IMPACT", "BEHAVIOR_CHANGED_NOT_PROVEN_BETTER"}
+```
+
+For the test framework, the expected top-level artifacts are:
+
+```
+test_framework_summary.json exists
+test_framework_summary.md exists
+tests_total > 0
+overall_status_v1 in {"PASS", "FAIL"}
 ```

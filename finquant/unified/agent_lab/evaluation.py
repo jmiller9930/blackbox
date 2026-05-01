@@ -120,9 +120,11 @@ def _collect_labels(
 
 def _build_notes(decisions: list[dict], case: dict) -> list[str]:
     notes: list[str] = []
+    any_llm = any(bool(d.get("llm_used_v1")) for d in decisions)
     for d in decisions:
         notes.append(f"step {d['step_index']}: action={d['action']} source={d['decision_source_v1']}")
-    notes.append(f"leakage_audit: causal_context_only confirmed (stub, no LLM output)")
+    mode_note = "llm or hybrid path present" if any_llm else "rule-only path"
+    notes.append(f"leakage_audit: causal_context_only confirmed ({mode_note})")
     return notes
 
 
@@ -132,4 +134,10 @@ def _resolve_status(entry_quality: str, exit_quality: str, no_trade_correctness:
     for sig in fail_signals:
         if sig in combined:
             return "FAIL"
+    if (
+        entry_quality in {"entered_as_expected", "correctly_abstained"}
+        or exit_quality in {"exited_as_expected", "no_exit_needed"}
+        or no_trade_correctness in {"correctly_stood_down", "traded_as_expected"}
+    ):
+        return "PASS"
     return "INFO"

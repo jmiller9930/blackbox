@@ -17,6 +17,7 @@ import datetime
 from pathlib import Path
 from typing import Any
 
+from learning_governance import build_learning_governance, build_lesson_text
 from schemas import SCHEMA_LEARNING_RECORD, SCHEMA_RUN_SUMMARY
 
 
@@ -52,20 +53,53 @@ class MemoryStore:
         evaluation: dict[str, Any],
     ) -> dict[str, Any]:
         record_id = f"lr_{uuid.uuid4().hex}"
-        retrieval_default = self._config.get("retrieval_enabled_default_v1", False)
+        decisions = list(self._decision_trace)
+        governance = build_learning_governance(
+            evaluation=evaluation,
+            decisions=decisions,
+        )
+        auto_promote = bool(self._config.get("auto_promote_learning_v1", False))
+        promoted_now = governance["decision"] == "PROMOTE" and auto_promote
+        retrieval_enabled = promoted_now
+        entry_action = "NO_TRADE"
+        for decision in decisions:
+            action = str(decision.get("action") or "")
+            if action in {"ENTER_LONG", "ENTER_SHORT"}:
+                entry_action = action
+                break
+        exit_action = "EXIT" if any(str(d.get("action") or "") == "EXIT" for d in decisions) else "NONE"
 
         record: dict[str, Any] = {
             "schema": SCHEMA_LEARNING_RECORD,
+            "agent_id": self._config.get("agent_id", "finquant"),
             "case_id": case["case_id"],
             "record_id": record_id,
             "symbol": case.get("symbol", ""),
+            "timeframe": f"{case.get('timeframe_minutes', 0)}m",
             "timeframe_minutes": case.get("timeframe_minutes", 0),
+            "decision_trace_ref": f"{self._run_id}/decision_trace.json",
             "decision_trace_ref_v1": f"{self._run_id}/decision_trace.json",
             "evaluation_ref_v1": f"{self._run_id}/evaluation.json",
+            "entry_action_v1": entry_action,
+            "exit_action_v1": exit_action,
+            "outcome_v1": {
+                "final_status_v1": evaluation.get("final_status_v1"),
+                "entry_quality_v1": evaluation.get("entry_quality_v1"),
+                "exit_quality_v1": evaluation.get("exit_quality_v1"),
+            },
+            "grade_v1": evaluation.get("final_status_v1", "UNKNOWN"),
+            "lesson_v1": build_lesson_text(
+                case=case,
+                evaluation=evaluation,
+                decisions=decisions,
+            ),
+            "failure_modes_v1": list(evaluation.get("learning_labels_v1", [])),
+            "learning_governance_v1": governance,
             "learning_labels_v1": evaluation.get("learning_labels_v1", []),
             "stored_v1": True,
-            "promotion_eligible_v1": False,
-            "retrieval_enabled_v1": retrieval_default,
+            "promotion_eligible_v1": promoted_now,
+            "retrieval_enabled_v1": retrieval_enabled,
+            "causal_integrity_v1": all(bool(d.get("causal_context_only_v1", True)) for d in decisions),
             "created_by_v1": "finquant_agent_lab_v1",
         }
 
@@ -139,6 +173,9 @@ class MemoryStore:
             "timeframe_minutes": case.get("timeframe_minutes", 0),
             "mode": self._config.get("mode", "deterministic_stub_v1"),
             "use_llm_v1": self._config.get("use_llm_v1", False),
+            "runtime_data_window_months_v1": self._config.get("runtime_data_window_months_v1"),
+            "runtime_interval_v1": self._config.get("runtime_interval_v1"),
+            "runtime_interval_minutes_v1": self._config.get("runtime_interval_minutes_v1"),
             "decisions_emitted": len(self._decision_trace),
             "learning_records_written": len(self._learning_records),
             "final_status_v1": evaluation.get("final_status_v1", "INFO"),

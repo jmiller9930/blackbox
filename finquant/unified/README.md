@@ -27,4 +27,8 @@ FinQuant is the agent.
 This lab is where we prove the agent works before integrating it.
 
 See `agent_lab/README.md` for execution instructions.  
+See `docs/FINQUANT_UNIFIED_LEARNING_ARCHITECTURE_001.md` for the isolated learning architecture.  
+See `docs/FINQUANT_UNIFIED_DEVELOPMENT_PLAN_001.md` for the directive-driven development plan and closure standard.  
+See `docs/FINQUANT_STUDENT_LEARNING_REFEREE_001.md` for the operator-facing learning proof artifact and verdict contract.  
+See `docs/FINQUANT_RESULTS_INTERPRETATION_GUIDE_001.md` for how to interpret runtime, judgment, and learning results.  
 See `docs/architect/FINQUANT_UNIFIED_AGENT_LAB_ARCHITECTURE_001.md` for the normative architecture directive.

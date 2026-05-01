@@ -1,0 +1,146 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://blackbox.local/finquant/unified/agent_lab/schemas/student_learning_referee_report_v1.schema.json",
+  "title": "student_learning_referee_report_v1",
+  "type": "object",
+  "additionalProperties": true,
+  "required": [
+    "schema",
+    "created_at_utc",
+    "scenario_id",
+    "control_run_id",
+    "candidate_run_id",
+    "control_profile_v1",
+    "candidate_profile_v1",
+    "verdict_v1",
+    "proof_checks_v1"
+  ],
+  "properties": {
+    "schema": {
+      "const": "student_learning_referee_report_v1"
+    },
+    "created_at_utc": {
+      "type": "string"
+    },
+    "scenario_id": {
+      "type": "string"
+    },
+    "student_id": {
+      "type": [
+        "string",
+        "null"
+      ]
+    },
+    "control_run_id": {
+      "type": "string"
+    },
+    "candidate_run_id": {
+      "type": "string"
+    },
+    "control_profile_v1": {
+      "type": "string"
+    },
+    "candidate_profile_v1": {
+      "type": "string"
+    },
+    "model_requested_v1": {
+      "type": [
+        "string",
+        "null"
+      ]
+    },
+    "model_resolved_v1": {
+      "type": [
+        "string",
+        "null"
+      ]
+    },
+    "ollama_base_url_used_v1": {
+      "type": [
+        "string",
+        "null"
+      ]
+    },
+    "retrieval_enabled_v1": {
+      "type": [
+        "boolean",
+        "null"
+      ]
+    },
+    "retrieval_match_count_v1": {
+      "type": [
+        "integer",
+        "null"
+      ],
+      "minimum": 0
+    },
+    "retrieved_record_ids_v1": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    },
+    "store_writes_count_v1": {
+      "type": [
+        "integer",
+        "null"
+      ],
+      "minimum": 0
+    },
+    "memory_impact_class_v1": {
+      "type": [
+        "string",
+        "null"
+      ]
+    },
+    "behavior_delta_v1": {
+      "type": [
+        "object",
+        "null"
+      ]
+    },
+    "outcome_delta_v1": {
+      "type": [
+        "object",
+        "null"
+      ]
+    },
+    "proof_checks_v1": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": [
+          "id",
+          "pass"
+        ],
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "pass": {
+            "type": "boolean"
+          },
+          "detail": {}
+        }
+      }
+    },
+    "verdict_v1": {
+      "type": "string",
+      "enum": [
+        "CONTROL_ONLY",
+        "ENGAGEMENT_WITHOUT_STORE_WRITES",
+        "MEMORY_AVAILABLE_NO_MATCH",
+        "MEMORY_MATCH_NO_IMPACT",
+        "BEHAVIOR_CHANGED_NOT_PROVEN_BETTER",
+        "FALSE_LEARNING_CLAIM_REJECTED",
+        "LEARNED_BEHAVIOR_PROVEN"
+      ]
+    },
+    "operator_summary_v1": {
+      "type": [
+        "string",
+        "null"
+      ]
+    }
+  }
+}
