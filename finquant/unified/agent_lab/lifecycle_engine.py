@@ -22,6 +22,11 @@ class LifecycleEngine:
         self._rule_source = (
             "deterministic_stub_v1" if self.mode == "deterministic_stub_v1" else "rule"
         )
+        self._use_llm = bool(config.get("use_llm_v1", False))
+        self._llm_model = str(config.get("llm_model_v1") or "qwen2.5:7b")
+        self._ollama_url = str(config.get("ollama_base_url_v1") or "http://172.20.2.230:11434")
+        self._llm_timeout = int(config.get("llm_timeout_seconds_v1") or 30)
+        self._llm_max_tokens = int(config.get("llm_max_tokens_v1") or 400)
 
     def run_case(
         self,
@@ -59,26 +64,53 @@ class LifecycleEngine:
                 prior_records=prior_records or [],
             )
 
-            (
-                action,
-                thesis,
-                invalidation,
-                risk_state,
-                decision_source,
-                confidence_band,
-                supporting_indicators,
-                conflicting_indicators,
-                risk_notes,
-            ) = self._decide(
-                step_index=step_index,
-                visible_bars=visible_bars,
-                position_open=position_open,
-                entry_price=entry_price,
-                entry_volume=entry_volume,
-                prior_rsi=prior_rsi,
-                prior_records=prior_records or [],
-                input_packet=input_packet,
-            )
+            # -- Try LLM path first; fall back to stub on any failure --
+            llm_fields: dict[str, Any] = {}
+            llm_used = False
+
+            if self._use_llm:
+                llm_fields, llm_used = self._decide_with_llm(
+                    input_packet=input_packet,
+                    position_open=position_open,
+                    entry_price=entry_price,
+                    entry_volume=entry_volume,
+                )
+
+            if not llm_used:
+                (
+                    action,
+                    thesis,
+                    invalidation,
+                    risk_state,
+                    decision_source,
+                    confidence_band,
+                    supporting_indicators,
+                    conflicting_indicators,
+                    risk_notes,
+                ) = self._decide(
+                    step_index=step_index,
+                    visible_bars=visible_bars,
+                    position_open=position_open,
+                    entry_price=entry_price,
+                    entry_volume=entry_volume,
+                    prior_rsi=prior_rsi,
+                    prior_records=prior_records or [],
+                    input_packet=input_packet,
+                )
+                raw_output = ""
+                llm_latency = 0
+            else:
+                action = llm_fields["action"]
+                thesis = llm_fields["thesis_v1"]
+                invalidation = llm_fields["invalidation_v1"]
+                risk_state = llm_fields["risk_state_v1"]
+                decision_source = "llm"
+                confidence_band = llm_fields["confidence_band_v1"]
+                supporting_indicators = llm_fields["supporting_indicators_v1"]
+                conflicting_indicators = llm_fields["conflicting_indicators_v1"]
+                risk_notes = llm_fields["risk_notes_v1"]
+                raw_output = llm_fields.get("raw_model_output_v1", "")
+                llm_latency = llm_fields.get("llm_latency_ms_v1", 0)
 
             decision = make_decision(
                 case_id=case_id,
@@ -95,9 +127,13 @@ class LifecycleEngine:
                 conflicting_indicators_v1=conflicting_indicators,
                 risk_notes_v1=risk_notes,
                 memory_used_v1=[r["record_id"] for r in (prior_records or [])],
-                llm_used_v1=False,
+                llm_used_v1=llm_used,
                 decision_source_v1=decision_source,
             )
+            # Attach raw model output outside the contract for audit (not authoritative)
+            if llm_used:
+                decision["raw_model_output_v1"] = raw_output
+                decision["llm_latency_ms_v1"] = llm_latency
             decisions.append(decision)
 
             # Update position state
@@ -114,6 +150,55 @@ class LifecycleEngine:
                 prior_rsi = visible_bars[-1].get("rsi_14")
 
         return decisions
+
+    # ------------------------------------------------------------------
+    # LLM decision path (Ollama)
+    # ------------------------------------------------------------------
+
+    def _decide_with_llm(
+        self,
+        *,
+        input_packet: dict[str, Any],
+        position_open: bool,
+        entry_price: float | None,
+        entry_volume: float | None,
+    ) -> tuple[dict[str, Any], bool]:
+        """
+        Call Ollama and parse a governed decision.
+        Returns (fields_dict, success).
+        On any failure returns ({}, False) so caller falls back to stub.
+        """
+        from llm_adapter import call_ollama, normalize_llm_decision
+        from prompt_builder import build_prompt, SYSTEM_PROMPT
+
+        prompt = build_prompt(
+            input_packet,
+            position_open=position_open,
+            entry_price=entry_price,
+            entry_volume=entry_volume,
+        )
+
+        result = call_ollama(
+            base_url=self._ollama_url,
+            model=self._llm_model,
+            prompt=prompt,
+            system_prompt=SYSTEM_PROMPT,
+            timeout_seconds=self._llm_timeout,
+            max_tokens=self._llm_max_tokens,
+        )
+
+        if not result.success:
+            return {}, False
+
+        fields = normalize_llm_decision(
+            result.parsed,
+            case_id=str(input_packet.get("case_id", "")),
+            step_index=int(input_packet.get("step_index", 0)),
+            symbol=str(input_packet.get("symbol", "")),
+            raw_output=result.raw_output,
+            latency_ms=result.latency_ms,
+        )
+        return fields, True
 
     # ------------------------------------------------------------------
     # Deterministic stub decision logic

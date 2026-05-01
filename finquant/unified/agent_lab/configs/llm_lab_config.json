@@ -1,0 +1,13 @@
+{
+  "schema": "finquant_agent_lab_config_v1",
+  "agent_id": "finquant",
+  "mode": "llm_v1",
+  "use_llm_v1": true,
+  "llm_model_v1": "qwen2.5:7b",
+  "ollama_base_url_v1": "http://172.20.2.230:11434",
+  "llm_timeout_seconds_v1": 30,
+  "llm_max_tokens_v1": 400,
+  "memory_store_path": "finquant/unified/agent_lab/outputs/shared_learning_records.jsonl",
+  "retrieval_enabled_default_v1": false,
+  "write_outputs_v1": true
+}

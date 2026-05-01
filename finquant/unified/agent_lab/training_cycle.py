@@ -264,6 +264,191 @@ def _operator_summary(verdict: str, retrieval_match_count: int, control_entry: s
     )
 
 
+def run_progressive_cycle(
+    *,
+    seed_case_path: str,
+    candidate_case_paths: list[str],
+    config_path: str,
+    output_dir: str,
+    data_window_months: int | None = None,
+    interval: str | None = None,
+    n_passes: int = 3,
+) -> dict[str, Any]:
+    """
+    Progressive multi-run learning cycle.
+
+    Structure:
+      1. Seed run   — builds initial governed memory (auto_promote=True)
+      2. Control run — first candidate case, no memory (baseline)
+      3. Pass 1..N  — same or held-out candidate case(s), each accumulating
+                       promoted memory from all prior passes
+
+    Returns a summary dict with all cycle results and a comparison table.
+
+    candidate_case_paths: list of case paths for each pass.
+      - If one path is given, it is used for all N passes.
+      - If N paths are given, each pass uses a different held-out case.
+    """
+    from config import load_config
+    from execution_flow import execute_case
+    from runtime_flags import apply_runtime_overrides_v1
+
+    cycle_id = (
+        f"progressive_{datetime.datetime.now(timezone.utc).strftime('%Y%m%dT%H%M%SZ')}"
+        f"_{uuid.uuid4().hex[:8]}"
+    )
+    cycle_dir = Path(output_dir) / cycle_id
+    runs_dir = cycle_dir / "runs"
+    cycle_dir.mkdir(parents=True, exist_ok=True)
+    runs_dir.mkdir(parents=True, exist_ok=True)
+
+    governed_store = cycle_dir / "shared_learning_records.jsonl"
+
+    base_config = load_config(config_path)
+    base_config = apply_runtime_overrides_v1(
+        base_config,
+        data_window_months=data_window_months,
+        interval=interval,
+    )
+    base_config["memory_store_path"] = str(governed_store)
+
+    # -- Seed run --
+    seed_config = copy.deepcopy(base_config)
+    seed_config["retrieval_enabled_default_v1"] = False
+    seed_config["auto_promote_learning_v1"] = True
+
+    seed_result = execute_case(
+        case_path=seed_case_path,
+        config=seed_config,
+        output_dir=str(runs_dir),
+    )
+
+    # -- Control run (no memory) --
+    control_path = candidate_case_paths[0] if candidate_case_paths else seed_case_path
+    control_config = copy.deepcopy(base_config)
+    control_config["retrieval_enabled_default_v1"] = False
+    control_config["auto_promote_learning_v1"] = False
+
+    control_result = execute_case(
+        case_path=control_path,
+        config=control_config,
+        output_dir=str(runs_dir),
+    )
+
+    # -- Progressive passes (each inherits all prior governed memory) --
+    pass_results: list[dict[str, Any]] = []
+    reports: list[dict[str, Any]] = []
+
+    for pass_idx in range(n_passes):
+        pass_case_path = (
+            candidate_case_paths[pass_idx]
+            if pass_idx < len(candidate_case_paths)
+            else candidate_case_paths[-1]
+        )
+        pass_config = copy.deepcopy(base_config)
+        pass_config["retrieval_enabled_default_v1"] = True
+        pass_config["auto_promote_learning_v1"] = True   # each pass can promote too
+
+        pass_result = execute_case(
+            case_path=pass_case_path,
+            config=pass_config,
+            output_dir=str(runs_dir),
+        )
+        pass_results.append(pass_result)
+
+        report = build_referee_report(
+            seed_result=seed_result,
+            control_result=control_result,
+            candidate_result=pass_result,
+        )
+        report["pass_index_v1"] = pass_idx + 1
+        report["retrieval_match_count_at_pass_v1"] = report["retrieval_match_count_v1"]
+        reports.append(report)
+
+    # -- Write all pass reports --
+    report_paths: list[str] = []
+    for i, report in enumerate(reports):
+        rpath = cycle_dir / f"referee_report_pass_{i + 1}.json"
+        with open(rpath, "w") as f:
+            json.dump(report, f, indent=2)
+        report_paths.append(str(rpath))
+
+    # -- Comparison table --
+    comparison = _build_comparison_table(
+        control_result=control_result,
+        pass_results=pass_results,
+        reports=reports,
+    )
+
+    manifest = {
+        "schema": "finquant_progressive_cycle_manifest_v1",
+        "cycle_id": cycle_id,
+        "n_passes": n_passes,
+        "seed_run_id": seed_result["run_id"],
+        "control_run_id": control_result["run_id"],
+        "pass_run_ids": [r["run_id"] for r in pass_results],
+        "report_paths": report_paths,
+        "shared_learning_store_path": str(governed_store),
+        "comparison_table_v1": comparison,
+    }
+    with open(cycle_dir / "progressive_cycle_manifest.json", "w") as f:
+        json.dump(manifest, f, indent=2)
+
+    return {
+        "cycle_id": cycle_id,
+        "cycle_dir": str(cycle_dir),
+        "seed_result": seed_result,
+        "control_result": control_result,
+        "pass_results": pass_results,
+        "reports": reports,
+        "report_paths": report_paths,
+        "comparison": comparison,
+        "manifest_path": str(cycle_dir / "progressive_cycle_manifest.json"),
+    }
+
+
+def _build_comparison_table(
+    *,
+    control_result: dict[str, Any],
+    pass_results: list[dict[str, Any]],
+    reports: list[dict[str, Any]],
+) -> list[dict[str, Any]]:
+    """Build a row-per-run comparison table for operator inspection."""
+    rows: list[dict[str, Any]] = []
+
+    # Control row
+    rows.append({
+        "run": "control",
+        "memory_enabled": False,
+        "final_status": control_result["evaluation"].get("final_status_v1"),
+        "actions": control_result["evaluation"].get("actions_taken", []),
+        "entry_action": _first_entry(control_result["evaluation"].get("actions_taken", [])),
+        "retrieval_matches": 0,
+        "verdict": "N/A (baseline)",
+    })
+
+    # Pass rows
+    for i, (pass_result, report) in enumerate(zip(pass_results, reports)):
+        rows.append({
+            "run": f"pass_{i + 1}",
+            "memory_enabled": True,
+            "final_status": pass_result["evaluation"].get("final_status_v1"),
+            "actions": pass_result["evaluation"].get("actions_taken", []),
+            "entry_action": _first_entry(pass_result["evaluation"].get("actions_taken", [])),
+            "retrieval_matches": report.get("retrieval_match_count_v1", 0),
+            "verdict": report.get("verdict_v1", "UNKNOWN"),
+        })
+
+    return rows
+
+
+def _first_entry(actions: list[str]) -> str:
+    for a in actions:
+        if a in {"ENTER_LONG", "ENTER_SHORT"}:
+            return a
+    return "NO_TRADE"
+
+
 def main() -> None:
     parser = argparse.ArgumentParser(description="FinQuant isolated training cycle")
     parser.add_argument("--seed-case", required=True, type=str)
