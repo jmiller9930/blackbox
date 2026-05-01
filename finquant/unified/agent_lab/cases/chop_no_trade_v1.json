@@ -1,0 +1,60 @@
+{
+  "schema": "finquant_lifecycle_case_v1",
+  "case_id": "chop_no_trade_v1",
+  "symbol": "SYNTH-PERP",
+  "timeframe": "1h",
+  "description": "Choppy market case. Price is ranging with no trend conviction. FinQuant should stand down and avoid forced entry.",
+  "expected_behavior": {
+    "entry_expected": false,
+    "exit_expected": false,
+    "no_trade_expected": true,
+    "notes": "Price whipsawing inside a tight range. RSI oscillating mid-range. ATR contracting. Volume thin. Correct behavior is NO_TRADE — no edge is present."
+  },
+  "steps": [
+    {
+      "step_index": 0,
+      "context_notes": "Price oscillating in tight range. No directional conviction.",
+      "visible_bars": [
+        {
+          "timestamp": "2024-01-03T08:00:00Z",
+          "open": 100.0,
+          "high": 101.0,
+          "low": 99.2,
+          "close": 99.8,
+          "volume": 600
+        },
+        {
+          "timestamp": "2024-01-03T09:00:00Z",
+          "open": 99.8,
+          "high": 100.8,
+          "low": 99.0,
+          "close": 100.2,
+          "volume": 550
+        },
+        {
+          "timestamp": "2024-01-03T10:00:00Z",
+          "open": 100.2,
+          "high": 100.9,
+          "low": 99.4,
+          "close": 99.6,
+          "volume": 480
+        }
+      ],
+      "indicators": {
+        "rsi_14": 49.8,
+        "ema_20": 100.1,
+        "atr_14": 0.9
+      }
+    }
+  ],
+  "outcome_candles": [
+    {
+      "timestamp": "2024-01-03T11:00:00Z",
+      "open": 99.6,
+      "high": 100.5,
+      "low": 99.1,
+      "close": 100.0,
+      "volume": 520
+    }
+  ]
+}

@@ -1,0 +1,33 @@
+{
+  "schema": "agent_lab_config_v1",
+  "agent_id": "finquant",
+  "version": "0.1.0-scaffold",
+  "llm": {
+    "enabled": false,
+    "provider": null,
+    "model": null,
+    "notes": "LLM disabled in scaffold phase. Decision source is rule-based stub."
+  },
+  "lifecycle": {
+    "max_steps_per_case": 20,
+    "candle_lookahead_forbidden": true,
+    "decision_source_default": "rule"
+  },
+  "memory": {
+    "retrieval_enabled": false,
+    "max_prior_records": 5,
+    "notes": "Retrieval disabled in scaffold phase. Enable per-record via retrieval_enabled_v1 governance flag."
+  },
+  "evaluation": {
+    "leakage_audit_strict": true,
+    "require_causal_context_only": true
+  },
+  "output": {
+    "write_decision_trace": true,
+    "write_learning_records": true,
+    "write_retrieval_trace": true,
+    "write_evaluation_summary": true,
+    "write_leakage_audit": true,
+    "write_run_manifest": true
+  }
+}

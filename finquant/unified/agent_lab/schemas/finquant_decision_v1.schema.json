@@ -1,0 +1,64 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "finquant_decision_v1",
+  "title": "FinQuant Decision v1",
+  "description": "A single agent decision in a lifecycle step. All LLM output must be converted to this schema before it is treated as an agent decision.",
+  "type": "object",
+  "required": [
+    "schema", "agent_id", "case_id", "step_index", "symbol",
+    "action", "thesis", "invalidation", "confidence_band",
+    "decision_source_v1", "causal_context_only_v1"
+  ],
+  "properties": {
+    "schema": {
+      "type": "string",
+      "const": "finquant_decision_v1"
+    },
+    "agent_id": {
+      "type": "string",
+      "const": "finquant"
+    },
+    "case_id": { "type": "string" },
+    "step_index": { "type": "integer", "minimum": 0 },
+    "symbol": { "type": "string" },
+    "action": {
+      "type": "string",
+      "enum": ["NO_TRADE", "ENTER_LONG", "ENTER_SHORT", "HOLD", "EXIT"]
+    },
+    "thesis": {
+      "type": "string",
+      "description": "Reasoning for the action (must not reference future bars)"
+    },
+    "invalidation": {
+      "type": "string",
+      "description": "Condition that would invalidate this decision"
+    },
+    "confidence_band": {
+      "type": "string",
+      "enum": ["low", "medium", "high"]
+    },
+    "supporting_indicators": {
+      "type": "array",
+      "items": { "type": "string" }
+    },
+    "conflicting_indicators": {
+      "type": "array",
+      "items": { "type": "string" }
+    },
+    "risk_notes": { "type": "string" },
+    "memory_used_v1": {
+      "type": "array",
+      "description": "Record IDs of prior learning records used in this decision",
+      "items": { "type": "string" }
+    },
+    "llm_used_v1": { "type": "boolean" },
+    "decision_source_v1": {
+      "type": "string",
+      "enum": ["rule", "llm", "hybrid"]
+    },
+    "causal_context_only_v1": {
+      "type": "boolean",
+      "description": "True if decision was made using only causally valid (non-future) context"
+    }
+  }
+}

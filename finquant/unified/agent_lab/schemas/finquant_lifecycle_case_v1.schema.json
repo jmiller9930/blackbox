@@ -1,0 +1,77 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "finquant_lifecycle_case_v1",
+  "title": "FinQuant Lifecycle Case v1",
+  "description": "A single lifecycle case for the FinQuant Unified Agent Lab. Future candles are hidden from decision steps and revealed one step at a time by the lifecycle engine.",
+  "type": "object",
+  "required": ["case_id", "schema", "symbol", "steps"],
+  "properties": {
+    "schema": {
+      "type": "string",
+      "const": "finquant_lifecycle_case_v1"
+    },
+    "case_id": {
+      "type": "string",
+      "description": "Unique identifier for this case"
+    },
+    "symbol": {
+      "type": "string",
+      "description": "Trading symbol (e.g. BTC-PERP)"
+    },
+    "timeframe": {
+      "type": "string",
+      "description": "Candle timeframe (e.g. 15m, 1h)"
+    },
+    "description": {
+      "type": "string"
+    },
+    "expected_behavior": {
+      "type": "object",
+      "description": "Human-authored expected agent behavior for grading reference",
+      "properties": {
+        "entry_expected": { "type": "boolean" },
+        "exit_expected": { "type": "boolean" },
+        "no_trade_expected": { "type": "boolean" },
+        "notes": { "type": "string" }
+      }
+    },
+    "steps": {
+      "type": "array",
+      "description": "Ordered decision steps. Each step provides only bars visible at that moment.",
+      "items": {
+        "type": "object",
+        "required": ["step_index", "visible_bars"],
+        "properties": {
+          "step_index": { "type": "integer" },
+          "visible_bars": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "required": ["timestamp", "open", "high", "low", "close", "volume"],
+              "properties": {
+                "timestamp": { "type": "string" },
+                "open": { "type": "number" },
+                "high": { "type": "number" },
+                "low": { "type": "number" },
+                "close": { "type": "number" },
+                "volume": { "type": "number" }
+              }
+            }
+          },
+          "indicators": {
+            "type": "object",
+            "description": "Precomputed indicator values at this step (feature layer only)"
+          },
+          "context_notes": {
+            "type": "string"
+          }
+        }
+      }
+    },
+    "outcome_candles": {
+      "type": "array",
+      "description": "Post-decision candles revealed only after all lifecycle decisions are made",
+      "items": { "type": "object" }
+    }
+  }
+}

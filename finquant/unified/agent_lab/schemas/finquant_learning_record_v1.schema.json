@@ -1,0 +1,74 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "finquant_learning_record_v1",
+  "title": "FinQuant Learning Record v1",
+  "description": "A durable learning record written after a lifecycle closes. Store and promotion are separate: rejected records may be stored but must not be retrievable unless governance explicitly enables retrieval.",
+  "type": "object",
+  "required": [
+    "schema", "agent_id", "case_id", "record_id", "symbol",
+    "entry_action_v1", "exit_action_v1", "grade_v1",
+    "learning_governance_v1", "stored_v1",
+    "promotion_eligible_v1", "retrieval_enabled_v1", "causal_integrity_v1"
+  ],
+  "properties": {
+    "schema": {
+      "type": "string",
+      "const": "finquant_learning_record_v1"
+    },
+    "agent_id": {
+      "type": "string",
+      "const": "finquant"
+    },
+    "case_id": { "type": "string" },
+    "record_id": { "type": "string" },
+    "symbol": { "type": "string" },
+    "timeframe": { "type": "string" },
+    "decision_trace_ref": {
+      "type": "string",
+      "description": "Path to the decision_trace.jsonl for this run"
+    },
+    "entry_action_v1": {
+      "type": "string",
+      "enum": ["NO_TRADE", "ENTER_LONG", "ENTER_SHORT"]
+    },
+    "exit_action_v1": {
+      "type": "string",
+      "enum": ["EXIT", "NONE"]
+    },
+    "outcome_v1": { "type": "object" },
+    "grade_v1": {
+      "type": "string",
+      "enum": ["PASS", "FAIL", "UNKNOWN"]
+    },
+    "lesson_v1": { "type": "string" },
+    "failure_modes_v1": {
+      "type": "array",
+      "items": {
+        "type": "string",
+        "enum": [
+          "entry_quality", "no_trade_quality", "hold_quality", "exit_quality",
+          "missed_opportunity", "premature_exit", "late_exit", "thesis_failure",
+          "invalidation_failure", "indicator_misuse", "regime_misread", "risk_reward_failure"
+        ]
+      }
+    },
+    "learning_governance_v1": {
+      "type": "object",
+      "required": ["decision", "reason_codes"],
+      "properties": {
+        "decision": {
+          "type": "string",
+          "enum": ["HOLD", "PROMOTE", "REJECT"]
+        },
+        "reason_codes": {
+          "type": "array",
+          "items": { "type": "string" }
+        }
+      }
+    },
+    "stored_v1": { "type": "boolean" },
+    "promotion_eligible_v1": { "type": "boolean" },
+    "retrieval_enabled_v1": { "type": "boolean" },
+    "causal_integrity_v1": { "type": "boolean" }
+  }
+}
