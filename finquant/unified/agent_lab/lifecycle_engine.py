@@ -284,25 +284,38 @@ class LifecycleEngine:
         ema = current.get("ema_20")
 
         rsi_str = f"{rsi:.1f}" if rsi is not None else "N/A"
+
+        # All ATR thresholds are price-relative (% of close) so the same logic
+        # works across any instrument price level — $1 altcoin or $100k BTC.
+        ref = close if close > 0 else 1.0
+        atr_pct = (atr / ref) if (atr is not None and ref > 0) else None
+
+        # Thresholds expressed as % of price — calibrated to real 15m SOL-PERP data
+        # where ATR% median=1.24%, p25=0.58%, p75=2.73%.
+        #   atr_expand      : ATR > 1.0% of price  — strong volatility, full trend entry
+        #   atr_near_thresh : ATR > 0.5% of price  — near-threshold, memory-backed entry OK
+        #   atr_chop        : ATR < 0.3% of price  — genuine chop (bottom ~20% of real bars)
+        #   avg_move_chop   : |close-prev| < 0.2% of price — price barely moved
+        ATR_EXPAND_PCT   = 0.0100
+        ATR_NEAR_PCT     = 0.0050
+        ATR_CHOP_PCT     = 0.0030
+        MOVE_CHOP_PCT    = 0.0020
+
         support: list[str] = []
         conflicts: list[str] = []
 
         # -- If in a position, evaluate hold vs exit --
         if position_open and entry_price is not None:
-            # Hard exit conditions
             rsi_low = rsi is not None and rsi < 45.0
-            price_retreat = close < entry_price * 0.995          # 0.5% below entry
-            # Momentum decay: RSI dropped 5+ pts from prior step
+            price_retreat = close < entry_price * 0.995
             rsi_decay = (
                 rsi is not None and prior_rsi is not None
                 and (prior_rsi - rsi) >= 5.0
             )
-            # Volume collapse vs entry volume
             vol_collapse = (
                 entry_volume is not None
                 and current.get("volume", 0) < entry_volume * 0.60
             )
-            # Resistance level invalidation: close fell back below resistance
             res = current.get("resistance_level")
             resistance_break_fail = res is not None and close < res
 
@@ -311,9 +324,9 @@ class LifecycleEngine:
                 if rsi_low:
                     reasons.append(f"RSI={rsi_str}<45")
                 if price_retreat:
-                    reasons.append(f"close={close:.2f}<entry*0.995={entry_price*0.995:.2f}")
+                    reasons.append(f"close={close:.4f}<entry*0.995={entry_price*0.995:.4f}")
                 if resistance_break_fail:
-                    reasons.append(f"close={close:.2f} fell back below resistance={res}")
+                    reasons.append(f"close fell back below resistance={res}")
                 if rsi_decay and vol_collapse:
                     reasons.append(f"RSI decayed {prior_rsi:.1f}→{rsi_str}, volume collapsed")
                 return (
@@ -325,38 +338,41 @@ class LifecycleEngine:
                     "high",
                     reasons,
                     [],
-                    "Exit was triggered by explicit invalidation rules.",
+                    "Exit triggered by explicit invalidation rules.",
                 )
             return (
                 "HOLD",
-                f"Position open. RSI={rsi_str}, close={close:.2f}. No exit signal.",
+                f"Position open. RSI={rsi_str}, close={close:.4f}. No exit signal.",
                 "Exit if RSI < 45, price retreats 0.5%, or resistance recaptured.",
-                f"holding entry={entry_price:.2f}",
+                f"holding entry={entry_price:.4f}",
                 self._rule_source,
                 "medium",
-                [f"RSI={rsi_str}", f"close={close:.2f}"],
+                [f"RSI={rsi_str}", f"close={close:.4f}"],
                 [],
                 "Hold while thesis remains intact.",
             )
 
         # -- No position — evaluate entry --
 
-        # Single-candle breakout detection (resistance level case)
+        # Breakout: price above resistance, RSI strong, ATR expanding (price-relative)
         res = current.get("resistance_level")
-        if res is not None and close > res and rsi is not None and rsi > 58 and atr is not None and atr > 1.5:
-            vol_ok = current.get("volume", 0) > 3000
-            if vol_ok:
-                return (
-                    "ENTER_LONG",
-                    f"Breakout above resistance={res}: close={close:.2f}, RSI={rsi_str}, ATR={atr:.2f}, vol={current.get('volume')}.",
-                    f"Exit if close falls back below resistance {res} on next candle.",
-                    f"breakout_long res={res} rsi={rsi_str}",
-                    self._rule_source,
-                    "high",
-                    [f"breakout_above_resistance={res}", f"RSI={rsi_str}", f"ATR={atr:.2f}"],
-                    [],
-                    "ATR-based risk geometry should be applied if opened.",
-                )
+        if (
+            res is not None
+            and close > res
+            and rsi is not None and rsi > 58
+            and atr_pct is not None and atr_pct > ATR_EXPAND_PCT
+        ):
+            return (
+                "ENTER_LONG",
+                f"Breakout above resistance={res:.4f}: close={close:.4f}, RSI={rsi_str}, ATR%={atr_pct*100:.3f}%.",
+                f"Exit if close falls back below resistance {res:.4f}.",
+                f"breakout_long res={res:.4f} rsi={rsi_str}",
+                self._rule_source,
+                "high",
+                [f"breakout_above_resistance={res:.4f}", f"RSI={rsi_str}", f"ATR%={atr_pct*100:.3f}%"],
+                [],
+                "ATR-based risk geometry should be applied if opened.",
+            )
 
         if len(visible_bars) < 2:
             return (
@@ -375,7 +391,8 @@ class LifecycleEngine:
         price_up = close > prev["close"]
         rsi_ok = rsi is not None and 50 < rsi < 70
         volume_expand = current.get("volume", 0) > prev.get("volume", 0)
-        atr_expand = atr is not None and atr > 1.5
+        # ATR expansion: price-relative — works at any price level
+        atr_expand = atr_pct is not None and atr_pct > ATR_EXPAND_PCT
         price_above_ema = ema is not None and close > ema
         memory = input_packet.get("memory_context_v1") or {}
         memory_long = int(memory.get("long_bias_count_v1", 0))
@@ -384,20 +401,20 @@ class LifecycleEngine:
             price_up
             and price_above_ema
             and rsi is not None and rsi >= 52
-            and atr is not None and atr >= 1.2
+            and atr_pct is not None and atr_pct >= ATR_NEAR_PCT
             and current.get("volume", 0) >= prev.get("volume", 0) * 1.05
         )
 
-        # Trend entry: price rising, RSI mid-range, volume expanding
+        # Trend entry: price rising, RSI mid-range, volume expanding, ATR expanding
         if price_up and rsi_ok and volume_expand and atr_expand:
             return (
                 "ENTER_LONG",
-                f"Uptrend: close {prev['close']:.2f}→{close:.2f}, RSI={rsi_str}, volume expanding, ATR={atr:.2f}.",
-                f"Exit if close drops below {close * 0.995:.2f} or RSI decays with volume collapse.",
-                f"entry_long rsi={rsi_str} atr={atr:.2f}",
+                f"Uptrend: close {prev['close']:.4f}→{close:.4f}, RSI={rsi_str}, volume expanding, ATR%={atr_pct*100:.3f}%.",
+                f"Exit if close drops below {close * 0.995:.4f} or RSI decays with volume collapse.",
+                f"entry_long rsi={rsi_str} atr_pct={atr_pct*100:.3f}",
                 self._rule_source,
                 "high",
-                [f"close_up={price_up}", f"rsi_midrange={rsi_ok}", f"volume_expand={volume_expand}", f"atr_expand={atr_expand}"],
+                [f"close_up", f"rsi_midrange={rsi_ok}", f"volume_expand", f"atr_pct={atr_pct*100:.3f}%"],
                 [],
                 "Strong trend-continuation evidence.",
             )
@@ -405,8 +422,8 @@ class LifecycleEngine:
         if memory_available and memory_long > 0 and near_threshold_long:
             return (
                 "ENTER_LONG",
-                f"Memory-backed long: similar promoted long pattern(s)={memory_long}; close={close:.2f}, RSI={rsi_str}, ATR={atr:.2f}.",
-                f"Exit if close drops below {close * 0.995:.2f} or memory thesis is contradicted by RSI < 45.",
+                f"Memory-backed long: promoted long patterns={memory_long}; close={close:.4f}, RSI={rsi_str}, ATR%={atr_pct*100:.3f}%.",
+                f"Exit if close drops below {close * 0.995:.4f} or RSI < 45.",
                 f"memory_backed_entry long_bias={memory_long}",
                 "hybrid",
                 "medium",
@@ -415,31 +432,32 @@ class LifecycleEngine:
                 "Memory/context promoted a near-threshold trend setup into an allowed entry.",
             )
 
-        # Chop / ranging: price not moving decisively
+        # Chop / ranging: price not moving decisively (price-relative thresholds)
         avg_move = abs(close - prev["close"])
-        is_chop = avg_move < 0.5 or (atr is not None and atr < 1.0)
+        avg_move_pct = avg_move / ref
+        is_chop = avg_move_pct < MOVE_CHOP_PCT or (atr_pct is not None and atr_pct < ATR_CHOP_PCT)
         if is_chop:
             return (
                 "NO_TRADE",
-                f"Market choppy: avg_move={avg_move:.2f}, ATR={atr}. No edge.",
-                "Stand down until ATR > 1.0 and directional conviction appears.",
+                f"Market choppy: avg_move%={avg_move_pct*100:.3f}%, ATR%={atr_pct*100:.3f}% (if known). No edge.",
+                f"Stand down until ATR%>{ATR_CHOP_PCT*100:.2f}% and directional conviction appears.",
                 "chop_no_edge",
                 self._rule_source,
                 "medium",
                 [],
-                [f"avg_move={avg_move:.2f}", f"atr={atr}"],
+                [f"avg_move_pct={avg_move_pct*100:.3f}%", f"atr_pct={atr_pct*100:.3f}%" if atr_pct else "atr=unknown"],
                 "No-trade is the best bounded action under chop.",
             )
 
         return (
             "NO_TRADE",
-            f"Conditions not met: price_up={price_up}, rsi_ok={rsi_ok}, volume_expand={volume_expand}.",
-            "Require price uptick, RSI 50-70, expanding volume.",
+            f"Conditions not met: price_up={price_up}, rsi_ok={rsi_ok}, volume_expand={volume_expand}, atr_expand={atr_expand}.",
+            "Require price uptick, RSI 50-70, expanding volume, ATR expanding.",
             "wait",
-                self._rule_source,
-                "low",
+            self._rule_source,
+            "low",
             [],
-            [f"price_up={price_up}", f"rsi_ok={rsi_ok}", f"volume_expand={volume_expand}"],
+            [f"price_up={price_up}", f"rsi_ok={rsi_ok}", f"volume_expand={volume_expand}", f"atr_expand={atr_expand}"],
             "Wait for a stronger bounded setup.",
         )
 

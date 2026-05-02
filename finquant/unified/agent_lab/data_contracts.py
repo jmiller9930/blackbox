@@ -49,6 +49,8 @@ def build_input_packet(
     pct_change = (price_delta / prev_close) if prev_close else 0.0
     ema_gap = (close - ema) if ema is not None else None
     volume_delta = volume - prev_volume
+    ref = close if close > 0 else 1.0
+    atr_pct = (atr / ref) if atr is not None else None
 
     memory_summary = summarize_memory_context(prior_records)
     hypotheses = build_strategy_hypotheses(
@@ -86,9 +88,11 @@ def build_input_packet(
             "price_above_ema_v1": ema is not None and close > ema,
             "price_up_v1": close > prev_close,
             "volume_expand_v1": volume > prev_volume,
-            "atr_expanded_v1": atr is not None and atr > 1.5,
+            # ATR expansion is price-relative: >1.0% of close (calibrated to real 15m SOL-PERP).
+            "atr_expanded_v1": atr_pct is not None and atr_pct > 0.0100,
+            "atr_pct_v1": round(atr_pct, 6) if atr_pct is not None else None,
             "rsi_state_v1": _rsi_state(rsi),
-            "volatility_state_v1": _volatility_state(atr),
+            "volatility_state_v1": _volatility_state(atr_pct),
         },
         "memory_context_v1": memory_summary,
         "strategy_hypotheses_v1": hypotheses,
@@ -130,10 +134,15 @@ def build_strategy_hypotheses(
     resistance_level: float | None,
     memory_summary: dict[str, Any],
 ) -> list[dict[str, Any]]:
+    ref = close if close > 0 else 1.0
+    atr_pct = (atr / ref) if atr is not None else None
+
     price_up = close > prev_close
     price_above_ema = ema is not None and close > ema
     volume_expand = volume > prev_volume
-    atr_expand = atr is not None and atr > 1.5
+    # ATR expansion: price-relative thresholds calibrated to real 15m SOL-PERP ATR% distribution.
+    atr_expand = atr_pct is not None and atr_pct > 0.0100
+    atr_near = atr_pct is not None and atr_pct > 0.0050
     memory_long = memory_summary.get("long_bias_count_v1", 0) > 0
 
     trend_score = 0.0
@@ -167,15 +176,15 @@ def build_strategy_hypotheses(
         mean_reversion_score += 0.35
     if ema is not None and close < ema:
         mean_reversion_score += 0.2
-    if atr is not None and atr < 1.2:
+    if atr_pct is not None and atr_pct < 0.0040:
         mean_reversion_score += 0.1
 
     no_trade_score = 0.2
-    if atr is None or atr < 1.0:
+    if atr_pct is None or atr_pct < 0.0030:
         no_trade_score += 0.25
     if rsi is not None and 47.0 <= rsi <= 53.0:
         no_trade_score += 0.15
-    if abs(close - prev_close) < 0.5:
+    if prev_close > 0 and abs(close - prev_close) / prev_close < 0.001:
         no_trade_score += 0.15
     if memory_summary.get("no_trade_bias_count_v1", 0) > 0:
         no_trade_score += 0.1
@@ -183,7 +192,7 @@ def build_strategy_hypotheses(
     pullback_score = 0.0
     if price_above_ema and not price_up and rsi is not None and rsi >= 48.0:
         pullback_score += 0.35
-    if atr is not None and atr >= 1.2:
+    if atr_near:
         pullback_score += 0.15
     if memory_long:
         pullback_score += 0.1
@@ -217,12 +226,13 @@ def _rsi_state(rsi: float | None) -> str:
     return "neutral"
 
 
-def _volatility_state(atr: float | None) -> str:
-    if atr is None:
+def _volatility_state(atr_pct: float | None) -> str:
+    """Classify volatility using price-relative ATR% (calibrated to real 15m SOL-PERP)."""
+    if atr_pct is None:
         return "unknown"
-    if atr >= 1.8:
+    if atr_pct >= 0.0200:
         return "expanded"
-    if atr < 1.0:
+    if atr_pct < 0.0030:
         return "contracted"
     return "normal"
 

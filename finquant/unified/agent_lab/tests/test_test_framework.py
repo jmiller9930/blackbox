@@ -53,9 +53,9 @@ def test_run_test_pack_writes_summary():
         "hidden_future_start_index": 2,
         "expected_learning_focus_v1": ["entry_quality"],
         "candles": [
-            {"timestamp": "2024-01-02T00:00:00Z", "open": 100.0, "high": 100.8, "low": 99.8, "close": 100.3, "volume": 1000, "rsi_14": 50.5, "ema_20": 100.0, "atr_14": 1.2},
-            {"timestamp": "2024-01-02T01:00:00Z", "open": 100.3, "high": 101.4, "low": 100.2, "close": 101.0, "volume": 1080, "rsi_14": 53.2, "ema_20": 100.4, "atr_14": 1.3},
-            {"timestamp": "2024-01-02T02:00:00Z", "open": 101.0, "high": 103.0, "low": 100.9, "close": 102.8, "volume": 1500, "rsi_14": 59.0, "ema_20": 101.0, "atr_14": 1.7}
+            {"timestamp": "2024-01-02T00:00:00Z", "open": 100.0, "high": 100.5, "low": 99.9, "close": 100.3, "volume": 1000, "rsi_14": 50.5, "ema_20": 100.0, "atr_14": 0.74},
+            {"timestamp": "2024-01-02T01:00:00Z", "open": 100.3, "high": 100.9, "low": 100.2, "close": 101.0, "volume": 1080, "rsi_14": 53.2, "ema_20": 100.4, "atr_14": 0.75},
+            {"timestamp": "2024-01-02T02:00:00Z", "open": 101.0, "high": 101.6, "low": 100.9, "close": 101.5, "volume": 1500, "rsi_14": 55.0, "ema_20": 100.8, "atr_14": 0.75}
         ]
     }
     test_pack = {
