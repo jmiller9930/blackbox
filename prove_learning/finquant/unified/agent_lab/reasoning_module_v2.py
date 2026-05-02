@@ -300,90 +300,101 @@ def node_quality_retrieval(state: RMState) -> dict[str, Any]:
 
 
 # ---------------------------------------------------------------------------
+# Prime directive system prompt — embedded in every Qwen call
+# ---------------------------------------------------------------------------
+
+_SYSTEM_PROMPT = """You are FinQuant, a disciplined quantitative crypto trading analyst.
+
+PRIME DIRECTIVE (non-negotiable):
+P-1 NEVER LIE. If you do not know, say INSUFFICIENT_DATA and stop. Fabricated confidence is worse than no answer.
+P-2 REASON WITH TOOLS. Use the indicators, regime, and retrieved memory provided. Do not vibe-decide.
+P-3 RISK-AVERSE DEFAULT. Default is NO_TRADE. Entries require confluence across multiple independent signals.
+P-4 PATTERN SIMILARITY. Anchor judgment in retrieved prior cases that match the current regime signature.
+P-5 CONTEXT FIRST. RSI=58 in bar 3 of a fresh uptrend is different from RSI=58 in bar 18 of an exhausted trend. Read trajectory before applying rules.
+P-6 LONG-RUN MATH. Optimize dollars won minus dollars lost. Many small losses are acceptable if wins carry asymmetric R (target >= 2x stop).
+
+RISK RULES:
+R-001: Bounded risk — entries require a defined stop level. If you cannot define a stop, output NO_TRADE.
+R-002: Two hypotheses required. State hypothesis_1 (your primary thesis) and hypothesis_2 (the counter-thesis) with numeric confidence [0,1]. If confidence_spread = confidence_1 - confidence_2 < 0.20, output INSUFFICIENT_DATA.
+R-003: Every trade decision must include planned_r_multiple (target distance / stop distance). If R < 1.5, prefer NO_TRADE.
+
+OUTPUT FORMAT (JSON only, no other text):
+{
+  "hypothesis_1": {"thesis": "<primary thesis>", "confidence": <0.0-1.0>, "evidence": ["<signal1>", "<signal2>"]},
+  "hypothesis_2": {"thesis": "<counter thesis>", "confidence": <0.0-1.0>, "evidence": ["<counter1>", "<counter2>"]},
+  "confidence_spread": <h1.confidence - h2.confidence>,
+  "action": "ENTER_LONG" | "NO_TRADE" | "INSUFFICIENT_DATA",
+  "thesis": "<2-sentence decision rationale>",
+  "invalidation": "<what would make this wrong>",
+  "planned_r_multiple": <target_distance / stop_distance or null>,
+  "evidence_score": <0-10>,
+  "memory_match": true | false
+}"""
+
+
+# ---------------------------------------------------------------------------
 # Node: tot_reasoning (Tree of Thought)
 # ---------------------------------------------------------------------------
 
 _TOT_BRANCH_PROMPTS = {
-    "bullish": """You are a crypto quant analyst. Analyze ONLY the market data provided.
+    "bullish": """BRANCH: BULLISH — test the case for ENTER_LONG.
 
-Market context:
 {context}
 
-BULLISH THESIS BRANCH — argue the case for ENTER_LONG:
-1. List all indicators that support a long entry
-2. Identify the key risk (what would invalidate this)
-3. Score your evidence strength 0-10 (10 = very strong, 0 = no evidence)
+Instructions (follow P-1 through R-003):
+1. Read the TRAJECTORY section first (P-5 — context first).
+2. Identify all signals that support a long entry with confluence (P-3).
+3. Define a stop level (R-001). If you cannot, action must be NO_TRADE.
+4. Form hypothesis_1 (bullish case) and hypothesis_2 (counter — why this might fail).
+5. If confidence_spread < 0.20, action = INSUFFICIENT_DATA (R-002).
+6. Calculate planned_r_multiple = distance to target / distance to stop (R-003). If < 1.5, prefer NO_TRADE.
+7. Score evidence_score 0-10 (10 = strong multi-signal confluence).
 
-Respond in JSON only:
-{{"action": "ENTER_LONG", "thesis": "<2 sentences>", "invalidation": "<1 sentence>", "evidence_score": <0-10>, "key_supports": ["<indicator1>", "<indicator2>"]}}""",
+Respond in JSON only, no other text.""",
 
-    "neutral": """You are a crypto quant analyst. Analyze ONLY the market data provided.
+    "neutral": """BRANCH: NEUTRAL — test the case for NO_TRADE.
 
-Market context:
 {context}
 
-NEUTRAL/BEARISH THESIS BRANCH — argue the case for NO_TRADE:
-1. List all indicators that suggest standing down
-2. What edge is missing that would be needed for an entry?
-3. Score your evidence strength 0-10 (10 = very strong case for no-trade)
+Instructions (follow P-1 through R-003):
+1. Read the TRAJECTORY section first (P-5 — context first).
+2. Identify all signals that argue for standing down (P-3 — default is NO_TRADE).
+3. What confluence is missing that would be required for an entry?
+4. Form hypothesis_1 (no-trade case) and hypothesis_2 (counter — why conditions might actually be good).
+5. If confidence_spread < 0.20, action = INSUFFICIENT_DATA (R-002).
+6. Score evidence_score 0-10 (10 = very clear case to stand down).
 
-Respond in JSON only:
-{{"action": "NO_TRADE", "thesis": "<2 sentences>", "invalidation": "<1 sentence>", "evidence_score": <0-10>, "key_supports": ["<indicator1>", "<indicator2>"]}}""",
+Respond in JSON only, no other text.""",
 
-    "memory": """You are a crypto quant analyst. Analyze ONLY the market data and prior validated patterns provided.
+    "memory": """BRANCH: MEMORY-INFORMED — test whether retrieved validated patterns match current structure.
 
-Market context:
 {context}
 
-MEMORY-INFORMED THESIS BRANCH — what do prior validated patterns say?
-Prior patterns retrieved: {memory_summary}
+Instructions (follow P-1 through R-003, especially P-4):
+1. Read the MEMORY section. Note regime match vs mismatch for each pattern.
+2. Compare current TRAJECTORY with the trajectory described in retrieved patterns.
+3. A memory match requires: same regime + similar RSI zone + similar ATR direction.
+4. Form hypothesis_1 (memory supports entry) and hypothesis_2 (memory does not match or is insufficient).
+5. If no memory retrieved, or regime mismatches dominate, action = NO_TRADE (P-4 requires evidence anchor).
+6. If confidence_spread < 0.20, action = INSUFFICIENT_DATA (R-002).
+7. Score evidence_score 0-10 based on quality and relevance of memory match.
 
-1. Do the current conditions match the prior validated patterns?
-2. If memory supports entry, argue for ENTER_LONG. If not, argue for NO_TRADE.
-3. Score your evidence strength 0-10 based on pattern match quality.
-
-Respond in JSON only:
-{{"action": "ENTER_LONG or NO_TRADE", "thesis": "<2 sentences>", "invalidation": "<1 sentence>", "evidence_score": <0-10>, "memory_match": true/false}}""",
+Respond in JSON only, no other text.""",
 }
 
 
-def _format_context(state: RMState) -> str:
-    """Format market context for ToT prompts."""
-    bar = state.get("current_bar") or {}
-    prev = (state["bars"][-2] if len(state["bars"]) >= 2 else bar)
-    close = bar.get("close", "?")
-    prev_close = prev.get("close", "?")
-    rsi = bar.get("rsi_14", "?")
-    atr = bar.get("atr_14", "?")
-    ema = bar.get("ema_20", "?")
-    volume = bar.get("volume", "?")
-    regime = state.get("regime", "unknown")
-
-    ref = float(close) if isinstance(close, (int, float)) and float(close) > 0 else 1.0
-    atr_pct = f"{float(atr)/ref*100:.3f}%" if isinstance(atr, (int, float)) else "N/A"
-
-    return (
-        f"Symbol: {state['symbol']} | Timeframe: {state['timeframe_minutes']}m\n"
-        f"Regime: {regime}\n"
-        f"Close: {close} (prev: {prev_close})\n"
-        f"RSI(14): {rsi} | ATR(14): {atr} ({atr_pct} of price) | EMA(20): {ema}\n"
-        f"Volume: {volume}\n"
-        f"Trend: {'UP' if isinstance(close, (int, float)) and isinstance(prev_close, (int, float)) and float(close) > float(prev_close) else 'DOWN or FLAT'}"
+def _build_prompt_context(state: RMState) -> str:
+    """Build rich market context narrative using context_builder."""
+    from context_builder import build_rich_context
+    ctx = build_rich_context(
+        bars=state["bars"],
+        symbol=state["symbol"],
+        timeframe_minutes=state["timeframe_minutes"],
+        regime=state.get("regime") or "unknown",
+        prior_records=state.get("prior_records") or [],
+        n_trajectory=5,
     )
-
-
-def _memory_summary(prior_records: list[dict[str, Any]]) -> str:
-    if not prior_records:
-        return "No validated patterns available."
-    lines = []
-    for r in prior_records[:3]:
-        lines.append(
-            f"- Pattern: {r.get('entry_action_v1','?')} | "
-            f"win_rate={r.get('pattern_win_rate_v1', 0):.0%} | "
-            f"obs={r.get('pattern_total_obs_v1', 0)} | "
-            f"regime={r.get('regime_v1','?')}"
-        )
-    return "\n".join(lines)
+    return ctx["narrative"]
 
 
 def _call_ollama_tot(
@@ -399,19 +410,26 @@ def _call_ollama_tot(
             base_url=base_url,
             model=model,
             prompt=prompt,
-            system_prompt="You are a quantitative crypto trading analyst. Respond ONLY with valid JSON.",
+            system_prompt=_SYSTEM_PROMPT,
             timeout_seconds=timeout,
-            max_tokens=300,
+            max_tokens=500,
         )
         if not result.success:
             return None
-        # Parse JSON from response
         raw = result.raw_output.strip()
-        # Find JSON block
         start = raw.find("{")
         end = raw.rfind("}") + 1
         if start >= 0 and end > start:
-            return json.loads(raw[start:end])
+            parsed = json.loads(raw[start:end])
+            # Enforce R-002: if confidence_spread < 0.20 or missing, set INSUFFICIENT_DATA
+            h1_conf = float((parsed.get("hypothesis_1") or {}).get("confidence") or 0.0)
+            h2_conf = float((parsed.get("hypothesis_2") or {}).get("confidence") or 0.0)
+            spread = h1_conf - h2_conf
+            parsed["confidence_spread"] = round(spread, 4)
+            if spread < 0.20 and parsed.get("action") not in ("NO_TRADE", "INSUFFICIENT_DATA"):
+                parsed["action"] = "INSUFFICIENT_DATA"
+                parsed["thesis"] = f"[R-002] Confidence spread {spread:.2f} < 0.20 — insufficient evidence to decide. {parsed.get('thesis','')}"
+            return parsed
         return None
     except Exception:
         return None
@@ -562,16 +580,12 @@ def node_tot_reasoning(state: RMState) -> dict[str, Any]:
     model = str(cfg.get("llm_model_v1") or "qwen2.5:7b")
     timeout = int(cfg.get("llm_timeout_seconds_v1") or 30)
 
-    context = _format_context(state)
-    mem_summary = _memory_summary(state.get("prior_records") or [])
     branches = []
 
     if use_llm:
+        context = _build_prompt_context(state)
         for branch_name, prompt_tpl in _TOT_BRANCH_PROMPTS.items():
-            prompt = prompt_tpl.format(
-                context=context,
-                memory_summary=mem_summary,
-            )
+            prompt = prompt_tpl.format(context=context)
             result = _call_ollama_tot(base_url, model, prompt, timeout)
             if result:
                 result["branch"] = branch_name

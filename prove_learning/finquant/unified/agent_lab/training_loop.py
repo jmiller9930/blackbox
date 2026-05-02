@@ -131,8 +131,14 @@ def _cycle_metrics(results: list[dict[str, Any]]) -> dict[str, Any]:
             fail_count += 1
 
     decided = wins + losses
+    all_opps = len(results)
+    # Prime directive metric: good decisions / all opportunities seen
+    good_decisions = wins + no_trade_correct
+    bad_decisions = losses + no_trade_missed
+    decision_quality_rate = round(good_decisions / all_opps, 4) if all_opps else 0.0
+
     return {
-        "cases_v1": len(results),
+        "cases_v1": all_opps,
         "decisions_v1": decisions,
         "wins_v1": wins,
         "losses_v1": losses,
@@ -140,8 +146,13 @@ def _cycle_metrics(results: list[dict[str, Any]]) -> dict[str, Any]:
         "no_trade_missed_v1": no_trade_missed,
         "total_pnl_v1": round(total_pnl, 6),
         "win_rate_v1": round(wins / decided, 4) if decided else 0.0,
+        "expectancy_v1": round(total_pnl / decided, 6) if decided else 0.0,
         "evaluation_pass_v1": pass_count,
         "evaluation_fail_v1": fail_count,
+        # Decision quality across ALL opportunities (prime directive standard)
+        "good_decisions_v1": good_decisions,
+        "bad_decisions_v1": bad_decisions,
+        "decision_quality_rate_v1": decision_quality_rate,
         "action_map_v1": action_map,
     }
 
@@ -228,8 +239,10 @@ def run_training_loop(
             f"[cycle {cycle_idx}] "
             f"wins={metrics['wins_v1']} losses={metrics['losses_v1']} "
             f"no_trade_correct={metrics['no_trade_correct_v1']} "
+            f"no_trade_missed={metrics['no_trade_missed_v1']} "
             f"pnl={metrics['total_pnl_v1']:.2f} "
-            f"win_rate={metrics['win_rate_v1']:.2%}"
+            f"win_rate(entries)={metrics['win_rate_v1']:.2%} "
+            f"decision_quality(all)={metrics['decision_quality_rate_v1']:.2%}"
         )
         print(
             f"[cycle {cycle_idx}] patterns: "
