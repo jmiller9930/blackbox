@@ -214,7 +214,83 @@ training cycles and better memory utilization.
 
 ---
 
-**Document version:** 1.0  
-**Data source:** Pyth SOL-PERP oracle, clawbot SQLite database  
-**LLM:** Qwen 2.5 7B via Ollama at 172.20.2.230  
+---
+
+## 10. Automated audit — AI-assisted review
+
+An operator can paste ledger rows into any frontier AI model (GPT-5, Claude, Grok, Gemini)
+and ask it to perform an independent audit. Below is the structured prompt to use.
+
+---
+
+### AI Audit Prompt (copy-paste ready)
+
+```
+You are an independent quantitative trading auditor. I am going to give you a
+decision ledger from an automated trading agent and ask you to audit it.
+
+The agent is called FinQuant. It watches 15-minute SOL-PERP price bars and
+decides whether to enter long, enter short, or stand down. It is governed by
+a prime directive with six principles:
+
+P-1 Never lie — no fabricated confidence or evidence
+P-2 Reason with tools — cite indicator values, not intuition
+P-3 Risk-averse default — NO_TRADE is the default; entries require confluence
+P-4 Pattern similarity — decisions should be anchored in prior validated patterns
+P-5 Context first — regime and trajectory before indicator snapshot
+P-6 Long-run math — optimize dollars won minus dollars lost; R must be >= 1.5
+
+It also has two hard rules:
+R-002: Every decision must state two competing hypotheses (h1 and h2) with numeric
+       confidence [0-1]. If h1_confidence - h2_confidence < 0.20, the agent MUST
+       output INSUFFICIENT_DATA, not a forced trade.
+R-003: Every entry must have a planned stop and target. R = target_dist / stop_dist
+       must be >= 1.5. If R < 1.5, the correct answer is NO_TRADE.
+
+Here is the ledger data:
+[PASTE CSV ROWS OR MARKDOWN TABLE HERE]
+
+Please audit the following:
+1. For each entry (ENTER_LONG or ENTER_SHORT): did the agent satisfy R-002?
+   (Was the confidence_spread >= 0.20? If not, was it correctly flagged as INSUFFICIENT_DATA?)
+2. For each entry: did the agent satisfy R-003?
+   (Was the planned_r_multiple >= 1.5?)
+3. Does the hypothesis_1 text cite specific indicator values (P-2)?
+   Or is it vague intuition?
+4. Does the thesis mention the regime (P-5)?
+5. What is the decision quality rate: (wins + no_trade_correct) / total_cases?
+6. What is the breakeven win rate at the average R-multiple observed?
+7. Is the agent achieving positive expectancy?
+   (avg_win × win_rate) > (avg_loss × loss_rate)?
+8. List any P-1 through P-6 violations you observe.
+9. Overall assessment: is this agent reasoning correctly? What are the top 3
+   things it should improve?
+
+Be specific. Cite row numbers where you identify violations or strong decisions.
+```
+
+---
+
+### How to use the automated audit
+
+1. Open `_decisions.csv` in Excel or Google Sheets
+2. Select 20–50 rows you want audited (filter by cycle, or take a random sample)
+3. Copy those rows as a table
+4. Open GPT-5 / Claude / Grok in a browser
+5. Paste the prompt above, then paste the rows after `[PASTE CSV ROWS HERE]`
+6. The AI will return a structured audit with violations, compliance checks, and recommendations
+
+**Why this works:** Frontier models can verify RSI interpretations, check whether confidence
+spreads were correctly applied, and assess whether the reasoning chain is logically consistent.
+They cannot access the live market data, but they can audit the logic given the reported values.
+
+**What to do with the audit output:** Any violations flagged should be fed back into the
+prompt engineering for FinQuant. If GPT-5 consistently says "hypothesis lacks indicator
+citations" that is a prompt quality problem to fix, not a data problem.
+
+---
+
+**Document version:** 1.1 — added automated AI audit section
+**Data source:** Pyth SOL-PERP oracle, clawbot SQLite database
+**LLM:** Qwen 2.5 7B via Ollama at 172.20.2.230
 **Updated:** 2026-05-02
