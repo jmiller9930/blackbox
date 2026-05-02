@@ -290,16 +290,16 @@ class LifecycleEngine:
         ref = close if close > 0 else 1.0
         atr_pct = (atr / ref) if (atr is not None and ref > 0) else None
 
-        # Thresholds expressed as % of price — calibrated to real 15m SOL-PERP data
-        # where ATR% median=1.24%, p25=0.58%, p75=2.73%.
-        #   atr_expand      : ATR > 1.0% of price  — strong volatility, full trend entry
-        #   atr_near_thresh : ATR > 0.5% of price  — near-threshold, memory-backed entry OK
-        #   atr_chop        : ATR < 0.3% of price  — genuine chop (bottom ~20% of real bars)
-        #   avg_move_chop   : |close-prev| < 0.2% of price — price barely moved
-        ATR_EXPAND_PCT   = 0.0100
-        ATR_NEAR_PCT     = 0.0050
-        ATR_CHOP_PCT     = 0.0030
-        MOVE_CHOP_PCT    = 0.0020
+        # Thresholds expressed as % of price — calibrated to actual case ATR% distribution
+        # for real 15m SOL-PERP (median=0.40%, p25=0.35%, p75=0.49%).
+        #   atr_expand      : ATR > 0.60% of price  — upper quartile; ~15% of real bars
+        #   atr_near_thresh : ATR > 0.30% of price  — above median; memory-backed OK
+        #   atr_chop        : ATR < 0.20% of price  — genuine chop, very narrow bars
+        #   avg_move_chop   : |close-prev| < 0.15% of price
+        ATR_EXPAND_PCT   = 0.0060
+        ATR_NEAR_PCT     = 0.0030
+        ATR_CHOP_PCT     = 0.0020
+        MOVE_CHOP_PCT    = 0.0015
 
         support: list[str] = []
         conflicts: list[str] = []

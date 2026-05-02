@@ -276,16 +276,16 @@ def _marginal_long(rng, start_price, start_time, bar_minutes):
     price = start_price
     # EMA starts behind price so close > ema throughout.
     ema = price * 0.97
-    # Target ATR: 0.65-0.80% of price — above ATR_NEAR_PCT (0.5%) but below ATR_EXPAND_PCT (1.0%).
-    # At start_price=100: ATR target = $0.70.
-    atr = start_price * 0.0070
+    # Target ATR: 0.40-0.50% of price — above ATR_NEAR_PCT (0.30%) but below ATR_EXPAND_PCT (0.60%).
+    # At start_price=100: ATR target = $0.45.
+    atr = start_price * 0.0045
     vol = 1200.0
     for i in range(28):
         # Drift floor 0.25% of price so avg_move is clearly above MOVE_CHOP_PCT (0.2%).
         drift = start_price * 0.0030 + rng.random() * start_price * 0.0010
         new_close = max(1.0, price + drift)
-        # Bar range sized to keep ATR at 0.65-0.80% of price.
-        bar_range_target = start_price * 0.0070
+        # Bar range sized to keep ATR at 0.40-0.50% of price.
+        bar_range_target = start_price * 0.0045
         h = new_close + bar_range_target * 0.25 + rng.random() * bar_range_target * 0.05
         l = price - bar_range_target * 0.20 - rng.random() * bar_range_target * 0.05
         # Geometric 7% volume growth guarantees >= 5% increase per bar (near_threshold check).

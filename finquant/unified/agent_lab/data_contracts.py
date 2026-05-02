@@ -88,8 +88,8 @@ def build_input_packet(
             "price_above_ema_v1": ema is not None and close > ema,
             "price_up_v1": close > prev_close,
             "volume_expand_v1": volume > prev_volume,
-            # ATR expansion is price-relative: >1.0% of close (calibrated to real 15m SOL-PERP).
-            "atr_expanded_v1": atr_pct is not None and atr_pct > 0.0100,
+            # ATR expansion is price-relative: >0.60% of close (case ATR% distribution).
+            "atr_expanded_v1": atr_pct is not None and atr_pct > 0.0060,
             "atr_pct_v1": round(atr_pct, 6) if atr_pct is not None else None,
             "rsi_state_v1": _rsi_state(rsi),
             "volatility_state_v1": _volatility_state(atr_pct),
@@ -140,9 +140,9 @@ def build_strategy_hypotheses(
     price_up = close > prev_close
     price_above_ema = ema is not None and close > ema
     volume_expand = volume > prev_volume
-    # ATR expansion: price-relative thresholds calibrated to real 15m SOL-PERP ATR% distribution.
-    atr_expand = atr_pct is not None and atr_pct > 0.0100
-    atr_near = atr_pct is not None and atr_pct > 0.0050
+    # ATR expansion: price-relative thresholds calibrated to case-level ATR% distribution.
+    atr_expand = atr_pct is not None and atr_pct > 0.0060
+    atr_near = atr_pct is not None and atr_pct > 0.0030
     memory_long = memory_summary.get("long_bias_count_v1", 0) > 0
 
     trend_score = 0.0
@@ -176,11 +176,11 @@ def build_strategy_hypotheses(
         mean_reversion_score += 0.35
     if ema is not None and close < ema:
         mean_reversion_score += 0.2
-    if atr_pct is not None and atr_pct < 0.0040:
+    if atr_pct is not None and atr_pct < 0.0025:
         mean_reversion_score += 0.1
 
     no_trade_score = 0.2
-    if atr_pct is None or atr_pct < 0.0030:
+    if atr_pct is None or atr_pct < 0.0020:
         no_trade_score += 0.25
     if rsi is not None and 47.0 <= rsi <= 53.0:
         no_trade_score += 0.15
@@ -227,12 +227,12 @@ def _rsi_state(rsi: float | None) -> str:
 
 
 def _volatility_state(atr_pct: float | None) -> str:
-    """Classify volatility using price-relative ATR% (calibrated to real 15m SOL-PERP)."""
+    """Classify volatility using price-relative ATR% (calibrated to case ATR% distribution)."""
     if atr_pct is None:
         return "unknown"
-    if atr_pct >= 0.0200:
+    if atr_pct >= 0.0060:
         return "expanded"
-    if atr_pct < 0.0030:
+    if atr_pct < 0.0020:
         return "contracted"
     return "normal"
 

@@ -3,7 +3,7 @@
   "case_id": "ab_marginal_memory_flip_v1",
   "symbol": "SOL-PERP",
   "timeframe_minutes": 60,
-  "description": "Marginal near-threshold: ATR=0.75% (above 0.5% near-thresh, below 1.0% expand). Without memory: NO_TRADE. With retrieved ENTER_LONG memory: ENTER_LONG.",
+  "description": "Marginal near-threshold: ATR=0.45% (above 0.30% near-thresh, below 0.60% expand). Without memory: NO_TRADE. With retrieved ENTER_LONG memory: ENTER_LONG.",
   "decision_start_index": 1,
   "decision_end_index": 1,
   "hidden_future_start_index": 2,
@@ -18,29 +18,29 @@
       "volume": 950,
       "rsi_14": 51.0,
       "ema_20": 99.6,
-      "atr_14": 0.74
+      "atr_14": 0.44
     },
     {
       "timestamp": "2024-01-11T01:00:00Z",
       "open": 100.0,
-      "high": 100.5,
-      "low": 99.9,
+      "high": 100.3,
+      "low": 99.95,
       "close": 100.4,
       "volume": 1020,
       "rsi_14": 53.0,
       "ema_20": 99.7,
-      "atr_14": 0.75
+      "atr_14": 0.45
     },
     {
       "timestamp": "2024-01-11T02:00:00Z",
       "open": 100.4,
-      "high": 100.9,
-      "low": 100.2,
+      "high": 100.7,
+      "low": 100.25,
       "close": 100.7,
       "volume": 1000,
       "rsi_14": 54.0,
       "ema_20": 99.8,
-      "atr_14": 0.74
+      "atr_14": 0.44
     }
   ]
 }
