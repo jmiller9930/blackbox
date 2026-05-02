@@ -129,8 +129,20 @@ Expected: cycle 1 win_rate=62.5% (baseline). Memory must beat this.
 - **Live data feed** — Pyth price feed is active and writing to the DB in real time
   - SOL-PERP: live bars being appended continuously
   - BTC: live Pyth data also available
-  - This means training cases can be generated against current market conditions, not just historical
   - Live data makes falsification real — outcomes are actual market results, not simulated
+
+### Two operating modes — both available
+
+| Mode | What it uses | Purpose |
+|------|-------------|---------|
+| **Backtest** | Historical bars from DB (24+ months) | Validate patterns on known data, measure win rate over past conditions |
+| **Live** | Current bars from live Pyth feed | Generate cases from real-time market, falsify against what actually happens next |
+
+This means:
+- Train on historical data → establish baseline patterns
+- Run live → validate those patterns against current market
+- Compare backtest win rate vs live win rate to detect regime shift or overfitting
+- Continuously append new live bars → cases never run out, patterns keep accumulating evidence
 
 ### Compute / LLM
 - **Local LLM host**: `jmiller@172.20.2.230` — Ollama running Qwen 2.5 7B
