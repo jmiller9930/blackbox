@@ -53,6 +53,12 @@ def build_input_packet(
     atr_pct = (atr / ref) if atr is not None else None
 
     memory_summary = summarize_memory_context(prior_records)
+    regime = detect_regime(
+        bars=visible_bars,
+        atr_pct=atr_pct,
+        rsi=rsi,
+        price_up=close > prev_close,
+    )
     hypotheses = build_strategy_hypotheses(
         close=close,
         prev_close=prev_close,
@@ -95,6 +101,7 @@ def build_input_packet(
             "volatility_state_v1": _volatility_state(atr_pct),
         },
         "memory_context_v1": memory_summary,
+        "regime_v1": regime,
         "strategy_hypotheses_v1": hypotheses,
         "baseline_strategy_families_v1": list(_STRATEGY_FAMILIES),
     }
@@ -212,6 +219,54 @@ def _hypothesis(strategy_family: str, action: str, score: float) -> dict[str, An
         "action_v1": action,
         "score_v1": round(max(0.0, min(score, 1.0)), 6),
     }
+
+
+def detect_regime(
+    *,
+    bars: list[dict[str, Any]],
+    atr_pct: float | None,
+    rsi: float | None,
+    price_up: bool,
+) -> str:
+    """
+    Classify current market regime from visible bars + indicators.
+
+    Returns one of: trending_up | trending_down | ranging | volatile | unknown
+
+    Industry standard: regime tagging prevents applying bull-market lessons
+    to bear-market or ranging conditions. Memory retrieval must match regime.
+    """
+    if atr_pct is None or rsi is None:
+        return "unknown"
+
+    # Volatile: ATR expanding sharply (top 10% of range)
+    if atr_pct >= 0.0150:
+        return "volatile"
+
+    # Use a simple EMA-slope proxy: last 5 bars trending direction
+    if len(bars) >= 5:
+        closes = [b.get("close", 0.0) for b in bars[-5:]]
+        slope = (closes[-1] - closes[0]) / closes[0] if closes[0] else 0.0
+        ema_vals = [b.get("ema_20") for b in bars[-5:]]
+        price_above_ema_count = sum(1 for b, e in zip(bars[-5:], ema_vals)
+                                    if e and b.get("close", 0) > e)
+
+        if slope > 0.004 and price_above_ema_count >= 4 and rsi > 53:
+            return "trending_up"
+        if slope < -0.004 and price_above_ema_count <= 1 and rsi < 47:
+            return "trending_down"
+
+    # Ranging: ATR low-normal, RSI mid
+    if atr_pct < 0.0060 and 43 <= rsi <= 57:
+        return "ranging"
+
+    # Weak trend
+    if price_up and rsi > 52:
+        return "trending_up"
+    if not price_up and rsi < 48:
+        return "trending_down"
+
+    return "ranging"
 
 
 def _rsi_state(rsi: float | None) -> str:

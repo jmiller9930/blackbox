@@ -9,5 +9,10 @@
   "llm_max_tokens_v1": 400,
   "memory_store_path": "finquant/unified/agent_lab/outputs/shared_learning_records.jsonl",
   "retrieval_enabled_default_v1": false,
-  "write_outputs_v1": true
+  "write_outputs_v1": true,
+  "auto_promote_learning_v1": true,
+  "_quality_gate": "RMv2 production quality gate — one win is not a lesson",
+  "retrieval_min_obs_v1": 5,
+  "retrieval_min_win_rate_v1": 0.55,
+  "retrieval_max_records_v1": 5
 }

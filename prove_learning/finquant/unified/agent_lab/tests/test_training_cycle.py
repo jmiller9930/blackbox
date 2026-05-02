@@ -26,6 +26,10 @@ def test_training_cycle_produces_referee_report():
         "write_outputs_v1": True,
         "llm_model_v1": "qwen2.5:7b",
         "ollama_base_url_v1": "http://172.20.2.230:11434",
+        "auto_promote_learning_v1": True,
+        "retrieval_min_obs_v1": 1,
+        "retrieval_min_win_rate_v1": 0.0,
+        "retrieval_allow_candidate_v1": True,
     }
     seed_case = {
         "schema": "finquant_lifecycle_case_v1",

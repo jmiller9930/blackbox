@@ -61,6 +61,11 @@ def _write_config(tmpdir: str) -> str:
         "memory_store_path": "",
         "retrieval_enabled_default_v1": False,
         "write_outputs_v1": True,
+        "auto_promote_learning_v1": True,
+        # Stub quality gate: permissive so tests work without accumulation cycles
+        "retrieval_min_obs_v1": 1,
+        "retrieval_min_win_rate_v1": 0.0,
+        "retrieval_allow_candidate_v1": True,
     }
     config_path = os.path.join(tmpdir, "config.json")
     with open(config_path, "w") as f:

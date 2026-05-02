@@ -69,7 +69,7 @@ def test_blocked_records_never_returned():
 
 
 def test_enabled_records_returned():
-    """Records with retrieval_enabled_v1=true and matching symbol are returned."""
+    """Records with retrieval_enabled_v1=true, matching symbol, and passing quality gate are returned."""
     with tempfile.TemporaryDirectory() as tmpdir:
         store_path = os.path.join(tmpdir, "records.jsonl")
         records = [
@@ -78,6 +78,10 @@ def test_enabled_records_returned():
                 "symbol": "SOL-PERP",
                 "retrieval_enabled_v1": True,
                 "schema": "finquant_learning_record_v1",
+                # RMv2 quality gate fields
+                "pattern_total_obs_v1": 10,
+                "pattern_win_rate_v1": 0.70,
+                "pattern_status_v1": "provisional",
             }
         ]
         _write_jsonl(store_path, records)
@@ -120,6 +124,7 @@ def test_prefers_enter_long_over_recent_no_trade():
     """Later NO_TRADE rows must not crowd out an older ENTER_LONG lesson (same symbol)."""
     with tempfile.TemporaryDirectory() as tmpdir:
         store_path = os.path.join(tmpdir, "records.jsonl")
+        _quality = {"pattern_total_obs_v1": 10, "pattern_win_rate_v1": 0.70, "pattern_status_v1": "provisional"}
         records = [
             {
                 "record_id": "lr_long_old",
@@ -127,6 +132,7 @@ def test_prefers_enter_long_over_recent_no_trade():
                 "entry_action_v1": "ENTER_LONG",
                 "retrieval_enabled_v1": True,
                 "schema": "finquant_learning_record_v1",
+                **_quality,
             },
             {
                 "record_id": "lr_nt_recent",
@@ -134,6 +140,7 @@ def test_prefers_enter_long_over_recent_no_trade():
                 "entry_action_v1": "NO_TRADE",
                 "retrieval_enabled_v1": True,
                 "schema": "finquant_learning_record_v1",
+                **_quality,
             },
         ]
         _write_jsonl(store_path, records)
@@ -154,11 +161,14 @@ def test_mixed_records_only_eligible_returned():
         store_path = os.path.join(tmpdir, "records.jsonl")
         records = [
             {"record_id": "lr_blocked", "symbol": "SOL-PERP",
-             "retrieval_enabled_v1": False, "schema": "finquant_learning_record_v1"},
+             "retrieval_enabled_v1": False, "schema": "finquant_learning_record_v1",
+             "pattern_total_obs_v1": 10, "pattern_win_rate_v1": 0.70, "pattern_status_v1": "provisional"},
             {"record_id": "lr_eligible", "symbol": "SOL-PERP",
-             "retrieval_enabled_v1": True, "schema": "finquant_learning_record_v1"},
+             "retrieval_enabled_v1": True, "schema": "finquant_learning_record_v1",
+             "pattern_total_obs_v1": 10, "pattern_win_rate_v1": 0.70, "pattern_status_v1": "provisional"},
             {"record_id": "lr_wrong", "symbol": "ETH-PERP",
-             "retrieval_enabled_v1": True, "schema": "finquant_learning_record_v1"},
+             "retrieval_enabled_v1": True, "schema": "finquant_learning_record_v1",
+             "pattern_total_obs_v1": 10, "pattern_win_rate_v1": 0.70, "pattern_status_v1": "provisional"},
         ]
         _write_jsonl(store_path, records)
 

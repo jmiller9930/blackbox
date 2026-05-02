@@ -5,5 +5,10 @@
   "use_llm_v1": false,
   "memory_store_path": "finquant/unified/agent_lab/outputs/shared_learning_records.jsonl",
   "retrieval_enabled_default_v1": false,
-  "write_outputs_v1": true
+  "write_outputs_v1": true,
+  "_comment": "Stub config: quality gate set to 1 obs so deterministic tests work without accumulation. Production config uses min_obs=5, min_win_rate=0.55.",
+  "retrieval_min_obs_v1": 1,
+  "retrieval_min_win_rate_v1": 0.0,
+  "retrieval_allow_candidate_v1": true,
+  "auto_promote_learning_v1": true
 }

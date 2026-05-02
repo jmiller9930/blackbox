@@ -48,11 +48,11 @@ def execute_case(
 
     evaluation = evaluate_lifecycle(case=case, decisions=decisions)
     record = store.write_learning_record(case=case, evaluation=evaluation)
-    run_id = store.finalize(case=case, evaluation=evaluation)
     run_dir = store.get_run_dir()
 
     # ----------------------------------------------------------------
-    # Falsify, accumulate, promote — for every step's pattern signature
+    # Falsify, accumulate, promote — BEFORE finalize so quality stats
+    # are embedded into the record dict before it is written to JSONL.
     # ----------------------------------------------------------------
 
     learning_observations: list[dict[str, Any]] = []
@@ -101,6 +101,26 @@ def execute_case(
                 thresholds=promo_thresholds,
             )
 
+            # Embed pattern quality stats into the record dict BEFORE finalize.
+            # Only update from decisions that have decided trades (wins+losses>0).
+            # HOLD/EXIT decisions have 0 decided trades and would zero out win_rate
+            # if we allowed them to overwrite a prior ENTER_LONG's stats.
+            decided = int(updated_unit.get("wins_v1") or 0) + int(updated_unit.get("losses_v1") or 0)
+            is_directional = proposed_action in ("ENTER_LONG", "ENTER_SHORT")
+            prior_decided = int(record.get("pattern_win_decided_v1") or 0)
+            if is_directional or decided > prior_decided:
+                record["pattern_id_v1"] = pattern_id
+                record["pattern_win_rate_v1"] = float(updated_unit.get("win_rate_v1") or 0.0)
+                record["pattern_total_obs_v1"] = int(updated_unit.get("total_observations_v1") or 0)
+                record["pattern_status_v1"] = str(updated_unit.get("status_v1") or "candidate")
+                record["pattern_expectancy_v1"] = float(updated_unit.get("expectancy_v1") or 0.0)
+                record["pattern_win_decided_v1"] = decided
+                record["outcome_kind_v1"] = str(verdict_info.get("outcome_kind_v1") or "")
+                record["pnl_v1"] = float(verdict_info.get("pnl_v1") or 0.0)
+                # Regime tag — enables regime-matched retrieval in RMv2
+                input_pkt = decision.get("input_packet_v1") or {}
+                record["regime_v1"] = str(input_pkt.get("regime_v1") or "unknown")
+
             learning_observations.append({
                 "pattern_id_v1": pattern_id,
                 "human_label_v1": sig.get("human_label_v1"),
@@ -122,6 +142,10 @@ def execute_case(
                 "post_cumulative_pnl_v1": updated_unit.get("cumulative_pnl_v1"),
                 "post_confidence_v1": updated_unit.get("confidence_score_v1"),
             })
+
+    # Finalize AFTER falsification so quality stats are in the record dict
+    # when memory_store writes it to the shared JSONL.
+    run_id = store.finalize(case=case, evaluation=evaluation)
 
     return {
         "case": case,

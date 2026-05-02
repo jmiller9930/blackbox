@@ -23,6 +23,10 @@ CONFIG = {
     "memory_store_path": "",
     "retrieval_enabled_default_v1": False,
     "write_outputs_v1": True,
+    "auto_promote_learning_v1": True,
+    "retrieval_min_obs_v1": 1,
+    "retrieval_min_win_rate_v1": 0.0,
+    "retrieval_allow_candidate_v1": True,
 }
 
 SEED_CASE = {
