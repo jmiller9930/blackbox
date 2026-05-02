@@ -57,7 +57,21 @@ Learning is proven when:
 - At least one pattern promoted past candidate
 - At least one decision changed because of retrieved memory
 
-Currently: baseline (no memory) = **62.5% win rate, positive PnL**. Memory must demonstrate **positive expectancy** — wins financially larger than losses — to prove learning. Win count alone is not sufficient.
+Currently: baseline (no memory) = **62.5% win rate, positive PnL**.
+
+**The correct success metric is decision quality across ALL opportunities, not wins ÷ entries.**
+
+| Decision | Outcome | Score |
+|---|---|---|
+| ENTER_LONG | Win | Good |
+| ENTER_LONG | Loss | Bad |
+| NO_TRADE | Market flat (correct abstention) | Good |
+| NO_TRADE | Market moved (missed opportunity) | Bad |
+
+A correct NO_TRADE is a good decision. An incorrect entry that loses is a bad decision.
+Per prime directive R-002: if top two hypothesis confidences differ by < 0.20, output INSUFFICIENT_DATA — do not force a trade.
+Per prime directive P-6: optimize dollars won minus dollars lost over the sample. Many small losses are acceptable if wins carry asymmetric R.
+Memory must demonstrate **positive expectancy** — wins financially larger than losses — to prove learning.
 
 ---
 
