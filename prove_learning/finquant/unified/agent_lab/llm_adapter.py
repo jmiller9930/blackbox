@@ -165,6 +165,19 @@ def extract_decision_json(text: str) -> dict[str, Any] | None:
         except json.JSONDecodeError:
             continue
 
+    # Last resort: try to recover a truncated JSON by closing open braces
+    try:
+        start = text.find("{")
+        if start >= 0:
+            partial = text[start:]
+            open_count = partial.count("{") - partial.count("}")
+            recovered = partial + "}" * max(0, open_count)
+            obj = json.loads(recovered)
+            if "action" in obj:
+                return obj
+    except Exception:
+        pass
+
     return None
 
 
