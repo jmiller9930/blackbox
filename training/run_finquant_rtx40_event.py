@@ -136,9 +136,11 @@ def main() -> int:
     )
     ap.add_argument(
         "--corpus",
+        "--dataset",
         type=Path,
+        dest="corpus",
         default=None,
-        help="Agentic JSONL (default: FINQUANT_BASE/datasets/corpus_v05_agentic_seed.jsonl)",
+        help="Training JSONL passed to train_qlora --dataset (default: FINQUANT_BASE/datasets/corpus_v05_agentic_seed.jsonl). Alias: --dataset.",
     )
     ap.add_argument(
         "--memory-store",
