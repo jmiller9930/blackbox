@@ -54,6 +54,17 @@ def _default_finquant_base() -> Path:
     return Path("/data/NDE/finquant/agentic_v05")
 
 
+def _default_corpus_path(repo: Path, base: Path) -> Path:
+    """Prefer FINQUANT_BASE copy; fall back to repo seed when datasets/ was never populated."""
+    primary = (base / "datasets" / "corpus_v05_agentic_seed.jsonl").resolve()
+    if primary.is_file():
+        return primary
+    shipped = (repo / "training" / "corpus_v05_agentic_seed.jsonl").resolve()
+    if shipped.is_file():
+        return shipped
+    return primary
+
+
 def _default_final_exam(finquant_base: Path) -> Path:
     env = (os.environ.get("FINQUANT_FINAL_EXAM_JSON") or "").strip()
     if env:
@@ -140,7 +151,11 @@ def main() -> int:
         type=Path,
         dest="corpus",
         default=None,
-        help="Training JSONL passed to train_qlora --dataset (default: FINQUANT_BASE/datasets/corpus_v05_agentic_seed.jsonl). Alias: --dataset.",
+        help=(
+            "Training JSONL passed to train_qlora --dataset (default: "
+            "FINQUANT_BASE/datasets/corpus_v05_agentic_seed.jsonl if present, else repo training/corpus_v05_agentic_seed.jsonl). "
+            "Alias: --dataset."
+        ),
     )
     ap.add_argument(
         "--memory-store",
@@ -196,7 +211,25 @@ def main() -> int:
 
     repo = _repo_root(args.repo_root)
     base = (args.finquant_base or _default_finquant_base()).resolve()
-    corpus = args.corpus or (base / "datasets" / "corpus_v05_agentic_seed.jsonl").resolve()
+    primary = (base / "datasets" / "corpus_v05_agentic_seed.jsonl").resolve()
+    shipped = (repo / "training" / "corpus_v05_agentic_seed.jsonl").resolve()
+
+    if args.corpus is not None:
+        corpus = args.corpus.expanduser().resolve()
+        # Shell defaults often pass FINQUANT_BASE/datasets/... even when that copy was never installed.
+        if not corpus.is_file() and corpus == primary and shipped.is_file():
+            print(
+                f"NOTE: corpus not found under FINQUANT_BASE ({primary}); using repo seed {shipped}",
+                flush=True,
+            )
+            corpus = shipped
+    else:
+        corpus = _default_corpus_path(repo, base)
+        if corpus != primary and corpus.is_file():
+            print(
+                f"NOTE: corpus not found under FINQUANT_BASE ({primary}); using repo seed {corpus}",
+                flush=True,
+            )
     mem = args.memory_store or (base / "finquant_memory" / "exemplar_store.jsonl").resolve()
     train_py = repo / "training" / "train_qlora.py"
     validate_py = repo / "training" / "validate_agentic_corpus_v1.py"
