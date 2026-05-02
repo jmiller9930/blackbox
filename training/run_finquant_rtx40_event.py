@@ -8,11 +8,11 @@ Typical use (from your Mac: SSH into trx40, attach tmux, then):
   export FINQUANT_BASE=/data/NDE/finquant/agentic_v05
   cd \"$BLACKBOX_REPO_ROOT\"
   # Smoke (default): short train — wiring / sanity only
-  python3 training/test.py --train smoke --adapter adapters/finquant-agentic-v05-smoke
+  python3 training/test.py --train smoke --adapter adapters/finquant-1-qwen7b-v0.1-smoke
 
   # Production full train — long run; requires explicit confirmation flag
   python3 training/test.py --train full --confirm-production-train \\
-    --adapter adapters/finquant-agentic-v05-prod
+    --adapter adapters/finquant-1-qwen7b-v0.1
 
 What runs where:
   * **Execution** is on the GPU host (trx40) inside your SSH/tmux session — not on your laptop.
@@ -163,10 +163,10 @@ def main() -> int:
     ap.add_argument(
         "--adapter",
         type=str,
-        default="adapters/finquant-agentic-v05-smoke",
+        default="adapters/finquant-1-qwen7b-v0.1-smoke",
         help=(
-            "Adapter dir relative to FINQUANT_BASE (exam step). Default matches smoke; "
-            "use your production adapter path when --train full"
+            "Adapter dir relative to FINQUANT_BASE (exam step); smoke YAML writes "
+            "adapters/finquant-1-qwen7b-v0.1-smoke; full train uses adapters/finquant-1-qwen7b-v0.1"
         ),
     )
     ap.add_argument("--config", type=Path, default=None, help="train_qlora YAML (default: training/config_v0.1.yaml)")

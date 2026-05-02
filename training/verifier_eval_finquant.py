@@ -16,7 +16,7 @@ Does not modify Blackbox.
 Usage:
   export FINQUANT_BASE=/data/NDE/finquant/agentic_v05
   python3 training/verifier_eval_finquant.py \\
-    --adapter adapters/finquant-agentic-v05-smoke \\
+    --adapter adapters/finquant-1-qwen7b-v0.1-smoke \\
     --write-report
 
 Requires GPU + training deps (same as train_qlora.py).

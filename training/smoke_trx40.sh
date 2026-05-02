@@ -47,9 +47,11 @@ if [[ "${USE_REPO_CORPUS:-0}" == "1" ]]; then
   EXTRA+=(--memory-store "$BLACKBOX_REPO_ROOT/training/finquant_memory/exemplar_store.jsonl")
 fi
 
+ADAPTER="${FINQUANT_SMOKE_ADAPTER:-adapters/finquant-1-qwen7b-v0.1-smoke}"
+
 python3 training/test.py \
   --train smoke \
-  --adapter adapters/finquant-agentic-v05-smoke \
+  --adapter "$ADAPTER" \
   --exam-write-report \
   "${EXTRA[@]}"
 
