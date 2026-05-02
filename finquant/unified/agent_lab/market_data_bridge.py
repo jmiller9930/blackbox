@@ -409,6 +409,10 @@ def run_bridge(
     cases_path = Path(cases_dir)
     cases_path.mkdir(parents=True, exist_ok=True)
 
+    # Use entry_quality only (not exit_quality) so that ENTER_LONG without an EXIT
+    # in the decision window is still graded PASS and governance promotes it to retrieval.
+    # If "exit_quality" is in focus and the stub holds (never exits in the window),
+    # evaluation gives "missed_exit" → FAIL → REJECT → nothing accumulates in memory.
     seed_cases = generate_cases_from_bars(
         seed_bars,
         symbol=symbol,
@@ -418,7 +422,7 @@ def run_bridge(
         decision_steps=decision_steps,
         outcome_candles=outcome_candles,
         stride=stride,
-        expected_learning_focus=["entry_quality", "exit_quality"],
+        expected_learning_focus=["entry_quality"],
     )
 
     test_cases = generate_cases_from_bars(

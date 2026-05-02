@@ -402,7 +402,7 @@ class LifecycleEngine:
             and price_above_ema
             and rsi is not None and rsi >= 52
             and atr_pct is not None and atr_pct >= ATR_NEAR_PCT
-            and current.get("volume", 0) >= prev.get("volume", 0) * 1.05
+            and current.get("volume", 0) >= prev.get("volume", 0) * 1.01
         )
 
         # Trend entry: price rising, RSI mid-range, volume expanding, ATR expanding
