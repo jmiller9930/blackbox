@@ -86,3 +86,7 @@ Final lines: `FINQUANT_RTX40_EVENT_COMPLETE_TRAIN_SMOKE`, `…_TRAIN_FULL_PRODUC
 Flow: validate agentic corpus → optional QLoRA → **verifier exam** via `training/verifier_eval_finquant.py` (or `FINQUANT_VERIFIER_EVAL_PY` / `--eval-script`). Normative `final_exam_v1.json` is **announced** (`FINQUANT_FINAL_EXAM_JSON` or `/data/NDE/finquant/eval/final_exam_v1.json`); when `cases` is non-empty, quant LLM grading can be added later without renaming the launcher.
 
 Suggested `/data` layout under `FINQUANT_BASE` (e.g. `/data/NDE/finquant/agentic_v05`): `datasets/`, `finquant_memory/`, `adapters/`, `reports/`.
+
+**trx40 / Debian PEP 668:** do not `pip install` into system Python. Create a venv on `/data`, e.g.  
+`python3 -m venv /data/NDE/finquant/.venv-finquant` → `source .../bin/activate` →  
+`pip install -r training/requirements-finquant-training.txt` from the repo root, then run `python3 training/test.py`.
