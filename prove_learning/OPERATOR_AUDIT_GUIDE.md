@@ -226,47 +226,80 @@ and ask it to perform an independent audit. Below is the structured prompt to us
 ### AI Audit Prompt (copy-paste ready)
 
 ```
-You are an independent quantitative trading auditor. I am going to give you a
-decision ledger from an automated trading agent and ask you to audit it.
+You are an independent quantitative trading auditor performing a full mathematical
+and logical review of an automated trading agent's decision ledger.
 
 The agent is called FinQuant. It watches 15-minute SOL-PERP price bars and
-decides whether to enter long, enter short, or stand down. It is governed by
-a prime directive with six principles:
+decides whether to enter long, enter short, or stand down. It is governed by:
 
+PRIME DIRECTIVE:
 P-1 Never lie — no fabricated confidence or evidence
 P-2 Reason with tools — cite indicator values, not intuition
 P-3 Risk-averse default — NO_TRADE is the default; entries require confluence
-P-4 Pattern similarity — decisions should be anchored in prior validated patterns
+P-4 Pattern similarity — decisions anchored in prior validated patterns
 P-5 Context first — regime and trajectory before indicator snapshot
 P-6 Long-run math — optimize dollars won minus dollars lost; R must be >= 1.5
 
-It also has two hard rules:
-R-002: Every decision must state two competing hypotheses (h1 and h2) with numeric
-       confidence [0-1]. If h1_confidence - h2_confidence < 0.20, the agent MUST
-       output INSUFFICIENT_DATA, not a forced trade.
-R-003: Every entry must have a planned stop and target. R = target_dist / stop_dist
-       must be >= 1.5. If R < 1.5, the correct answer is NO_TRADE.
+HARD RULES:
+R-002: Every decision requires two competing hypotheses (h1 and h2) with numeric
+       confidence [0-1]. confidence_spread = h1_confidence - h2_confidence.
+       If spread < 0.20 → agent MUST output INSUFFICIENT_DATA, not a forced trade.
+R-003: Every entry requires planned_stop and planned_target.
+       R-multiple = (target - entry) / (entry - stop) for longs.
+       R must be >= 1.5. If R < 1.5 → NO_TRADE is the correct answer.
 
 Here is the ledger data:
 [PASTE CSV ROWS OR MARKDOWN TABLE HERE]
 
-Please audit the following:
-1. For each entry (ENTER_LONG or ENTER_SHORT): did the agent satisfy R-002?
-   (Was the confidence_spread >= 0.20? If not, was it correctly flagged as INSUFFICIENT_DATA?)
-2. For each entry: did the agent satisfy R-003?
-   (Was the planned_r_multiple >= 1.5?)
-3. Does the hypothesis_1 text cite specific indicator values (P-2)?
-   Or is it vague intuition?
-4. Does the thesis mention the regime (P-5)?
-5. What is the decision quality rate: (wins + no_trade_correct) / total_cases?
-6. What is the breakeven win rate at the average R-multiple observed?
-7. Is the agent achieving positive expectancy?
-   (avg_win × win_rate) > (avg_loss × loss_rate)?
-8. List any P-1 through P-6 violations you observe.
-9. Overall assessment: is this agent reasoning correctly? What are the top 3
-   things it should improve?
+PERFORM THE FOLLOWING MATH AND SHOW YOUR WORK:
 
-Be specific. Cite row numbers where you identify violations or strong decisions.
+SECTION 1 — AGGREGATE STATISTICS
+Compute and display:
+- Total rows, total entries (ENTER_LONG + ENTER_SHORT), total NO_TRADE
+- Win count, loss count, no_trade_correct count, no_trade_missed count
+- Win rate on entries = wins / (wins + losses)
+- Decision quality rate = (wins + no_trade_correct) / total_rows
+- Average PnL per winning trade
+- Average PnL per losing trade (use absolute value)
+- Expectancy per trade = (win_rate × avg_win) - (loss_rate × avg_loss)
+  Show whether expectancy is positive or negative.
+
+SECTION 2 — R-MULTIPLE ANALYSIS
+For each entry with a planned_r_multiple value:
+- List the R-multiple
+- Compute the breakeven win rate for that R: breakeven = 1 / (1 + R)
+- State whether the actual win rate for this trade exceeded breakeven
+
+Compute:
+- Average R-multiple across all entries
+- Minimum R needed to be profitable at the observed win rate:
+  Required R = (1 - win_rate) / win_rate
+
+SECTION 3 — R-002 COMPLIANCE CHECK
+For each entry row:
+- Show the confidence_spread (h1_confidence - h2_confidence)
+- State COMPLIANT if spread >= 0.20, VIOLATION if spread < 0.20 and action was not INSUFFICIENT_DATA
+- Count total violations
+
+SECTION 4 — REASONING QUALITY AUDIT
+For a sample of 5 entries, evaluate each hypothesis_1:
+- Does it cite at least one specific numeric indicator value? (P-2)
+- Does it mention the market regime? (P-5)
+- Is the thesis internally consistent with the action taken?
+Flag any hypotheses that are vague, circular, or unsupported.
+
+SECTION 5 — PRIME DIRECTIVE VIOLATIONS
+List every row that violates P-1 through P-6 and state which principle was violated and why.
+
+SECTION 6 — FINAL VERDICT
+State:
+1. Is the agent currently profitable? (positive expectancy yes/no)
+2. Is it reasoning correctly per the prime directive? (yes/no, with evidence)
+3. Top 3 specific improvements the agent should make, ranked by impact on expectancy.
+4. At what win rate and R-multiple combination would this agent become profitable?
+   Show the math.
+
+Be precise. Show every calculation. Do not skip steps.
 ```
 
 ---
