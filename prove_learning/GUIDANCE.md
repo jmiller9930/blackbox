@@ -249,5 +249,17 @@ Until that is true, keep iterating.
 
 ---
 
+---
+
+## Known issues for next session
+
+1. **R-002 gate too strict**: latest run with full prime directive in prompts caused 0 entries (Qwen stands down on everything). Need to calibrate — allow entries on clear confluence setups while keeping the gate for ambiguous ones.
+
+2. **Hypothesis columns in ledger**: h1/h2 confidence not yet captured from the 100-case run (fields are new). Will be populated in next run after prompt calibration.
+
+3. **Memory not yet activating**: quality gate (5 obs, 55% win rate) still blocking retrieval. With 100 cases and 40% win rate, nothing clears. Next session: either more warmup cycles or seed from stub run's promoted records.
+
+4. **Partner ledger ready** at `prove_learning/ledger_output/` — use with `OPERATOR_AUDIT_GUIDE.md`.
+
 **Last updated:** 2026-05-02  
-**Status:** Building RMv2 — starting with clean entry point + Fix 1 (quality gate)**
+**Status:** Session paused. Training loop ran. Next: calibrate R-002 gate and get entries with positive expectancy.**
