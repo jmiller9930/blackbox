@@ -138,38 +138,41 @@ def call_ollama(
 
 
 def extract_decision_json(text: str) -> dict[str, Any] | None:
-    """Extract the first valid JSON object from model output text."""
-    # Try JSON code fence first
-    fence_match = re.search(r"```(?:json)?\s*(\{.*?\})\s*```", text, re.DOTALL)
-    if fence_match:
-        try:
-            return json.loads(fence_match.group(1))
-        except json.JSONDecodeError:
-            pass
+    """
+    Extract the first valid JSON object from model output text.
+    Handles nested JSON (hypothesis_1, hypothesis_2 are objects inside the outer object).
+    """
+    def _extract_nested_json(s: str, start: int) -> dict[str, Any] | None:
+        """Walk forward balancing braces to extract a complete nested JSON object."""
+        depth = 0
+        for i in range(start, len(s)):
+            if s[i] == "{":
+                depth += 1
+            elif s[i] == "}":
+                depth -= 1
+                if depth == 0:
+                    candidate = s[start:i + 1]
+                    try:
+                        return json.loads(candidate)
+                    except json.JSONDecodeError:
+                        return None
+        return None
 
-    # Try first raw JSON object
-    brace_match = re.search(r"\{[^{}]*\}", text, re.DOTALL)
-    if brace_match:
-        try:
-            return json.loads(brace_match.group(0))
-        except json.JSONDecodeError:
-            pass
+    # Strip code fences
+    text_clean = re.sub(r"```(?:json)?", "", text).strip()
 
-    # Try last JSON object (model may reason then conclude)
-    all_matches = list(re.finditer(r"\{[^{}]*\}", text, re.DOTALL))
-    for m in reversed(all_matches):
-        try:
-            obj = json.loads(m.group(0))
-            if "action" in obj:
+    # Find all top-level "{" positions and try to parse complete JSON from each
+    for i, ch in enumerate(text_clean):
+        if ch == "{":
+            obj = _extract_nested_json(text_clean, i)
+            if obj and "action" in obj:
                 return obj
-        except json.JSONDecodeError:
-            continue
 
-    # Last resort: try to recover a truncated JSON by closing open braces
+    # Last resort: recover truncated JSON
     try:
-        start = text.find("{")
+        start = text_clean.find("{")
         if start >= 0:
-            partial = text[start:]
+            partial = text_clean[start:]
             open_count = partial.count("{") - partial.count("}")
             recovered = partial + "}" * max(0, open_count)
             obj = json.loads(recovered)
