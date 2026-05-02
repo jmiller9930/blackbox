@@ -2,6 +2,9 @@
 # Run ON trx40 after: ssh vanayr@172.20.1.66
 # Optional: tmux new -s finquant   then run this script inside tmux.
 #
+# Container (host launches training/docker/run_smoke.sh): FINQUANT_CONTAINER=1 is set — skips venv,
+# git pull, and pip (image already has deps).
+#
 # Override paths if needed:
 #   export BLACKBOX_REPO_ROOT=/home/vanayr/blackbox
 #   export FINQUANT_BASE=/data/NDE/finquant/agentic_v05
@@ -14,16 +17,26 @@ BLACKBOX_REPO_ROOT="${BLACKBOX_REPO_ROOT:-${HOME}/blackbox}"
 FINQUANT_BASE="${FINQUANT_BASE:-/data/NDE/finquant/agentic_v05}"
 FINQUANT_VENV="${FINQUANT_VENV:-/data/NDE/finquant/.venv-finquant}"
 
-if [[ ! -d "$FINQUANT_VENV" ]]; then
-  echo "Creating venv at $FINQUANT_VENV"
-  python3 -m venv "$FINQUANT_VENV"
+CONTAINER_MODE=0
+if [[ "${FINQUANT_CONTAINER:-0}" == "1" ]] || [[ -f /.dockerenv ]]; then
+  CONTAINER_MODE=1
 fi
-# shellcheck source=/dev/null
-source "$FINQUANT_VENV/bin/activate"
 
-cd "$BLACKBOX_REPO_ROOT"
-git pull origin main
-pip install -r training/requirements-finquant-training.txt
+if [[ "$CONTAINER_MODE" == "1" ]]; then
+  cd "${BLACKBOX_REPO_ROOT}"
+  echo "[finquant] container mode: using image Python (no venv / no pip install / no git pull)"
+else
+  if [[ ! -d "$FINQUANT_VENV" ]]; then
+    echo "Creating venv at $FINQUANT_VENV"
+    python3 -m venv "$FINQUANT_VENV"
+  fi
+  # shellcheck source=/dev/null
+  source "$FINQUANT_VENV/bin/activate"
+
+  cd "$BLACKBOX_REPO_ROOT"
+  git pull origin main
+  pip install -r training/requirements-finquant-training.txt
+fi
 
 export BLACKBOX_REPO_ROOT
 export FINQUANT_BASE

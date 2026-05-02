@@ -1,0 +1,14 @@
+# Context for `docker build -f training/docker/Dockerfile` (repo root).
+.git/objects
+.git/lfs
+**/node_modules
+**/__pycache__
+**/.pytest_cache
+**/.mypy_cache
+**/.venv
+**/*.db
+**/*.sqlite3
+prove_learning/finquant/unified/agent_lab/outputs
+data/sqlite
+training/runs
+*.md.bak

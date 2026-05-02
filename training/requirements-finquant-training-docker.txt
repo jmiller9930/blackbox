@@ -1,0 +1,10 @@
+# Installed ON TOP of pytorch/pytorch CUDA images (torch already present).
+# Build: see training/docker/Dockerfile
+transformers>=4.43,<5
+accelerate>=0.33,<2
+peft>=0.11,<1
+bitsandbytes>=0.43,<1
+trl>=0.9,<1
+datasets>=2.14,<4
+pyyaml>=6,<7
+safetensors>=0.4,<1

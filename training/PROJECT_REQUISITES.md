@@ -92,3 +92,19 @@ Suggested `/data` layout under `FINQUANT_BASE` (e.g. `/data/NDE/finquant/agentic
 `pip install -r training/requirements-finquant-training.txt` from the repo root, then run `python3 training/test.py`.
 
 **One script (on trx40 after SSH):** `bash training/smoke_trx40.sh` — creates venv if missing, `git pull`, installs deps, runs smoke (set `BLACKBOX_REPO_ROOT` / `FINQUANT_BASE` / `USE_REPO_CORPUS=1` if needed).
+
+### Docker / GPU container (optional housekeeping)
+
+Host needs **NVIDIA driver** + **[NVIDIA Container Toolkit](https://docs.nvidia.com/datacenter/cloud-native/container-toolkit/install-guide.html)** so `docker run --gpus all` works.
+
+```bash
+# From repo root on trx40 (after git pull):
+./training/docker/build.sh
+USE_REPO_CORPUS=1 ./training/docker/run_smoke.sh
+```
+
+- Image: `blackbox-finquant-train:rtx40` (PyTorch CUDA runtime + `training/requirements-finquant-training-docker.txt`).
+- Mounts: blackbox clone → `/workspace/blackbox`, `FINQUANT_BASE_HOST` → `/data/NDE/finquant/agentic_v05`.
+- Inside the container, `training/smoke_trx40.sh` sees `FINQUANT_CONTAINER=1` and **skips venv, git pull, and pip**.
+
+Bare-metal venv workflow remains supported; container avoids PEP 668 on the host OS Python.
