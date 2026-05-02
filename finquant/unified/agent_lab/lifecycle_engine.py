@@ -13,10 +13,13 @@ from typing import Any
 
 from data_contracts import build_input_packet
 from decision_contracts import make_decision
+from learning.pattern_signature import build_signature_from_packet
+from learning.pattern_competition import resolve_competition
+from learning.decision_explainer import build_decision_explanation
 
 
 class LifecycleEngine:
-    def __init__(self, config: dict[str, Any]) -> None:
+    def __init__(self, config: dict[str, Any], learning_store=None) -> None:
         self.config = config
         self.mode = config.get("mode", "deterministic_stub_v1")
         self._rule_source = (
@@ -27,6 +30,7 @@ class LifecycleEngine:
         self._ollama_url = str(config.get("ollama_base_url_v1") or "http://172.20.2.230:11434")
         self._llm_timeout = int(config.get("llm_timeout_seconds_v1") or 30)
         self._llm_max_tokens = int(config.get("llm_max_tokens_v1") or 400)
+        self._learning_store = learning_store
 
     def run_case(
         self,
@@ -63,6 +67,14 @@ class LifecycleEngine:
                 config=self.config,
                 prior_records=prior_records or [],
             )
+
+            # -- Pattern signature for this step (always computed) --
+            signature = build_signature_from_packet(input_packet, position_open=position_open)
+            pattern_id = signature["pattern_id_v1"]
+            human_label = signature["human_label_v1"]
+
+            # -- Pattern competition over the learning store (if any) --
+            competition = self._resolve_pattern_competition(pattern_id)
 
             # -- Try LLM path first; fall back to stub on any failure --
             llm_fields: dict[str, Any] = {}
@@ -134,6 +146,16 @@ class LifecycleEngine:
             if llm_used:
                 decision["raw_model_output_v1"] = raw_output
                 decision["llm_latency_ms_v1"] = llm_latency
+
+            # Attach pattern signature + decision explanation
+            decision["pattern_signature_v1"] = signature
+            decision["decision_explanation_v1"] = build_decision_explanation(
+                pattern_id=pattern_id,
+                human_label=human_label,
+                competition=competition,
+                final_action=action,
+                final_decision_source=decision_source,
+            )
             decisions.append(decision)
 
             # Update position state
@@ -150,6 +172,31 @@ class LifecycleEngine:
                 prior_rsi = visible_bars[-1].get("rsi_14")
 
         return decisions
+
+    # ------------------------------------------------------------------
+    # Learning-unit competition (queries the learning store, if attached)
+    # ------------------------------------------------------------------
+
+    def _resolve_pattern_competition(self, pattern_id: str) -> dict[str, Any]:
+        if not self._learning_store:
+            return {
+                "primary_unit_v1": None,
+                "challengers_v1": [],
+                "observers_v1": [],
+                "suppressors_v1": [],
+                "reason_v1": "no learning store attached",
+            }
+        try:
+            units = self._learning_store.units_by_pattern(pattern_id)
+        except Exception as exc:
+            return {
+                "primary_unit_v1": None,
+                "challengers_v1": [],
+                "observers_v1": [],
+                "suppressors_v1": [],
+                "reason_v1": f"store query failed: {exc}",
+            }
+        return resolve_competition(units)
 
     # ------------------------------------------------------------------
     # LLM decision path (Ollama)

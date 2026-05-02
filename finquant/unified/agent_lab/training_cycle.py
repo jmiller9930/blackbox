@@ -36,6 +36,7 @@ def run_training_cycle(
     from config import load_config
     from execution_flow import execute_case
     from runtime_flags import apply_runtime_overrides_v1
+    from learning.learning_unit_store import LearningUnitStore
 
     cycle_id = (
         f"cycle_{datetime.datetime.now(timezone.utc).strftime('%Y%m%dT%H%M%SZ')}"
@@ -47,6 +48,8 @@ def run_training_cycle(
     runs_dir.mkdir(parents=True, exist_ok=True)
 
     governed_store = cycle_dir / "shared_learning_records.jsonl"
+    learning_units_dir = cycle_dir / "learning_units"
+    learning_store = LearningUnitStore(learning_units_dir)
 
     base_config = load_config(config_path)
     base_config = apply_runtime_overrides_v1(
@@ -68,20 +71,26 @@ def run_training_cycle(
     candidate_config["retrieval_enabled_default_v1"] = True
     candidate_config["auto_promote_learning_v1"] = False
 
+    # Seed: build memory AND build learning units
     seed_result = execute_case(
         case_path=seed_case_path,
         config=seed_config,
         output_dir=str(runs_dir),
+        learning_store=learning_store,
     )
+    # Control: fresh student, NO learning store query (control of memory)
     control_result = execute_case(
         case_path=candidate_case_path,
         config=control_config,
         output_dir=str(runs_dir),
+        learning_store=None,
     )
+    # Candidate: same case but learning store is queried + observed
     candidate_result = execute_case(
         case_path=candidate_case_path,
         config=candidate_config,
         output_dir=str(runs_dir),
+        learning_store=learning_store,
     )
 
     report = build_referee_report(
@@ -94,6 +103,7 @@ def run_training_cycle(
     with open(report_path, "w") as f:
         json.dump(report, f, indent=2)
 
+    learning_summary = learning_store.summary_stats()
     manifest = {
         "schema": "finquant_training_cycle_manifest_v1",
         "cycle_id": cycle_id,
@@ -102,6 +112,8 @@ def run_training_cycle(
         "candidate_run_id": candidate_result["run_id"],
         "report_path": str(report_path),
         "shared_learning_store_path": str(governed_store),
+        "learning_units_dir_v1": str(learning_units_dir),
+        "learning_units_summary_v1": learning_summary,
     }
     with open(cycle_dir / "training_cycle_manifest.json", "w") as f:
         json.dump(manifest, f, indent=2)
@@ -114,6 +126,7 @@ def run_training_cycle(
         "candidate_result": candidate_result,
         "report": report,
         "report_path": str(report_path),
+        "learning_store_summary_v1": learning_summary,
     }
 
 
@@ -292,6 +305,7 @@ def run_progressive_cycle(
     from config import load_config
     from execution_flow import execute_case
     from runtime_flags import apply_runtime_overrides_v1
+    from learning.learning_unit_store import LearningUnitStore
 
     cycle_id = (
         f"progressive_{datetime.datetime.now(timezone.utc).strftime('%Y%m%dT%H%M%SZ')}"
@@ -303,6 +317,8 @@ def run_progressive_cycle(
     runs_dir.mkdir(parents=True, exist_ok=True)
 
     governed_store = cycle_dir / "shared_learning_records.jsonl"
+    learning_units_dir = cycle_dir / "learning_units"
+    learning_store = LearningUnitStore(learning_units_dir)
 
     base_config = load_config(config_path)
     base_config = apply_runtime_overrides_v1(
@@ -321,9 +337,10 @@ def run_progressive_cycle(
         case_path=seed_case_path,
         config=seed_config,
         output_dir=str(runs_dir),
+        learning_store=learning_store,
     )
 
-    # -- Control run (no memory) --
+    # -- Control run (no memory, no learning store) --
     control_path = candidate_case_paths[0] if candidate_case_paths else seed_case_path
     control_config = copy.deepcopy(base_config)
     control_config["retrieval_enabled_default_v1"] = False
@@ -333,11 +350,13 @@ def run_progressive_cycle(
         case_path=control_path,
         config=control_config,
         output_dir=str(runs_dir),
+        learning_store=None,
     )
 
-    # -- Progressive passes (each inherits all prior governed memory) --
+    # -- Progressive passes (each accumulates learning) --
     pass_results: list[dict[str, Any]] = []
     reports: list[dict[str, Any]] = []
+    learning_snapshots: list[dict[str, Any]] = []
 
     for pass_idx in range(n_passes):
         pass_case_path = (
@@ -347,14 +366,20 @@ def run_progressive_cycle(
         )
         pass_config = copy.deepcopy(base_config)
         pass_config["retrieval_enabled_default_v1"] = True
-        pass_config["auto_promote_learning_v1"] = True   # each pass can promote too
+        pass_config["auto_promote_learning_v1"] = True
 
         pass_result = execute_case(
             case_path=pass_case_path,
             config=pass_config,
             output_dir=str(runs_dir),
+            learning_store=learning_store,
         )
         pass_results.append(pass_result)
+
+        learning_snapshots.append({
+            "pass_index_v1": pass_idx + 1,
+            "summary_v1": learning_store.summary_stats(),
+        })
 
         report = build_referee_report(
             seed_result=seed_result,
@@ -363,6 +388,7 @@ def run_progressive_cycle(
         )
         report["pass_index_v1"] = pass_idx + 1
         report["retrieval_match_count_at_pass_v1"] = report["retrieval_match_count_v1"]
+        report["learning_units_summary_v1"] = learning_store.summary_stats()
         reports.append(report)
 
     # -- Write all pass reports --
@@ -389,6 +415,9 @@ def run_progressive_cycle(
         "pass_run_ids": [r["run_id"] for r in pass_results],
         "report_paths": report_paths,
         "shared_learning_store_path": str(governed_store),
+        "learning_units_dir_v1": str(learning_units_dir),
+        "learning_snapshots_v1": learning_snapshots,
+        "final_learning_summary_v1": learning_store.summary_stats(),
         "comparison_table_v1": comparison,
     }
     with open(cycle_dir / "progressive_cycle_manifest.json", "w") as f:
@@ -403,6 +432,7 @@ def run_progressive_cycle(
         "reports": reports,
         "report_paths": report_paths,
         "comparison": comparison,
+        "learning_snapshots": learning_snapshots,
         "manifest_path": str(cycle_dir / "progressive_cycle_manifest.json"),
     }
 

@@ -129,6 +129,9 @@ def _print_single_cycle_report(cycle_dir: Path, indent: str = "") -> None:
     control_status = od.get("control_final_status_v1", "?")
     candidate_status = od.get("candidate_final_status_v1", "?")
 
+    # NEW: learning unit summary (engineering-grade learning surface)
+    units_summary = report.get("learning_units_summary_v1") or _try_load_learning_units(cycle_dir)
+
     p = lambda s: print(f"{indent}{s}")
 
     p(f"  Scenario : {scenario}")
@@ -179,6 +182,26 @@ def _print_single_cycle_report(cycle_dir: Path, indent: str = "") -> None:
     p(f"  {'✓' if retrieval_attributed else '─'} Memory attributed    : {'YES — prior lesson influenced the decision' if retrieval_attributed else 'No — memory did not change behavior'}")
     p(f"  {'✓' if outcome_improved else '─'} Outcome improved     : {'YES — result got better' if outcome_improved else 'No — same or neither changed'}")
 
+    if units_summary:
+        p("")
+        p("  LEARNING UNITS — engineering-grade learning surface")
+        p(THIN.replace("─", " ─")[2:])
+        total = units_summary.get("total_units_v1", 0)
+        by_status = units_summary.get("by_status_v1", {}) or {}
+        p("")
+        p(f"  Total patterns observed : {total}")
+        for status_name in ("active", "validated", "provisional", "candidate", "retired"):
+            count = by_status.get(status_name, 0)
+            label = {
+                "active": "Driving decisions",
+                "validated": "Statistically meaningful, not yet driving",
+                "provisional": "Multiple observations, logged only",
+                "candidate": "First-seen, observation only",
+                "retired": "Negative knowledge — explicitly suppressed",
+            }[status_name]
+            if count > 0:
+                p(f"    {status_name:12} : {count:3}  ({label})")
+
     p("")
     p("  VERDICT")
     p(THIN.replace("─", " ─")[2:])
@@ -186,6 +209,25 @@ def _print_single_cycle_report(cycle_dir: Path, indent: str = "") -> None:
     p(f"  {_plain_verdict(verdict)}")
     p("")
     p(f"  {_plain_explanation(verdict, retrieval, action_changed, outcome_improved, seed_writes, checks)}")
+
+
+def _try_load_learning_units(cycle_dir: Path) -> dict | None:
+    units_path = cycle_dir / "learning_units" / "units.json"
+    if not units_path.exists():
+        return None
+    try:
+        snapshot = json.load(open(units_path))
+        units = snapshot.get("units_v1") or []
+        by_status: dict[str, int] = {}
+        for u in units:
+            s = str(u.get("status_v1", "unknown"))
+            by_status[s] = by_status.get(s, 0) + 1
+        return {
+            "total_units_v1": len(units),
+            "by_status_v1": by_status,
+        }
+    except Exception:
+        return None
 
 
 # ─────────────────────────────────────────────────────────────
