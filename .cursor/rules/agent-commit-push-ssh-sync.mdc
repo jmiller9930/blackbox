@@ -1,0 +1,40 @@
+---
+description: HARD — commit + push origin; SSH pull trx40 (vanayr@172.20.1.66) before closing substantive work
+alwaysApply: true
+---
+
+# Agent: commit, push, and remote SSH sync (non-negotiable)
+
+## Local → GitHub
+
+After **any substantive** change to tracked files you intend to ship (code, tests, operator-facing config):
+
+1. **`git status`** — stage only what belongs to the task.
+2. **`git commit`** — clear message.
+3. **`git push origin`** on the **current branch** (usually `main`).
+
+Do **not** end the turn saying “done,” “fixed,” or “synced” until **`git push` succeeded**. If push fails, give the **error** and **local commit hash** — do **not** imply `origin` has the work.
+
+Details and exceptions (explicit local-only, UI rebuild bars): [git-complete-push-origin.mdc](git-complete-push-origin.mdc).
+
+## GitHub → lab host (SSH)
+
+When the change affects **runtime on trx40** (FinQuant `training/`, NDE Studio, or anything the operator runs under **`~/blackbox` on the lab host**), **`git push` alone is incomplete.**
+
+**Immediately after a successful push**, run a **non-interactive** sync on trx40 (adjust branch if the task used another integration branch):
+
+```bash
+ssh -o BatchMode=yes vanayr@172.20.1.66 'cd ~/blackbox && git fetch origin && git pull origin main && git rev-parse HEAD'
+```
+
+- **Success proof:** paste or summarize **remote `git rev-parse HEAD`** matching the pushed commit (or state they match).
+- **If SSH fails** (auth, network, host down): report the **failure** and the **pushed hash**; tell the operator the lab is **not** verified current — do **not** claim trx40 is synced.
+
+**Canonical host:** **`vanayr@172.20.1.66`** (hostname **trx40**), repo **`~/blackbox`**. For NDE Studio container acceptance after pull, follow [nde-studio-host-trx40.mdc](nde-studio-host-trx40.mdc).
+
+## Scope reminder
+
+- **Mac / Cursor workspace:** commit + push.
+- **trx40 / lab:** SSH pull after push when the task depends on that host running the new revision.
+
+Skipping SSH pull because “the operator will do it” is **failed delivery** unless the user **explicitly** asked for **push-only** or the task **cannot** touch trx40.
