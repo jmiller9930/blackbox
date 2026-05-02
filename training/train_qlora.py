@@ -3,18 +3,18 @@
 FinQuant-1 — QLoRA adapter training (smoke or full). Does not modify Blackbox.
 
 Requires GPU + CUDA (trx40-class). Install:
-  pip install -r finquant/requirements-finquant-training.txt
+  pip install -r training/requirements-finquant-training.txt
 
-Deploy paths:
-  /data/finquant-1/training/train_qlora.py
-  /data/finquant-1/training/config_v0.1.yaml
+Deploy paths (trx40):
+  Repo: `training/train_qlora.py`, `training/config_v0.1.yaml`
+  Data: `FINQUANT_BASE` on `/data` (see PROJECT_REQUISITES.md).
 
 Phase 3 smoke:
-  export FINQUANT_BASE=/data/finquant-1
-  python3 finquant/training/train_qlora.py smoke --config finquant/training/config_v0.1.yaml
+  export FINQUANT_BASE=/data/NDE/finquant/agentic_v05
+  python3 training/train_qlora.py smoke --config training/config_v0.1.yaml
 
 Phase 6 full (after approval only):
-  python3 finquant/training/train_qlora.py full --config finquant/training/config_v0.1.yaml
+  python3 training/train_qlora.py full --config training/config_v0.1.yaml
 
 Writes smoke training report:
   {FINQUANT_BASE}/reports/smoke_training_report.md   (smoke mode only)
@@ -213,7 +213,7 @@ def main() -> None:
         from trl import SFTConfig, SFTTrainer
     except ImportError as e:
         raise SystemExit(
-            "Missing training deps. Install: pip install -r finquant/requirements-finquant-training.txt\n" + str(e)
+            "Missing training deps. Install: pip install -r training/requirements-finquant-training.txt\n" + str(e)
         ) from e
 
     if not torch.cuda.is_available():

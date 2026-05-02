@@ -2,6 +2,13 @@
 
 Canonical for work under `training/` until this module is promoted into the wider repo.
 
+## Workstream isolation (do not cross threads)
+
+- **This folder** is **FinQuant LLM training + verifier gate** only — not the general Student / learning-loop / NDE graph thread.
+- **Authoring** for this effort stays under `training/` (corpus, validators, launcher, `verifier_eval_finquant.py`).
+- **trx40 / RTX 40:** sync with `git pull` on the same branch you use here; keep large artifacts on **`FINQUANT_BASE`** under `/data` (see RTX 40 launcher section).
+- **Upstream note:** `training/verifier_eval_finquant.py` is a **training-local copy** of the verifier eval; merge from `prove_learning/finquant/evals/eval_finquant.py` only when you intentionally refresh — daily work does not go through `prove_learning/`.
+
 ## Corpus packaging (`finquant_agentic_qa_v1`)
 
 Each JSONL row is one object with:
@@ -66,6 +73,6 @@ One entry point on the GPU host after `cd` to repo root:
 - `python3 training/test.py --help` (alias)
 - `python3 training/run_finquant_rtx40_event.py --help`
 
-Flow: validate agentic corpus → optional QLoRA (`--train smoke|full|none`) → **verifier exam** via `prove_learning/finquant/evals/eval_finquant.py`. Normative `final_exam_v1.json` is **announced** (`FINQUANT_FINAL_EXAM_JSON` or `/data/NDE/finquant/eval/final_exam_v1.json`); when `cases` is non-empty, quant LLM grading can be added later without renaming the launcher.
+Flow: validate agentic corpus → optional QLoRA (`--train smoke|full|none`) → **verifier exam** via `training/verifier_eval_finquant.py` (or `FINQUANT_VERIFIER_EVAL_PY` / `--eval-script` for a `/data` copy). Normative `final_exam_v1.json` is **announced** (`FINQUANT_FINAL_EXAM_JSON` or `/data/NDE/finquant/eval/final_exam_v1.json`); when `cases` is non-empty, quant LLM grading can be added later without renaming the launcher.
 
 Suggested `/data` layout under `FINQUANT_BASE` (e.g. `/data/NDE/finquant/agentic_v05`): `datasets/`, `finquant_memory/`, `adapters/`, `reports/`.

@@ -1,0 +1,11 @@
+# FinQuant training stack (GPU/CUDA). Install only on training hosts (e.g. trx40).
+# pip install -r training/requirements-finquant-training.txt
+torch>=2.2,<3
+transformers>=4.43,<5
+accelerate>=0.33,<2
+peft>=0.11,<1
+bitsandbytes>=0.43,<1
+trl>=0.9,<1
+datasets>=2.14,<4
+pyyaml>=6,<7
+safetensors>=0.4,<1

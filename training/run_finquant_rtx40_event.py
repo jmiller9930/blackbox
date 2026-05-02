@@ -12,9 +12,9 @@ Typical use (from your Mac: SSH into trx40, attach tmux, then):
 What runs where:
   * **Execution** is on the GPU host (trx40) inside your SSH/tmux session — not on your laptop.
   * **Normative final exam JSON** (`final_exam_v1.json`) is checked for placeholder vs populated cases.
-    Today the **graded battery** wired here is `prove_learning/finquant/evals/eval_finquant.py`
-    (verifier-shaped suite). When `final_exam_v1.json` gains non-empty `cases`, a quant runner
-    can be added without changing how you invoke this script.
+    The **graded verifier battery** is `training/verifier_eval_finquant.py` only (FinQuant training
+    isolation). Override with env `FINQUANT_VERIFIER_EVAL_PY` if trx40 keeps a copy under `/data`.
+    When `final_exam_v1.json` gains non-empty `cases`, a quant runner can be added here.
 
 Recommended data layout on `/data` (FINQUANT_BASE):
 
@@ -60,7 +60,7 @@ def _default_final_exam(finquant_base: Path) -> Path:
     return Path("/data/NDE/finquant/eval/final_exam_v1.json")
 
 
-def _announce_final_exam(path: Path, repo_root: Path) -> None:
+def _announce_final_exam(path: Path) -> None:
     if not path.is_file():
         print(
             f"NOTE: final exam JSON not found ({path}). "
@@ -81,11 +81,10 @@ def _announce_final_exam(path: Path, repo_root: Path) -> None:
             flush=True,
         )
     else:
-        placeholder = repo_root / "nde_factory/layout/finquant/eval/final_exam_v1.json"
         print(
             f"NOTE: {path} lists {len(cases)} case(s). "
             "Quant-exam LLM grading is not wired in this launcher yet; "
-            f"still running verifier battery only. (Repo placeholder: {placeholder})",
+            "still running verifier battery only (`training/verifier_eval_finquant.py`).",
             flush=True,
         )
 
@@ -130,6 +129,12 @@ def main() -> int:
     ap.add_argument("--exam-write-report", action="store_true", help="Pass --write-report to eval_finquant.py")
     ap.add_argument("--final-exam-json", type=Path, default=None, help="Override path announced before exam")
     ap.add_argument("--eval-max-new-tokens", type=int, default=768)
+    ap.add_argument(
+        "--eval-script",
+        type=Path,
+        default=None,
+        help="Verifier eval Python file (default: env FINQUANT_VERIFIER_EVAL_PY or training/verifier_eval_finquant.py)",
+    )
     args = ap.parse_args()
 
     repo = _repo_root(args.repo_root)
@@ -138,10 +143,16 @@ def main() -> int:
     mem = args.memory_store or (base / "finquant_memory" / "exemplar_store.jsonl").resolve()
     train_py = repo / "training" / "train_qlora.py"
     validate_py = repo / "training" / "validate_agentic_corpus_v1.py"
-    eval_py = repo / "prove_learning" / "finquant" / "evals" / "eval_finquant.py"
+    env_eval = (os.environ.get("FINQUANT_VERIFIER_EVAL_PY") or "").strip()
+    if args.eval_script is not None:
+        eval_py = args.eval_script.expanduser().resolve()
+    elif env_eval:
+        eval_py = Path(env_eval).expanduser().resolve()
+    else:
+        eval_py = (repo / "training" / "verifier_eval_finquant.py").resolve()
     cfg = args.config or (repo / "training" / "config_v0.1.yaml")
 
-    for label, p in ("train_qlora.py", train_py), ("validate_agentic_corpus_v1.py", validate_py), ("eval_finquant.py", eval_py):
+    for label, p in ("train_qlora.py", train_py), ("validate_agentic_corpus_v1.py", validate_py), ("verifier_eval_finquant.py", eval_py):
         if not p.is_file():
             print(f"ERROR: missing {label} at {p}", file=sys.stderr)
             return 2
@@ -150,7 +161,7 @@ def main() -> int:
     env["FINQUANT_BASE"] = str(base)
 
     fe = args.final_exam_json or _default_final_exam(base)
-    _announce_final_exam(fe, repo)
+    _announce_final_exam(fe)
 
     if not args.skip_validate:
         r = subprocess.run(
