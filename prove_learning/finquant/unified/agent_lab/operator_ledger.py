@@ -80,21 +80,25 @@ def build_ledger_row(
     else:
         confidence = float(raw_conf)
 
-    # ToT branches if present
+    # Hypothesis fields — from R-002 normalized output (llm_adapter) or ToT branches
+    h1_raw = decision.get("hypothesis_1_v1") or {}
+    h2_raw = decision.get("hypothesis_2_v1") or {}
+    confidence_spread = decision.get("confidence_spread_v1")
+    r_multiple = decision.get("planned_r_multiple_v1")
+    winning_branch = decision.get("llm_raw_action_v1") or ""
+
+    # Fall back to tot_branches if present (RMv2 path)
     tot_branches = decision.get("tot_branches_v1") or []
-    h1 = h2 = {}
-    winning_branch = ""
-    confidence_spread = None
-    r_multiple = None
-    if tot_branches:
+    if not h1_raw and tot_branches:
         winner = max(tot_branches, key=lambda b: float(b.get("evidence_score") or 0))
         winning_branch = winner.get("branch", "")
-        h1_data = winner.get("hypothesis_1") or {}
-        h2_data = winner.get("hypothesis_2") or {}
-        h1 = {"thesis": h1_data.get("thesis", ""), "confidence": h1_data.get("confidence")}
-        h2 = {"thesis": h2_data.get("thesis", ""), "confidence": h2_data.get("confidence")}
+        h1_raw = winner.get("hypothesis_1") or {}
+        h2_raw = winner.get("hypothesis_2") or {}
         confidence_spread = winner.get("confidence_spread")
         r_multiple = winner.get("planned_r_multiple")
+
+    h1 = {"thesis": str(h1_raw.get("thesis") or ""), "confidence": h1_raw.get("confidence")} if h1_raw else {}
+    h2 = {"thesis": str(h2_raw.get("thesis") or ""), "confidence": h2_raw.get("confidence")} if h2_raw else {}
 
     # Outcome
     outcome_kind = str(outcome.get("outcome_kind_v1") or "")
@@ -294,12 +298,18 @@ def extract_from_loop_dir(loop_dir: Path) -> list[dict[str, Any]]:
                 d0 = decisions[0]
                 pkt = d0.get("input_packet_v1") or {}
                 math = pkt.get("market_math_v1") or {}
-                ctx = pkt.get("market_context_v1") or {}
                 regime = pkt.get("regime_v1") or "unknown"
+                # Use observed_context for actual timestamp
+                obs_ctx = d0.get("observed_context_v1") or {}
+                # Try to get actual bar timestamp from the case via run_summary
+                bar_ts = summary.get("bar_timestamp") or case_id
+                # Some runs store timestamp in observed_context
+                if isinstance(obs_ctx, dict) and obs_ctx.get("last_timestamp"):
+                    bar_ts = obs_ctx["last_timestamp"]
                 full_bar = {
-                    "timestamp": case_id,
+                    "timestamp": bar_ts,
                     "close": math.get("close_v1"),
-                    "rsi_14": (pkt.get("market_math_v1") or {}).get("rsi_14_v1"),
+                    "rsi_14": math.get("rsi_14_v1"),
                     "ema_20": None,
                     "atr_14": math.get("atr_14_v1"),
                     "volume": None,

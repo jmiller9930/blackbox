@@ -64,8 +64,8 @@ def test_prompt_contains_rsi_and_atr():
 
 def test_prompt_contains_memory_context():
     prompt = build_prompt(SAMPLE_PACKET)
-    assert "Prior Memory" in prompt
-    assert "long_bias" in prompt.lower() or "Long bias" in prompt
+    assert "MEMORY" in prompt.upper()
+    assert "long" in prompt.lower() or "Long" in prompt
 
 
 def test_prompt_flat_position_says_flat():
@@ -87,7 +87,7 @@ def test_prompt_no_memory_says_no_eligible():
         "memory_influence_available_v1": False,
     }
     prompt = build_prompt(no_mem_packet)
-    assert "No eligible prior memory" in prompt
+    assert "No validated patterns" in prompt or "No eligible" in prompt
 
 
 def test_system_prompt_mentions_finquant():

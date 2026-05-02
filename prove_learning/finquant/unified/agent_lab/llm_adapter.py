@@ -20,7 +20,7 @@ import urllib.request
 import urllib.error
 from typing import Any
 
-VALID_ACTIONS = {"NO_TRADE", "ENTER_LONG", "ENTER_SHORT", "HOLD", "EXIT"}
+VALID_ACTIONS = {"NO_TRADE", "ENTER_LONG", "ENTER_SHORT", "HOLD", "EXIT", "INSUFFICIENT_DATA"}
 VALID_CONFIDENCE = {"low", "medium", "high"}
 
 DEFAULT_TIMEOUT = 30
@@ -193,6 +193,12 @@ def normalize_llm_decision(
 ) -> dict[str, Any]:
     """Normalize a parsed LLM response into the standard decision field set."""
     action = str(parsed.get("action", "NO_TRADE")).upper()
+    if action not in VALID_ACTIONS:
+        action = "NO_TRADE"
+
+    # INSUFFICIENT_DATA is treated as NO_TRADE for execution, but preserved for audit
+    effective_action = "NO_TRADE" if action == "INSUFFICIENT_DATA" else action
+
     confidence = str(parsed.get("confidence", "low")).lower()
     if confidence not in VALID_CONFIDENCE:
         confidence = "low"
@@ -209,8 +215,29 @@ def normalize_llm_decision(
     conflicting = parsed.get("conflicting", parsed.get("conflicting_indicators", [])) or []
     risk_notes = str(parsed.get("risk_notes", parsed.get("risk", "")) or "").strip()
 
+    # R-002: extract hypothesis_1, hypothesis_2, confidence_spread for audit trail
+    h1 = parsed.get("hypothesis_1") or {}
+    h2 = parsed.get("hypothesis_2") or {}
+    h1_conf = float(h1.get("confidence") or 0.0) if h1 else None
+    h2_conf = float(h2.get("confidence") or 0.0) if h2 else None
+    spread = parsed.get("confidence_spread")
+    if spread is None and h1_conf is not None and h2_conf is not None:
+        spread = round(h1_conf - h2_conf, 4)
+
+    # Mechanically enforce R-002: if spread < 0.20 and action is directional, downgrade
+    if spread is not None and spread < 0.20 and effective_action in ("ENTER_LONG", "ENTER_SHORT"):
+        effective_action = "NO_TRADE"
+        thesis = f"[R-002 gate: spread={spread:.2f}<0.20, insufficient evidence] {thesis}"
+        action = "INSUFFICIENT_DATA"
+
+    # R-003: extract risk/reward for audit
+    planned_stop = parsed.get("planned_stop")
+    planned_target = parsed.get("planned_target")
+    r_multiple = parsed.get("planned_r_multiple")
+
     return {
-        "action": action,
+        "action": effective_action,
+        "llm_raw_action_v1": action,                    # original LLM action before gates
         "thesis_v1": thesis,
         "invalidation_v1": invalidation,
         "confidence_band_v1": confidence,
@@ -220,4 +247,20 @@ def normalize_llm_decision(
         "risk_state_v1": f"llm_conf={confidence}",
         "raw_model_output_v1": raw_output,
         "llm_latency_ms_v1": latency_ms,
+        # R-002 audit fields
+        "hypothesis_1_v1": {
+            "thesis": str(h1.get("thesis") or ""),
+            "confidence": h1_conf,
+            "evidence": h1.get("evidence") or [],
+        } if h1 else None,
+        "hypothesis_2_v1": {
+            "thesis": str(h2.get("thesis") or ""),
+            "confidence": h2_conf,
+            "evidence": h2.get("evidence") or [],
+        } if h2 else None,
+        "confidence_spread_v1": spread,
+        # R-003 audit fields
+        "planned_stop_v1": planned_stop,
+        "planned_target_v1": planned_target,
+        "planned_r_multiple_v1": r_multiple,
     }
