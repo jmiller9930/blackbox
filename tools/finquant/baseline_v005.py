@@ -10,7 +10,13 @@ Hard rules enforced:
   * Writes only under the run directory (default ``runtime/finquant_train_v005``).
   * Final line on success: ``FINQUANT_V005_BASELINE_MEASURED_NO_TRAINING_PERFORMED``.
 
-Phase banners (spec §19): PHASE_01_DATA_LOAD .. PHASE_08_REPORT_WRITE.
+Phase banners: PHASE_01_DATA_LOAD .. PHASE_07_REPORT_WRITE.
+
+Per Engineering directive 2026-05-01 (Determinism De-scoped Revision):
+consistency / determinism work is OUT OF SCOPE for this baseline. The
+focus is schema discipline, causal integrity, risk reasoning, no-trade
+quality, and (primary gate) learning_record_candidate validity. Consistency
+replay will be added in a later phase.
 """
 
 from __future__ import annotations
@@ -686,46 +692,26 @@ def validate_output(case: dict[str, Any], parsed: dict[str, Any] | None, raw: st
 
 
 # ---------------------------------------------------------------------------
-# Phase 7 — consistency replay
-# ---------------------------------------------------------------------------
-
-def consistency_score(replays: list[list[dict[str, Any]]]) -> float:
-    """Each entry = list of repeat-results for one case."""
-    if not replays:
-        return 1.0
-    case_scores: list[float] = []
-    for runs in replays:
-        if len(runs) < 2:
-            continue
-        decisions = {r.get("decision") for r in runs}
-        directions = {r.get("direction") for r in runs}
-        confs = [float(r.get("confidence") or 0.0) for r in runs if isinstance(r.get("confidence"), (int, float))]
-        decision_match = 1.0 if len(decisions) == 1 else 0.0
-        direction_match = 1.0 if len(directions) == 1 else 0.0
-        conf_band = 1.0 if (confs and (max(confs) - min(confs)) <= 0.20) else 0.5 if confs else 0.0
-        case_scores.append(0.5 * decision_match + 0.3 * direction_match + 0.2 * conf_band)
-    return round(sum(case_scores) / len(case_scores), 4) if case_scores else 1.0
-
-
-# ---------------------------------------------------------------------------
 # Reports
 # ---------------------------------------------------------------------------
 
 def classify_readiness(metrics: dict[str, float], thresholds: dict[str, float]) -> str:
+    """Per revised directive (2026-05-01): only three classifications.
+
+    Determinism / consistency intentionally NOT a gate at this phase.
+    Primary gate: learning_record_valid_rate (learning-record generation
+    capability — if invalid, the system is not learning).
+    """
     schema = metrics["schema_valid_rate"]
     leakage = metrics["future_leakage_count"]
     risk = metrics["risk_reasoning_rate"]
-    no_trade = metrics["no_trade_quality_rate"]
     learn = metrics["learning_record_valid_rate"]
-    consistency = metrics["consistency_score"]
 
     if schema < thresholds["schema"] or learn < thresholds["learning"]:
         return "BASELINE_BLOCKED_BY_SCHEMA_OR_LEARNING_RECORDS"
-    if leakage > thresholds["leakage_max"] or risk < thresholds["risk"] or consistency < thresholds["consistency"]:
+    if leakage > thresholds["leakage_max"] or risk < thresholds["risk"]:
         return "BASELINE_NOT_READY_FOR_PROMOTION"
-    if no_trade < thresholds["no_trade"]:
-        return "BASELINE_READY_FOR_BEHAVIOR_TUNING"
-    return "BASELINE_READY_FOR_CANDIDATE_CORE_REVIEW"
+    return "BASELINE_READY_FOR_BEHAVIOR_TUNING"
 
 
 def write_markdown(report: dict[str, Any], path: Path) -> None:
@@ -764,9 +750,10 @@ def write_markdown(report: dict[str, Any], path: Path) -> None:
         f"- future_leakage_count: **{m['future_leakage_count']}**",
         f"- risk_reasoning_rate: **{m['risk_reasoning_rate']:.3f}**",
         f"- no_trade_quality_rate: **{m['no_trade_quality_rate']:.3f}**",
-        f"- learning_record_valid_rate: **{m['learning_record_valid_rate']:.3f}**",
-        f"- consistency_score: **{m['consistency_score']:.3f}**",
+        f"- learning_record_valid_rate: **{m['learning_record_valid_rate']:.3f}**  *(primary gate)*",
         f"- decision_distribution: {m['decision_distribution']}",
+        "",
+        "_Consistency / determinism scoring intentionally OUT OF SCOPE (revised directive 2026-05-01)._ ",
         "",
         "## Failure Buckets",
         "",
@@ -812,9 +799,7 @@ def main() -> int:
     p.add_argument("--top-p", type=float, default=1.0)
     p.add_argument("--num-predict", type=int, default=1200)
     p.add_argument("--timeout", type=int, default=180)
-    p.add_argument("--repeat", type=int, default=3, help="Consistency repeats per sampled case")
-    p.add_argument("--consistency-sample", type=int, default=10)
-    p.add_argument("--smoke", action="store_true", help="Smoke mode: 10 cases, repeat=2")
+    p.add_argument("--smoke", action="store_true", help="Smoke mode: 10 cases")
     p.add_argument("--seed", type=int, default=20260501)
     p.add_argument("--out", default=f"runtime/{RUN_TAG}")
     p.add_argument("--repo-root", default=str(Path(__file__).resolve().parents[2]))
@@ -822,8 +807,6 @@ def main() -> int:
 
     if args.smoke:
         args.cases = min(args.cases, 10)
-        args.repeat = min(args.repeat, 2)
-        args.consistency_sample = min(args.consistency_sample, 3)
 
     repo_root = Path(args.repo_root).resolve()
     db_path = (Path(args.db) if Path(args.db).is_absolute() else repo_root / args.db).resolve()
@@ -988,52 +971,21 @@ def main() -> int:
         f"leak={future_leakage_count}"
     )
 
-    # ---------- PHASE 7
-    print("\nPHASE_07_CONSISTENCY_REPLAY")
-    rng = random.Random(args.seed + 1)
-    sample_n = min(args.consistency_sample, len(cases))
-    sample_indices = rng.sample(range(len(cases)), sample_n) if sample_n else []
-    consistency_log_path = run_dir / "debug" / "consistency_replay.jsonl"
-    cons_fh = consistency_log_path.open("w", encoding="utf-8")
-    replays_data: list[list[dict[str, Any]]] = []
-    for si in sample_indices:
-        case = cases[si]
-        prompt = build_prompt(case)
-        runs: list[dict[str, Any]] = []
-        for rep in range(args.repeat):
-            try:
-                text, _meta = call_ollama(
-                    args.ollama_url, args.model, prompt, args.temperature, args.top_p, args.num_predict, args.timeout
-                )
-                obj, _ = extract_json(text)
-            except Exception as e:  # noqa: BLE001
-                obj = {"_error": str(e)}
-            runs.append(obj or {})
-            cons_fh.write(json.dumps({"case_id": case["case_id"], "rep": rep, "obj": obj}, separators=(",", ":")) + "\n")
-        replays_data.append(runs)
-        print(f"  consistency case={case['case_id']} reps={args.repeat}")
-    cons_fh.close()
-    consistency = consistency_score(replays_data)
-    print(f"  consistency_score={consistency}")
-
-    # ---------- PHASE 8
-    print("\nPHASE_08_REPORT_WRITE")
+    # ---------- PHASE 7 (consistency replay intentionally omitted — directive 2026-05-01)
+    print("\nPHASE_07_REPORT_WRITE")
     metrics = {
         "schema_valid_rate": round(schema_valid_rate, 4),
         "future_leakage_count": int(future_leakage_count),
         "risk_reasoning_rate": round(risk_reasoning_rate, 4),
         "no_trade_quality_rate": round(no_trade_quality_rate, 4),
         "learning_record_valid_rate": round(learning_record_valid_rate, 4),
-        "consistency_score": consistency,
         "decision_distribution": decisions,
     }
     thresholds = {
         "schema": 0.98,
         "leakage_max": 0,
         "risk": 0.95,
-        "no_trade": 0.90,
         "learning": 0.95,
-        "consistency": 0.90,
     }
     classification = classify_readiness(metrics, thresholds)
 
@@ -1060,6 +1012,8 @@ def main() -> int:
         "no_training_performed": True,
         "read_only_db_access": True,
         "wrote_only_under_run_dir": True,
+        "consistency_scoring_in_scope": False,
+        "directive_revision": "2026-05-01_determinism_descoped",
         "final_line": "FINQUANT_V005_BASELINE_MEASURED_NO_TRAINING_PERFORMED",
     }
     (run_dir / "reports" / "finquant_v005_baseline_report.json").write_text(
