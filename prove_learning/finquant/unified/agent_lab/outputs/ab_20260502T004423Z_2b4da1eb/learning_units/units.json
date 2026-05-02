@@ -1,0 +1,115 @@
+{
+  "schema": "finquant_learning_unit_snapshot_v1",
+  "generated_at_v1": "2026-05-02T00:44:23Z",
+  "unit_count_v1": 2,
+  "units_v1": [
+    {
+      "schema": "finquant_learning_unit_v1",
+      "pattern_id_v1": "6144da3be90fcd99",
+      "signature_components_v1": {
+        "symbol_v1": "SOL-PERP",
+        "timeframe_minutes_v1": 60,
+        "trend_v1": "trend_up",
+        "rsi_bucket_v1": "rsi_55_60",
+        "atr_bucket_v1": "atr_2_3",
+        "volatility_v1": "vol_high",
+        "volume_v1": "vol_expand",
+        "position_v1": "pos_flat"
+      },
+      "human_label_v1": "trend_up | rsi_55_60 | vol_high | pos_flat",
+      "proposed_action_v1": "ENTER_LONG",
+      "hypothesis_v1": "Uptrend: close 100.00\u2192102.00, RSI=58.0, volume expanding, ATR=2.20.",
+      "expected_outcome_v1": "Price moves up after entry; case PASS.",
+      "invalidation_condition_v1": "Exit if close drops below 101.49 or RSI decays with volume collapse.",
+      "scope_notes_v1": "case=aa_seed_long_promote_v1 symbol=SOL-PERP",
+      "hit_count_v1": 2,
+      "miss_count_v1": 0,
+      "inconclusive_count_v1": 0,
+      "evidence_record_ids_v1": [
+        "lr_689e8c84df034cd8ac99f396a147df74",
+        "lr_17a9d9c0ca1e4e6ea5cd8ee9f95aca60"
+      ],
+      "total_observations_v1": 2,
+      "wins_v1": 2,
+      "losses_v1": 0,
+      "no_trade_correct_v1": 0,
+      "no_trade_missed_v1": 0,
+      "cumulative_pnl_v1": 3.0,
+      "expectancy_v1": 1.5,
+      "win_rate_v1": 1.0,
+      "confidence_score_v1": 0.7,
+      "status_v1": "candidate",
+      "first_seen_at_v1": "2026-05-02T00:44:23Z",
+      "last_seen_at_v1": "2026-05-02T00:44:23Z",
+      "last_status_change_at_v1": "2026-05-02T00:44:23Z",
+      "status_history_v1": [
+        {
+          "at": "2026-05-02T00:44:23Z",
+          "from": null,
+          "to": "candidate",
+          "reason": "initial"
+        }
+      ],
+      "recent_verdict_chain_v1": [
+        "confirmed",
+        "confirmed"
+      ],
+      "retired_reason_v1": null,
+      "retired_at_v1": null
+    },
+    {
+      "schema": "finquant_learning_unit_v1",
+      "pattern_id_v1": "4de3c192f5cb938b",
+      "signature_components_v1": {
+        "symbol_v1": "SOL-PERP",
+        "timeframe_minutes_v1": 60,
+        "trend_v1": "trend_up",
+        "rsi_bucket_v1": "rsi_50_55",
+        "atr_bucket_v1": "atr_1_1_5",
+        "volatility_v1": "vol_normal",
+        "volume_v1": "vol_expand",
+        "position_v1": "pos_flat"
+      },
+      "human_label_v1": "trend_up | rsi_50_55 | vol_normal | pos_flat",
+      "proposed_action_v1": "NO_TRADE",
+      "hypothesis_v1": "Market choppy: avg_move=0.40, ATR=1.3. No edge.",
+      "expected_outcome_v1": "Standing down avoids loss; case does not penalize abstention.",
+      "invalidation_condition_v1": "Stand down until ATR > 1.0 and directional conviction appears.",
+      "scope_notes_v1": "case=ab_marginal_memory_flip_v1 symbol=SOL-PERP",
+      "hit_count_v1": 2,
+      "miss_count_v1": 0,
+      "inconclusive_count_v1": 0,
+      "evidence_record_ids_v1": [
+        "lr_2e1f5bb2216c41cb9242b445de688e26",
+        "lr_b5685de9da4745c596ccd47ceb0302d0"
+      ],
+      "total_observations_v1": 2,
+      "wins_v1": 1,
+      "losses_v1": 0,
+      "no_trade_correct_v1": 1,
+      "no_trade_missed_v1": 0,
+      "cumulative_pnl_v1": 0.3,
+      "expectancy_v1": 0.3,
+      "win_rate_v1": 1.0,
+      "confidence_score_v1": 0.7,
+      "status_v1": "candidate",
+      "first_seen_at_v1": "2026-05-02T00:44:23Z",
+      "last_seen_at_v1": "2026-05-02T00:44:23Z",
+      "last_status_change_at_v1": "2026-05-02T00:44:23Z",
+      "status_history_v1": [
+        {
+          "at": "2026-05-02T00:44:23Z",
+          "from": null,
+          "to": "candidate",
+          "reason": "initial"
+        }
+      ],
+      "recent_verdict_chain_v1": [
+        "confirmed",
+        "confirmed"
+      ],
+      "retired_reason_v1": null,
+      "retired_at_v1": null
+    }
+  ]
+}

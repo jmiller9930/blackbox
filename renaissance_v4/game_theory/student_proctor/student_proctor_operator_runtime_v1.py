@@ -102,6 +102,7 @@ from renaissance_v4.game_theory.student_proctor.student_reasoning_fault_map_v1 i
     merge_runtime_fault_nodes_v1,
 )
 from renaissance_v4.game_theory.student_proctor.student_learning_store_v1 import (
+    _raw_append_degraded_record_v1,
     append_student_learning_record_v1,
     build_student_learning_record_v1_from_reveal,
     default_student_learning_store_path_v1,
@@ -316,6 +317,46 @@ def _phased_honesty_annotation_v1(
     }
 
 
+def _build_degraded_learning_record_v1(
+    lr: dict[str, Any],
+    *,
+    sid: str,
+    trade_id: str,
+    errors: list[str],
+) -> dict[str, Any]:
+    """
+    Produce a minimal schema-safe fallback record when ``validate_student_learning_record_v1``
+    rejects the in-flight row.
+
+    ``degraded_v1=True`` marks the row so retrieval skips it.  The original fields are preserved
+    where valid; only broken governance is replaced with a reject placeholder.
+    """
+    from datetime import datetime, timezone
+
+    base = dict(lr) if isinstance(lr, dict) else {}
+    base["degraded_v1"] = True
+    base["degraded_reason_codes_v1"] = list(errors)[:20]
+    base["retrieval_enabled_v1"] = False
+    base["promotion_eligible_v1"] = False
+    base["stored_v1"] = True
+    gov = base.get("learning_governance_v1")
+    if not isinstance(gov, dict) or str(gov.get("decision") or "").lower() not in (
+        "promote",
+        "hold",
+        "reject",
+    ):
+        base["learning_governance_v1"] = {
+            "schema": "learning_governance_v1",
+            "decision": "reject",
+            "reason_codes": ["degraded_record_v1"],
+            "source_job_id": str(base.get("run_id") or ""),
+            "fingerprint": None,
+            "timestamp_utc": datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ"),
+        }
+    base.setdefault("schema", "student_learning_record_v1")
+    return base
+
+
 def _env_seam_enabled() -> bool:
     v = (os.environ.get("PATTERN_GAME_STUDENT_LOOP_SEAM") or "1").strip().lower()
     return v not in ("0", "false", "no", "off")
@@ -516,6 +557,7 @@ def student_loop_seam_after_parallel_batch_v1(
 
     errors: list[str] = []
     appended = 0
+    _degraded_rows = 0
     memory_promotion_batch_trades_v1: list[dict[str, Any]] = []
     trades_seen = 0
     retrieval_matches_total = 0
@@ -1453,21 +1495,28 @@ def student_loop_seam_after_parallel_batch_v1(
                         student_output=so,
                         trade_id=str(o.trade_id),
                     )
+                    # --- Always-append invariant: REJECT ≠ discard, only controls reuse. ---
+                    is_reject = str(gov.get("decision") or "") == GOVERNANCE_REJECT
+                    lr["stored_v1"] = True
+                    lr["promotion_eligible_v1"] = not is_reject
+                    lr["retrieval_enabled_v1"] = not is_reject
+
                     post_gov_errs = validate_student_learning_record_v1(lr)
                     if post_gov_errs:
                         errors.append(
                             f"{sid} trade={o.trade_id}: learning_record_post_governance_invalid: "
                             f"{'; '.join(post_gov_errs)}"
                         )
-                        continue
-                    if str(gov.get("decision") or "") == GOVERNANCE_REJECT:
+                        lr = _build_degraded_learning_record_v1(
+                            lr, sid=sid, trade_id=str(o.trade_id), errors=post_gov_errs
+                        )
+
+                    if is_reject:
                         errors.append(
-                            f"{sid} trade={o.trade_id}: memory_promotion_reject: {gov.get('reason_codes')}"
+                            f"{sid} trade={o.trade_id}: memory_promotion_reject "
+                            f"(stored, retrieval_disabled): {gov.get('reason_codes')}"
                         )
-                        memory_promotion_batch_trades_v1.append(
-                            {"trade_id": str(o.trade_id), "learning_governance_v1": gov, "stored": False}
-                        )
-                        continue
+
                     try:
                         emit_candle_timeframe_nexus_v1(
                             job_id=str(run_id).strip(),
@@ -1477,8 +1526,16 @@ def student_loop_seam_after_parallel_batch_v1(
                             scenario_id=sid,
                             trade_id=str(o.trade_id),
                         )
-                        append_student_learning_record_v1(store, lr)
+                        try:
+                            append_student_learning_record_v1(store, lr)
+                        except ValueError as ve_inner:
+                            if "invalid student_learning_record_v1" in str(ve_inner) and lr.get("degraded_v1"):
+                                _raw_append_degraded_record_v1(store, lr)
+                            else:
+                                raise
                         appended += 1
+                        if lr.get("degraded_v1"):
+                            _degraded_rows += 1
                         emit_learning_record_appended_v1(
                             job_id=str(run_id).strip(),
                             fingerprint=fp_emit,
@@ -1488,7 +1545,12 @@ def student_loop_seam_after_parallel_batch_v1(
                             candle_timeframe_minutes=c_tf,
                         )
                         memory_promotion_batch_trades_v1.append(
-                            {"trade_id": str(o.trade_id), "learning_governance_v1": gov, "stored": True}
+                            {
+                                "trade_id": str(o.trade_id),
+                                "learning_governance_v1": gov,
+                                "stored": True,
+                                "promotion_eligible_v1": not is_reject,
+                            }
                         )
                     except ValueError as ve:
                         if "record_id already present" in str(ve):
@@ -1561,6 +1623,16 @@ def student_loop_seam_after_parallel_batch_v1(
             out_fp = _student_output_fingerprint_v1(primary_student_output_v1)
 
         student_emit_occurred = primary_student_output_v1 is not None
+        _rows_rejected = sum(
+            1
+            for x in memory_promotion_batch_trades_v1
+            if str((x.get("learning_governance_v1") or {}).get("decision") or "") == GOVERNANCE_REJECT
+        )
+        _rows_promoted = sum(
+            1
+            for x in memory_promotion_batch_trades_v1
+            if str((x.get("learning_governance_v1") or {}).get("decision") or "") == "promote"
+        )
         out_audit: dict[str, Any] = {
             "schema": "student_loop_seam_audit_v1",
             "run_id": run_id,
@@ -1586,6 +1658,11 @@ def student_loop_seam_after_parallel_batch_v1(
             "database_path_used": str(db.resolve()),
             "trades_considered": trades_seen,
             "student_learning_rows_appended": appended,
+            "student_learning_rows_attempted_v1": int(trades_seen),
+            "student_learning_rows_appended_v1": int(appended),
+            "student_learning_rows_rejected_v1": int(_rows_rejected),
+            "student_learning_rows_degraded_v1": int(_degraded_rows),
+            "student_learning_rows_promoted_v1": int(_rows_promoted),
             "student_retrieval_matches": retrieval_matches_total,
             "student_output_fingerprint": out_fp,
             "shadow_student_enabled": True,

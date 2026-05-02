@@ -1,0 +1,25 @@
+{
+  "schema": "finquant_agent_lab_run_summary_v1",
+  "run_id": "run_20260502T005548Z_831bd22f",
+  "agent_id": "finquant",
+  "case_id": "syn_btcperp_false_break_0034",
+  "symbol": "BTC-PERP",
+  "timeframe_minutes": 15,
+  "mode": "deterministic_stub_v1",
+  "use_llm_v1": false,
+  "runtime_data_window_months_v1": null,
+  "runtime_interval_v1": "15m",
+  "runtime_interval_minutes_v1": 15,
+  "decisions_emitted": 1,
+  "learning_records_written": 1,
+  "final_status_v1": "FAIL",
+  "retrieval_records_used": 171,
+  "artifacts": [
+    "decision_trace.json",
+    "learning_records.jsonl",
+    "retrieval_trace.json",
+    "evaluation.json",
+    "run_summary.json"
+  ],
+  "output_dir": "finquant/unified/agent_lab/outputs/ab_20260502T005548Z_450aeb6f/runs/run_b/run_20260502T005548Z_831bd22f"
+}

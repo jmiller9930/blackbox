@@ -1,0 +1,218 @@
+[
+  {
+    "schema": "finquant_lifecycle_decision_v1",
+    "agent_id": "finquant",
+    "case_id": "syn_solperp_marginal_long_0029",
+    "step_index": 20,
+    "symbol": "SOL-PERP",
+    "action": "ENTER_LONG",
+    "thesis_v1": "Memory-backed long: similar promoted long pattern(s)=25; close=42174.97, RSI=63.6, ATR=1.32.",
+    "invalidation_v1": "Exit if close drops below 41964.09 or memory thesis is contradicted by RSI < 45.",
+    "risk_state_v1": "memory_backed_entry long_bias=25",
+    "observed_context_v1": {
+      "candles_visible": 21,
+      "last_close": 42174.9666,
+      "last_rsi_14": 63.58,
+      "last_ema_20": 41947.6421,
+      "last_atr_14": 1.324,
+      "last_volume": 4948.13
+    },
+    "input_packet_v1": {
+      "schema": "finquant_input_packet_v1",
+      "case_id": "syn_solperp_marginal_long_0029",
+      "step_index": 20,
+      "symbol": "SOL-PERP",
+      "timeframe_minutes": 15,
+      "runtime_data_window_months_v1": null,
+      "runtime_interval_v1": null,
+      "candles_visible_v1": 21,
+      "market_math_v1": {
+        "close_v1": 42174.9666,
+        "prev_close_v1": 42174.0841,
+        "price_delta_v1": 0.8825,
+        "pct_change_v1": 2.1e-05,
+        "ema_gap_v1": 227.3245,
+        "atr_14_v1": 1.324,
+        "rsi_14_v1": 63.58,
+        "volume_delta_v1": 335.51
+      },
+      "market_context_v1": {
+        "price_above_ema_v1": true,
+        "price_up_v1": true,
+        "volume_expand_v1": true,
+        "atr_expanded_v1": false,
+        "rsi_state_v1": "bullish_range",
+        "volatility_state_v1": "normal"
+      },
+      "memory_context_v1": {
+        "matched_record_count_v1": 25,
+        "matched_record_ids_v1": [
+          "lr_10fa49ceaee94e12aa410751b82aed3f",
+          "lr_ab62e5d347b447ccbd45c24a7d02aab5",
+          "lr_f2b5836b8e2741a8a12d847d5c2abcdb",
+          "lr_6a9ec7144137418f891aa9521a6041a5",
+          "lr_1dbcdeba71334cd7b386ed9048e6222c",
+          "lr_c22aff0fc58347a1868a353d281fb8fa",
+          "lr_41b69efa3a49448bba04b73c581920c9",
+          "lr_68b9b4d55e284cf2b254636e5672d3d6",
+          "lr_7e1b2226f1cb4998b602010c0a9d666e",
+          "lr_46c7bb2ab3a2424ba3d0012e6856be6f",
+          "lr_0606fcaa93d24cc18d31dae1d5af9835",
+          "lr_4e97b6fbf50e43fd945492781b9c7244",
+          "lr_60ffe972fda24339b55a32d97a21a4e9",
+          "lr_4816eabe3bd2402591bd937c9ce30c5f",
+          "lr_5fdcc96ee5f14103ae363309a7a4c7da",
+          "lr_bbe1a66c30484dd2a5b618df1916aa5a",
+          "lr_b4b5f987b9df483f87d37f7ee884c04d",
+          "lr_35448eeb1be14ae2ba03036156aa9460",
+          "lr_6b2e71a748ba463bba38bf259a4d736b",
+          "lr_28d54f6903824a04a31c295b123a57e1",
+          "lr_42d6f526b25a4b5e9e7a565a7e0bc3ef",
+          "lr_bf7c1e75e7b841b79834e436606a4ecc",
+          "lr_a38576c5bd9f428eb1064e70cbe8fae7",
+          "lr_e298611d313a4b9482197c1393f03be8",
+          "lr_a64dba56e8464036a36dfea5b76e1df1"
+        ],
+        "long_bias_count_v1": 25,
+        "short_bias_count_v1": 0,
+        "no_trade_bias_count_v1": 0,
+        "best_grade_v1": "PASS",
+        "memory_influence_available_v1": true
+      },
+      "strategy_hypotheses_v1": [
+        {
+          "strategy_family_v1": "trend_continuation",
+          "action_v1": "ENTER_LONG",
+          "score_v1": 0.9
+        },
+        {
+          "strategy_family_v1": "pullback_continuation",
+          "action_v1": "ENTER_LONG",
+          "score_v1": 0.25
+        },
+        {
+          "strategy_family_v1": "breakout_expansion",
+          "action_v1": "ENTER_LONG",
+          "score_v1": 0.35
+        },
+        {
+          "strategy_family_v1": "mean_reversion_fade",
+          "action_v1": "ENTER_SHORT",
+          "score_v1": 0.0
+        },
+        {
+          "strategy_family_v1": "no_trade_guard",
+          "action_v1": "NO_TRADE",
+          "score_v1": 0.2
+        }
+      ],
+      "baseline_strategy_families_v1": [
+        "trend_continuation",
+        "pullback_continuation",
+        "breakout_expansion",
+        "mean_reversion_fade",
+        "no_trade_guard"
+      ]
+    },
+    "confidence_band_v1": "medium",
+    "supporting_indicators_v1": [
+      "memory_long_bias=25",
+      "close_above_ema=True",
+      "rsi=63.6"
+    ],
+    "conflicting_indicators_v1": [
+      "direct_rule_threshold_not_fully_met"
+    ],
+    "risk_notes_v1": "Memory/context promoted a near-threshold trend setup into an allowed entry.",
+    "memory_used_v1": [
+      "lr_10fa49ceaee94e12aa410751b82aed3f",
+      "lr_ab62e5d347b447ccbd45c24a7d02aab5",
+      "lr_f2b5836b8e2741a8a12d847d5c2abcdb",
+      "lr_6a9ec7144137418f891aa9521a6041a5",
+      "lr_1dbcdeba71334cd7b386ed9048e6222c",
+      "lr_c22aff0fc58347a1868a353d281fb8fa",
+      "lr_41b69efa3a49448bba04b73c581920c9",
+      "lr_68b9b4d55e284cf2b254636e5672d3d6",
+      "lr_7e1b2226f1cb4998b602010c0a9d666e",
+      "lr_46c7bb2ab3a2424ba3d0012e6856be6f",
+      "lr_0606fcaa93d24cc18d31dae1d5af9835",
+      "lr_4e97b6fbf50e43fd945492781b9c7244",
+      "lr_60ffe972fda24339b55a32d97a21a4e9",
+      "lr_4816eabe3bd2402591bd937c9ce30c5f",
+      "lr_5fdcc96ee5f14103ae363309a7a4c7da",
+      "lr_bbe1a66c30484dd2a5b618df1916aa5a",
+      "lr_b4b5f987b9df483f87d37f7ee884c04d",
+      "lr_35448eeb1be14ae2ba03036156aa9460",
+      "lr_6b2e71a748ba463bba38bf259a4d736b",
+      "lr_28d54f6903824a04a31c295b123a57e1",
+      "lr_42d6f526b25a4b5e9e7a565a7e0bc3ef",
+      "lr_bf7c1e75e7b841b79834e436606a4ecc",
+      "lr_a38576c5bd9f428eb1064e70cbe8fae7",
+      "lr_e298611d313a4b9482197c1393f03be8",
+      "lr_a64dba56e8464036a36dfea5b76e1df1"
+    ],
+    "llm_used_v1": false,
+    "decision_source_v1": "hybrid",
+    "causal_context_only_v1": true,
+    "thesis": "Memory-backed long: similar promoted long pattern(s)=25; close=42174.97, RSI=63.6, ATR=1.32.",
+    "invalidation": "Exit if close drops below 41964.09 or memory thesis is contradicted by RSI < 45.",
+    "confidence_band": "medium",
+    "supporting_indicators": [
+      "memory_long_bias=25",
+      "close_above_ema=True",
+      "rsi=63.6"
+    ],
+    "conflicting_indicators": [
+      "direct_rule_threshold_not_fully_met"
+    ],
+    "risk_notes": "Memory/context promoted a near-threshold trend setup into an allowed entry.",
+    "pattern_signature_v1": {
+      "pattern_id_v1": "87a93a5812e0470f",
+      "components_v1": {
+        "symbol_v1": "SOL-PERP",
+        "timeframe_minutes_v1": 15,
+        "trend_v1": "trend_up",
+        "rsi_bucket_v1": "rsi_60_65",
+        "atr_bucket_v1": "atr_1_1_5",
+        "volatility_v1": "vol_normal",
+        "volume_v1": "vol_expand",
+        "position_v1": "pos_flat"
+      },
+      "human_label_v1": "trend_up | rsi_60_65 | vol_normal | pos_flat",
+      "canonical_v1": "{\"atr_bucket_v1\":\"atr_1_1_5\",\"position_v1\":\"pos_flat\",\"rsi_bucket_v1\":\"rsi_60_65\",\"symbol_v1\":\"SOL-PERP\",\"timeframe_minutes_v1\":15,\"trend_v1\":\"trend_up\",\"volatility_v1\":\"vol_normal\",\"volume_v1\":\"vol_expand\"}"
+    },
+    "decision_explanation_v1": {
+      "schema": "finquant_decision_explanation_v1",
+      "pattern_id_v1": "87a93a5812e0470f",
+      "human_label_v1": "trend_up | rsi_60_65 | vol_normal | pos_flat",
+      "primary_unit_v1": null,
+      "primary_attributable_v1": false,
+      "challenger_units_v1": [],
+      "observer_unit_count_v1": 0,
+      "suppressor_units_v1": [
+        {
+          "pattern_id_v1": "87a93a5812e0470f",
+          "human_label_v1": "trend_up | rsi_60_65 | vol_normal | pos_flat",
+          "proposed_action_v1": "NO_TRADE",
+          "status_v1": "retired",
+          "hit_count_v1": 14,
+          "miss_count_v1": 10,
+          "inconclusive_count_v1": 0,
+          "wins_v1": 14,
+          "losses_v1": 0,
+          "no_trade_correct_v1": 0,
+          "no_trade_missed_v1": 10,
+          "win_rate_v1": 1.0,
+          "expectancy_v1": 3.270161,
+          "cumulative_pnl_v1": 45.78225,
+          "confidence_score_v1": 0.5741,
+          "hypothesis_v1": "Conditions not met: price_up=True, rsi_ok=True, volume_expand=True."
+        }
+      ],
+      "competition_reason_v1": "no eligible active unit",
+      "final_action_v1": "ENTER_LONG",
+      "final_decision_source_v1": "hybrid",
+      "narrative_v1": "No ACTIVE learning unit matched signature [trend_up | rsi_60_65 | vol_normal | pos_flat] (id=87a93a5812e0470f). 1 retired unit(s) for this signature represent negative knowledge. The decision was driven by source=hybrid, not by validated learning."
+    }
+  }
+]

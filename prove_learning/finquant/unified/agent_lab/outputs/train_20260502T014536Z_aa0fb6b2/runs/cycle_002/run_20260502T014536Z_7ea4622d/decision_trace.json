@@ -1,0 +1,196 @@
+[
+  {
+    "schema": "finquant_lifecycle_decision_v1",
+    "agent_id": "finquant",
+    "case_id": "syn_solperp_breakout_0015",
+    "step_index": 20,
+    "symbol": "SOL-PERP",
+    "action": "ENTER_LONG",
+    "thesis_v1": "Breakout above resistance=160.3609: close=162.3394, RSI=64.0, ATR%=1.501%.",
+    "invalidation_v1": "Exit if close falls back below resistance 160.3609.",
+    "risk_state_v1": "breakout_long res=160.3609 rsi=64.0",
+    "observed_context_v1": {
+      "candles_visible": 21,
+      "last_close": 162.3394,
+      "last_rsi_14": 64.0,
+      "last_ema_20": 159.6733,
+      "last_atr_14": 2.4362,
+      "last_volume": 3742.69
+    },
+    "input_packet_v1": {
+      "schema": "finquant_input_packet_v1",
+      "case_id": "syn_solperp_breakout_0015",
+      "step_index": 20,
+      "symbol": "SOL-PERP",
+      "timeframe_minutes": 15,
+      "runtime_data_window_months_v1": null,
+      "runtime_interval_v1": null,
+      "candles_visible_v1": 21,
+      "market_math_v1": {
+        "close_v1": 162.3394,
+        "prev_close_v1": 161.1453,
+        "price_delta_v1": 1.1941,
+        "pct_change_v1": 0.00741,
+        "ema_gap_v1": 2.6661,
+        "atr_14_v1": 2.4362,
+        "rsi_14_v1": 64.0,
+        "volume_delta_v1": 186.97
+      },
+      "market_context_v1": {
+        "price_above_ema_v1": true,
+        "price_up_v1": true,
+        "volume_expand_v1": true,
+        "atr_expanded_v1": true,
+        "atr_pct_v1": 0.015007,
+        "rsi_state_v1": "bullish_range",
+        "volatility_state_v1": "normal"
+      },
+      "memory_context_v1": {
+        "matched_record_count_v1": 25,
+        "matched_record_ids_v1": [
+          "lr_6e88ba734fa14c54852ee54911b729ec",
+          "lr_c817c68b7f794c31ae74c0e75bae5a7b",
+          "lr_8bde092e2ada438281ddc20921ee5cf1",
+          "lr_4f518caacc804fe88dd9930a0b6515d4",
+          "lr_d5c8130f1cc94f52a079ac5e6aa33af0",
+          "lr_7a38853eca63467cbd26746f6baa946e",
+          "lr_b5cef8d3d0ee467c81ef43c5708d44bd",
+          "lr_aab07621dadf48caa73c1e4c6aadd1dc",
+          "lr_8290124db5fb4022970350a20fa403e2",
+          "lr_14ac88035a9d44608672a895e0e2f3f2",
+          "lr_0ed44a7425e24213a285115dcab9b5ef",
+          "lr_37f2879d1cf74d59a6d427426baddb37",
+          "lr_78bef67801f34426a227e9c2b06e285d",
+          "lr_05dcd1fff7bc4f95a9b6ba6616e3ba4f",
+          "lr_4bc57cdfe7624317bf03ed260580b1c7",
+          "lr_968f93e9204b43799945de60ae368805",
+          "lr_2a9e47c9ba9842b4b434369a57a421c7",
+          "lr_7671fde2415543c996e23974fc020ba2",
+          "lr_28dbaae2b8fd427baf8a463c2187deb4",
+          "lr_30f5210d19544803932301dbf95e404e",
+          "lr_f401187bfb4d433cb838483e6258ad3c",
+          "lr_d8580afa603441b19b6da8b752a359da",
+          "lr_04ae09d0c5b944d0b5c76a19787d9d9f",
+          "lr_2a16417bc3304d148fbfa168be4281af",
+          "lr_3c9142b1acb743018b93c9538c06a37a"
+        ],
+        "long_bias_count_v1": 20,
+        "short_bias_count_v1": 0,
+        "no_trade_bias_count_v1": 5,
+        "best_grade_v1": "PASS",
+        "memory_influence_available_v1": true
+      },
+      "strategy_hypotheses_v1": [
+        {
+          "strategy_family_v1": "trend_continuation",
+          "action_v1": "ENTER_LONG",
+          "score_v1": 1.0
+        },
+        {
+          "strategy_family_v1": "pullback_continuation",
+          "action_v1": "ENTER_LONG",
+          "score_v1": 0.25
+        },
+        {
+          "strategy_family_v1": "breakout_expansion",
+          "action_v1": "ENTER_LONG",
+          "score_v1": 1.0
+        },
+        {
+          "strategy_family_v1": "mean_reversion_fade",
+          "action_v1": "ENTER_SHORT",
+          "score_v1": 0.0
+        },
+        {
+          "strategy_family_v1": "no_trade_guard",
+          "action_v1": "NO_TRADE",
+          "score_v1": 0.3
+        }
+      ],
+      "baseline_strategy_families_v1": [
+        "trend_continuation",
+        "pullback_continuation",
+        "breakout_expansion",
+        "mean_reversion_fade",
+        "no_trade_guard"
+      ]
+    },
+    "confidence_band_v1": "high",
+    "supporting_indicators_v1": [
+      "breakout_above_resistance=160.3609",
+      "RSI=64.0",
+      "ATR%=1.501%"
+    ],
+    "conflicting_indicators_v1": [],
+    "risk_notes_v1": "ATR-based risk geometry should be applied if opened.",
+    "memory_used_v1": [
+      "lr_6e88ba734fa14c54852ee54911b729ec",
+      "lr_c817c68b7f794c31ae74c0e75bae5a7b",
+      "lr_8bde092e2ada438281ddc20921ee5cf1",
+      "lr_4f518caacc804fe88dd9930a0b6515d4",
+      "lr_d5c8130f1cc94f52a079ac5e6aa33af0",
+      "lr_7a38853eca63467cbd26746f6baa946e",
+      "lr_b5cef8d3d0ee467c81ef43c5708d44bd",
+      "lr_aab07621dadf48caa73c1e4c6aadd1dc",
+      "lr_8290124db5fb4022970350a20fa403e2",
+      "lr_14ac88035a9d44608672a895e0e2f3f2",
+      "lr_0ed44a7425e24213a285115dcab9b5ef",
+      "lr_37f2879d1cf74d59a6d427426baddb37",
+      "lr_78bef67801f34426a227e9c2b06e285d",
+      "lr_05dcd1fff7bc4f95a9b6ba6616e3ba4f",
+      "lr_4bc57cdfe7624317bf03ed260580b1c7",
+      "lr_968f93e9204b43799945de60ae368805",
+      "lr_2a9e47c9ba9842b4b434369a57a421c7",
+      "lr_7671fde2415543c996e23974fc020ba2",
+      "lr_28dbaae2b8fd427baf8a463c2187deb4",
+      "lr_30f5210d19544803932301dbf95e404e",
+      "lr_f401187bfb4d433cb838483e6258ad3c",
+      "lr_d8580afa603441b19b6da8b752a359da",
+      "lr_04ae09d0c5b944d0b5c76a19787d9d9f",
+      "lr_2a16417bc3304d148fbfa168be4281af",
+      "lr_3c9142b1acb743018b93c9538c06a37a"
+    ],
+    "llm_used_v1": false,
+    "decision_source_v1": "deterministic_stub_v1",
+    "causal_context_only_v1": true,
+    "thesis": "Breakout above resistance=160.3609: close=162.3394, RSI=64.0, ATR%=1.501%.",
+    "invalidation": "Exit if close falls back below resistance 160.3609.",
+    "confidence_band": "high",
+    "supporting_indicators": [
+      "breakout_above_resistance=160.3609",
+      "RSI=64.0",
+      "ATR%=1.501%"
+    ],
+    "conflicting_indicators": [],
+    "risk_notes": "ATR-based risk geometry should be applied if opened.",
+    "pattern_signature_v1": {
+      "pattern_id_v1": "601f751ba032c0fa",
+      "components_v1": {
+        "symbol_v1": "SOL-PERP",
+        "timeframe_minutes_v1": 15,
+        "trend_v1": "trend_up",
+        "rsi_bucket_v1": "rsi_60_65",
+        "atr_bucket_v1": "atr_2_3",
+        "volatility_v1": "vol_high",
+        "volume_v1": "vol_expand",
+        "position_v1": "pos_flat"
+      },
+      "human_label_v1": "trend_up | rsi_60_65 | vol_high | pos_flat",
+      "canonical_v1": "{\"atr_bucket_v1\":\"atr_2_3\",\"position_v1\":\"pos_flat\",\"rsi_bucket_v1\":\"rsi_60_65\",\"symbol_v1\":\"SOL-PERP\",\"timeframe_minutes_v1\":15,\"trend_v1\":\"trend_up\",\"volatility_v1\":\"vol_high\",\"volume_v1\":\"vol_expand\"}"
+    },
+    "decision_explanation_v1": {
+      "schema": "finquant_decision_explanation_v1",
+      "pattern_id_v1": "601f751ba032c0fa",
+      "human_label_v1": "trend_up | rsi_60_65 | vol_high | pos_flat",
+      "primary_unit_v1": null,
+      "primary_attributable_v1": false,
+      "challenger_units_v1": [],
+      "observer_unit_count_v1": 1,
+      "suppressor_units_v1": [],
+      "competition_reason_v1": "no eligible active unit",
+      "final_action_v1": "ENTER_LONG",
+      "final_decision_source_v1": "deterministic_stub_v1",
+      "narrative_v1": "No ACTIVE learning unit matched signature [trend_up | rsi_60_65 | vol_high | pos_flat] (id=601f751ba032c0fa). 1 candidate/provisional unit(s) were observing \u2014 they cannot drive decisions yet. The decision was driven by source=deterministic_stub_v1, not by validated learning."
+    }
+  }
+]

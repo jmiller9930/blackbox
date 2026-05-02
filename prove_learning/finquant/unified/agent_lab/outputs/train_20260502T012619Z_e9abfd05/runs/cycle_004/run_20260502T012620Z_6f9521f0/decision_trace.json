@@ -1,0 +1,216 @@
+[
+  {
+    "schema": "finquant_lifecycle_decision_v1",
+    "agent_id": "finquant",
+    "case_id": "syn_solperp_bull_trend_0000",
+    "step_index": 20,
+    "symbol": "SOL-PERP",
+    "action": "ENTER_LONG",
+    "thesis_v1": "Uptrend: close 42020.96\u219242021.91, RSI=65.5, volume expanding, ATR=4.02.",
+    "invalidation_v1": "Exit if close drops below 41811.80 or RSI decays with volume collapse.",
+    "risk_state_v1": "entry_long rsi=65.5 atr=4.02",
+    "observed_context_v1": {
+      "candles_visible": 21,
+      "last_close": 42021.9142,
+      "last_rsi_14": 65.47,
+      "last_ema_20": 42016.1817,
+      "last_atr_14": 4.0239,
+      "last_volume": 5079.88
+    },
+    "input_packet_v1": {
+      "schema": "finquant_input_packet_v1",
+      "case_id": "syn_solperp_bull_trend_0000",
+      "step_index": 20,
+      "symbol": "SOL-PERP",
+      "timeframe_minutes": 15,
+      "runtime_data_window_months_v1": null,
+      "runtime_interval_v1": null,
+      "candles_visible_v1": 21,
+      "market_math_v1": {
+        "close_v1": 42021.9142,
+        "prev_close_v1": 42020.9649,
+        "price_delta_v1": 0.9493,
+        "pct_change_v1": 2.3e-05,
+        "ema_gap_v1": 5.7325,
+        "atr_14_v1": 4.0239,
+        "rsi_14_v1": 65.47,
+        "volume_delta_v1": 136.5
+      },
+      "market_context_v1": {
+        "price_above_ema_v1": true,
+        "price_up_v1": true,
+        "volume_expand_v1": true,
+        "atr_expanded_v1": true,
+        "rsi_state_v1": "bullish_range",
+        "volatility_state_v1": "expanded"
+      },
+      "memory_context_v1": {
+        "matched_record_count_v1": 25,
+        "matched_record_ids_v1": [
+          "lr_b4b5f987b9df483f87d37f7ee884c04d",
+          "lr_35448eeb1be14ae2ba03036156aa9460",
+          "lr_6b2e71a748ba463bba38bf259a4d736b",
+          "lr_28d54f6903824a04a31c295b123a57e1",
+          "lr_42d6f526b25a4b5e9e7a565a7e0bc3ef",
+          "lr_bf7c1e75e7b841b79834e436606a4ecc",
+          "lr_a38576c5bd9f428eb1064e70cbe8fae7",
+          "lr_e298611d313a4b9482197c1393f03be8",
+          "lr_a64dba56e8464036a36dfea5b76e1df1",
+          "lr_6699e4fc5f9e4f9a8a027e1287e3088d",
+          "lr_c25afd51fe6b453bb3352e8b98fca3f2",
+          "lr_f0e22a305af24032b80d790bc5477141",
+          "lr_10f6496a81124e60849f3a7f9460d8bf",
+          "lr_1e50c8db9e7e41069c0bf39fe19ea7d7",
+          "lr_856f2c2b6fd444139da44a1bae0f9452",
+          "lr_47b201b590f44c499603d19af571bc09",
+          "lr_be68e509df1e4c52b5c770afa73f9a66",
+          "lr_4ce9eea2303c4d58a28b9857430b6e1e",
+          "lr_4968a93bcd9c4086bd19f07ca28b5e28",
+          "lr_7c89c2863d584dc7ae5a5823439430b7",
+          "lr_ae82244e5e5a4c6ca2c8b8643b2330ba",
+          "lr_2d678eb1655141f3911c7c3f2f99bc08",
+          "lr_4d3d9d10150a430a881e09866d2daa36",
+          "lr_23a2242bd0db448fa48b1b8d466fb146",
+          "lr_51c994cd3ede491dbe71cdd661bbe747"
+        ],
+        "long_bias_count_v1": 25,
+        "short_bias_count_v1": 0,
+        "no_trade_bias_count_v1": 0,
+        "best_grade_v1": "PASS",
+        "memory_influence_available_v1": true
+      },
+      "strategy_hypotheses_v1": [
+        {
+          "strategy_family_v1": "trend_continuation",
+          "action_v1": "ENTER_LONG",
+          "score_v1": 1.0
+        },
+        {
+          "strategy_family_v1": "pullback_continuation",
+          "action_v1": "ENTER_LONG",
+          "score_v1": 0.25
+        },
+        {
+          "strategy_family_v1": "breakout_expansion",
+          "action_v1": "ENTER_LONG",
+          "score_v1": 0.5
+        },
+        {
+          "strategy_family_v1": "mean_reversion_fade",
+          "action_v1": "ENTER_SHORT",
+          "score_v1": 0.0
+        },
+        {
+          "strategy_family_v1": "no_trade_guard",
+          "action_v1": "NO_TRADE",
+          "score_v1": 0.2
+        }
+      ],
+      "baseline_strategy_families_v1": [
+        "trend_continuation",
+        "pullback_continuation",
+        "breakout_expansion",
+        "mean_reversion_fade",
+        "no_trade_guard"
+      ]
+    },
+    "confidence_band_v1": "high",
+    "supporting_indicators_v1": [
+      "close_up=True",
+      "rsi_midrange=True",
+      "volume_expand=True",
+      "atr_expand=True"
+    ],
+    "conflicting_indicators_v1": [],
+    "risk_notes_v1": "Strong trend-continuation evidence.",
+    "memory_used_v1": [
+      "lr_b4b5f987b9df483f87d37f7ee884c04d",
+      "lr_35448eeb1be14ae2ba03036156aa9460",
+      "lr_6b2e71a748ba463bba38bf259a4d736b",
+      "lr_28d54f6903824a04a31c295b123a57e1",
+      "lr_42d6f526b25a4b5e9e7a565a7e0bc3ef",
+      "lr_bf7c1e75e7b841b79834e436606a4ecc",
+      "lr_a38576c5bd9f428eb1064e70cbe8fae7",
+      "lr_e298611d313a4b9482197c1393f03be8",
+      "lr_a64dba56e8464036a36dfea5b76e1df1",
+      "lr_6699e4fc5f9e4f9a8a027e1287e3088d",
+      "lr_c25afd51fe6b453bb3352e8b98fca3f2",
+      "lr_f0e22a305af24032b80d790bc5477141",
+      "lr_10f6496a81124e60849f3a7f9460d8bf",
+      "lr_1e50c8db9e7e41069c0bf39fe19ea7d7",
+      "lr_856f2c2b6fd444139da44a1bae0f9452",
+      "lr_47b201b590f44c499603d19af571bc09",
+      "lr_be68e509df1e4c52b5c770afa73f9a66",
+      "lr_4ce9eea2303c4d58a28b9857430b6e1e",
+      "lr_4968a93bcd9c4086bd19f07ca28b5e28",
+      "lr_7c89c2863d584dc7ae5a5823439430b7",
+      "lr_ae82244e5e5a4c6ca2c8b8643b2330ba",
+      "lr_2d678eb1655141f3911c7c3f2f99bc08",
+      "lr_4d3d9d10150a430a881e09866d2daa36",
+      "lr_23a2242bd0db448fa48b1b8d466fb146",
+      "lr_51c994cd3ede491dbe71cdd661bbe747"
+    ],
+    "llm_used_v1": false,
+    "decision_source_v1": "deterministic_stub_v1",
+    "causal_context_only_v1": true,
+    "thesis": "Uptrend: close 42020.96\u219242021.91, RSI=65.5, volume expanding, ATR=4.02.",
+    "invalidation": "Exit if close drops below 41811.80 or RSI decays with volume collapse.",
+    "confidence_band": "high",
+    "supporting_indicators": [
+      "close_up=True",
+      "rsi_midrange=True",
+      "volume_expand=True",
+      "atr_expand=True"
+    ],
+    "conflicting_indicators": [],
+    "risk_notes": "Strong trend-continuation evidence.",
+    "pattern_signature_v1": {
+      "pattern_id_v1": "02610f850c843111",
+      "components_v1": {
+        "symbol_v1": "SOL-PERP",
+        "timeframe_minutes_v1": 15,
+        "trend_v1": "trend_up",
+        "rsi_bucket_v1": "rsi_65_70",
+        "atr_bucket_v1": "atr_3plus",
+        "volatility_v1": "vol_high",
+        "volume_v1": "vol_expand",
+        "position_v1": "pos_flat"
+      },
+      "human_label_v1": "trend_up | rsi_65_70 | vol_high | pos_flat",
+      "canonical_v1": "{\"atr_bucket_v1\":\"atr_3plus\",\"position_v1\":\"pos_flat\",\"rsi_bucket_v1\":\"rsi_65_70\",\"symbol_v1\":\"SOL-PERP\",\"timeframe_minutes_v1\":15,\"trend_v1\":\"trend_up\",\"volatility_v1\":\"vol_high\",\"volume_v1\":\"vol_expand\"}"
+    },
+    "decision_explanation_v1": {
+      "schema": "finquant_decision_explanation_v1",
+      "pattern_id_v1": "02610f850c843111",
+      "human_label_v1": "trend_up | rsi_65_70 | vol_high | pos_flat",
+      "primary_unit_v1": null,
+      "primary_attributable_v1": false,
+      "challenger_units_v1": [
+        {
+          "pattern_id_v1": "02610f850c843111",
+          "human_label_v1": "trend_up | rsi_65_70 | vol_high | pos_flat",
+          "proposed_action_v1": "ENTER_LONG",
+          "status_v1": "validated",
+          "hit_count_v1": 30,
+          "miss_count_v1": 0,
+          "inconclusive_count_v1": 0,
+          "wins_v1": 30,
+          "losses_v1": 0,
+          "no_trade_correct_v1": 0,
+          "no_trade_missed_v1": 0,
+          "win_rate_v1": 1.0,
+          "expectancy_v1": 4.42749,
+          "cumulative_pnl_v1": 132.8247,
+          "confidence_score_v1": 0.9545,
+          "hypothesis_v1": "Uptrend: close 42020.96\u219242021.91, RSI=65.5, volume expanding, ATR=4.02."
+        }
+      ],
+      "observer_unit_count_v1": 0,
+      "suppressor_units_v1": [],
+      "competition_reason_v1": "no eligible active unit",
+      "final_action_v1": "ENTER_LONG",
+      "final_decision_source_v1": "deterministic_stub_v1",
+      "narrative_v1": "No ACTIVE learning unit matched signature [trend_up | rsi_65_70 | vol_high | pos_flat] (id=02610f850c843111). The decision was driven by source=deterministic_stub_v1, not by validated learning."
+    }
+  }
+]

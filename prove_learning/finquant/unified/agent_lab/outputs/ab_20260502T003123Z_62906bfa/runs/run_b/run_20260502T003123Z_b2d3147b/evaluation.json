@@ -1,0 +1,25 @@
+{
+  "schema": "finquant_lifecycle_evaluation_v1",
+  "case_id": "test_btcusd_15m_0006_20260408",
+  "final_status_v1": "PASS",
+  "entry_quality_v1": "entered_as_expected",
+  "exit_quality_v1": "no_exit_needed",
+  "hold_quality_v1": "hold_steps=0",
+  "no_trade_correctness_v1": "traded_as_expected",
+  "actions_taken": [
+    "NO_TRADE",
+    "NO_TRADE",
+    "ENTER_LONG"
+  ],
+  "final_action": "ENTER_LONG",
+  "step_decisions_emitted": 3,
+  "learning_labels_v1": [
+    "entry_quality"
+  ],
+  "notes": [
+    "step 20: action=NO_TRADE source=deterministic_stub_v1",
+    "step 21: action=NO_TRADE source=deterministic_stub_v1",
+    "step 22: action=ENTER_LONG source=deterministic_stub_v1",
+    "leakage_audit: causal_context_only confirmed (rule-only path)"
+  ]
+}

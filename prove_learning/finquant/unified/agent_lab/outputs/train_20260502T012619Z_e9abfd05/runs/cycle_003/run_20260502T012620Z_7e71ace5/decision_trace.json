@@ -1,0 +1,193 @@
+[
+  {
+    "schema": "finquant_lifecycle_decision_v1",
+    "agent_id": "finquant",
+    "case_id": "syn_solperp_chop_0044",
+    "step_index": 20,
+    "symbol": "SOL-PERP",
+    "action": "NO_TRADE",
+    "thesis_v1": "Market choppy: avg_move=0.21, ATR=0.4475. No edge.",
+    "invalidation_v1": "Stand down until ATR > 1.0 and directional conviction appears.",
+    "risk_state_v1": "chop_no_edge",
+    "observed_context_v1": {
+      "candles_visible": 21,
+      "last_close": 42254.1715,
+      "last_rsi_14": 47.77,
+      "last_ema_20": 42254.3659,
+      "last_atr_14": 0.4475,
+      "last_volume": 669.4
+    },
+    "input_packet_v1": {
+      "schema": "finquant_input_packet_v1",
+      "case_id": "syn_solperp_chop_0044",
+      "step_index": 20,
+      "symbol": "SOL-PERP",
+      "timeframe_minutes": 15,
+      "runtime_data_window_months_v1": null,
+      "runtime_interval_v1": null,
+      "candles_visible_v1": 21,
+      "market_math_v1": {
+        "close_v1": 42254.1715,
+        "prev_close_v1": 42253.9566,
+        "price_delta_v1": 0.2149,
+        "pct_change_v1": 5e-06,
+        "ema_gap_v1": -0.1944,
+        "atr_14_v1": 0.4475,
+        "rsi_14_v1": 47.77,
+        "volume_delta_v1": -166.22
+      },
+      "market_context_v1": {
+        "price_above_ema_v1": false,
+        "price_up_v1": true,
+        "volume_expand_v1": false,
+        "atr_expanded_v1": false,
+        "rsi_state_v1": "neutral",
+        "volatility_state_v1": "contracted"
+      },
+      "memory_context_v1": {
+        "matched_record_count_v1": 25,
+        "matched_record_ids_v1": [
+          "lr_7e1b2226f1cb4998b602010c0a9d666e",
+          "lr_46c7bb2ab3a2424ba3d0012e6856be6f",
+          "lr_0606fcaa93d24cc18d31dae1d5af9835",
+          "lr_4e97b6fbf50e43fd945492781b9c7244",
+          "lr_60ffe972fda24339b55a32d97a21a4e9",
+          "lr_4816eabe3bd2402591bd937c9ce30c5f",
+          "lr_5fdcc96ee5f14103ae363309a7a4c7da",
+          "lr_bbe1a66c30484dd2a5b618df1916aa5a",
+          "lr_b4b5f987b9df483f87d37f7ee884c04d",
+          "lr_35448eeb1be14ae2ba03036156aa9460",
+          "lr_6b2e71a748ba463bba38bf259a4d736b",
+          "lr_28d54f6903824a04a31c295b123a57e1",
+          "lr_42d6f526b25a4b5e9e7a565a7e0bc3ef",
+          "lr_bf7c1e75e7b841b79834e436606a4ecc",
+          "lr_a38576c5bd9f428eb1064e70cbe8fae7",
+          "lr_e298611d313a4b9482197c1393f03be8",
+          "lr_a64dba56e8464036a36dfea5b76e1df1",
+          "lr_6699e4fc5f9e4f9a8a027e1287e3088d",
+          "lr_c25afd51fe6b453bb3352e8b98fca3f2",
+          "lr_f0e22a305af24032b80d790bc5477141",
+          "lr_10f6496a81124e60849f3a7f9460d8bf",
+          "lr_1e50c8db9e7e41069c0bf39fe19ea7d7",
+          "lr_856f2c2b6fd444139da44a1bae0f9452",
+          "lr_47b201b590f44c499603d19af571bc09",
+          "lr_be68e509df1e4c52b5c770afa73f9a66"
+        ],
+        "long_bias_count_v1": 25,
+        "short_bias_count_v1": 0,
+        "no_trade_bias_count_v1": 0,
+        "best_grade_v1": "PASS",
+        "memory_influence_available_v1": true
+      },
+      "strategy_hypotheses_v1": [
+        {
+          "strategy_family_v1": "trend_continuation",
+          "action_v1": "ENTER_LONG",
+          "score_v1": 0.35
+        },
+        {
+          "strategy_family_v1": "pullback_continuation",
+          "action_v1": "ENTER_LONG",
+          "score_v1": 0.1
+        },
+        {
+          "strategy_family_v1": "breakout_expansion",
+          "action_v1": "ENTER_LONG",
+          "score_v1": 0.1
+        },
+        {
+          "strategy_family_v1": "mean_reversion_fade",
+          "action_v1": "ENTER_SHORT",
+          "score_v1": 0.3
+        },
+        {
+          "strategy_family_v1": "no_trade_guard",
+          "action_v1": "NO_TRADE",
+          "score_v1": 0.75
+        }
+      ],
+      "baseline_strategy_families_v1": [
+        "trend_continuation",
+        "pullback_continuation",
+        "breakout_expansion",
+        "mean_reversion_fade",
+        "no_trade_guard"
+      ]
+    },
+    "confidence_band_v1": "medium",
+    "supporting_indicators_v1": [],
+    "conflicting_indicators_v1": [
+      "avg_move=0.21",
+      "atr=0.4475"
+    ],
+    "risk_notes_v1": "No-trade is the best bounded action under chop.",
+    "memory_used_v1": [
+      "lr_7e1b2226f1cb4998b602010c0a9d666e",
+      "lr_46c7bb2ab3a2424ba3d0012e6856be6f",
+      "lr_0606fcaa93d24cc18d31dae1d5af9835",
+      "lr_4e97b6fbf50e43fd945492781b9c7244",
+      "lr_60ffe972fda24339b55a32d97a21a4e9",
+      "lr_4816eabe3bd2402591bd937c9ce30c5f",
+      "lr_5fdcc96ee5f14103ae363309a7a4c7da",
+      "lr_bbe1a66c30484dd2a5b618df1916aa5a",
+      "lr_b4b5f987b9df483f87d37f7ee884c04d",
+      "lr_35448eeb1be14ae2ba03036156aa9460",
+      "lr_6b2e71a748ba463bba38bf259a4d736b",
+      "lr_28d54f6903824a04a31c295b123a57e1",
+      "lr_42d6f526b25a4b5e9e7a565a7e0bc3ef",
+      "lr_bf7c1e75e7b841b79834e436606a4ecc",
+      "lr_a38576c5bd9f428eb1064e70cbe8fae7",
+      "lr_e298611d313a4b9482197c1393f03be8",
+      "lr_a64dba56e8464036a36dfea5b76e1df1",
+      "lr_6699e4fc5f9e4f9a8a027e1287e3088d",
+      "lr_c25afd51fe6b453bb3352e8b98fca3f2",
+      "lr_f0e22a305af24032b80d790bc5477141",
+      "lr_10f6496a81124e60849f3a7f9460d8bf",
+      "lr_1e50c8db9e7e41069c0bf39fe19ea7d7",
+      "lr_856f2c2b6fd444139da44a1bae0f9452",
+      "lr_47b201b590f44c499603d19af571bc09",
+      "lr_be68e509df1e4c52b5c770afa73f9a66"
+    ],
+    "llm_used_v1": false,
+    "decision_source_v1": "deterministic_stub_v1",
+    "causal_context_only_v1": true,
+    "thesis": "Market choppy: avg_move=0.21, ATR=0.4475. No edge.",
+    "invalidation": "Stand down until ATR > 1.0 and directional conviction appears.",
+    "confidence_band": "medium",
+    "supporting_indicators": [],
+    "conflicting_indicators": [
+      "avg_move=0.21",
+      "atr=0.4475"
+    ],
+    "risk_notes": "No-trade is the best bounded action under chop.",
+    "pattern_signature_v1": {
+      "pattern_id_v1": "7968e6ce1b24b405",
+      "components_v1": {
+        "symbol_v1": "SOL-PERP",
+        "timeframe_minutes_v1": 15,
+        "trend_v1": "trend_mixed",
+        "rsi_bucket_v1": "rsi_45_50",
+        "atr_bucket_v1": "atr_under05",
+        "volatility_v1": "vol_low",
+        "volume_v1": "vol_contract",
+        "position_v1": "pos_flat"
+      },
+      "human_label_v1": "trend_mixed | rsi_45_50 | vol_low | pos_flat",
+      "canonical_v1": "{\"atr_bucket_v1\":\"atr_under05\",\"position_v1\":\"pos_flat\",\"rsi_bucket_v1\":\"rsi_45_50\",\"symbol_v1\":\"SOL-PERP\",\"timeframe_minutes_v1\":15,\"trend_v1\":\"trend_mixed\",\"volatility_v1\":\"vol_low\",\"volume_v1\":\"vol_contract\"}"
+    },
+    "decision_explanation_v1": {
+      "schema": "finquant_decision_explanation_v1",
+      "pattern_id_v1": "7968e6ce1b24b405",
+      "human_label_v1": "trend_mixed | rsi_45_50 | vol_low | pos_flat",
+      "primary_unit_v1": null,
+      "primary_attributable_v1": false,
+      "challenger_units_v1": [],
+      "observer_unit_count_v1": 1,
+      "suppressor_units_v1": [],
+      "competition_reason_v1": "no eligible active unit",
+      "final_action_v1": "NO_TRADE",
+      "final_decision_source_v1": "deterministic_stub_v1",
+      "narrative_v1": "No ACTIVE learning unit matched signature [trend_mixed | rsi_45_50 | vol_low | pos_flat] (id=7968e6ce1b24b405). 1 candidate/provisional unit(s) were observing \u2014 they cannot drive decisions yet. The decision was driven by source=deterministic_stub_v1, not by validated learning."
+    }
+  }
+]

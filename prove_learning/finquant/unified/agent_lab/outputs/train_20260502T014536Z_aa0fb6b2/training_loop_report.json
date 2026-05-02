@@ -1,0 +1,199 @@
+{
+  "schema": "finquant_training_loop_report_v1",
+  "loop_tag_v1": "train_20260502T014536Z_aa0fb6b2",
+  "created_at_v1": "2026-05-02T01:45:36Z",
+  "case_count_v1": 60,
+  "max_cycles_v1": 4,
+  "cycles_run_v1": 4,
+  "cycle_reports_v1": [
+    {
+      "cycle_v1": 1,
+      "created_at_v1": "2026-05-02T01:45:36Z",
+      "metrics_v1": {
+        "cases_v1": 60,
+        "decisions_v1": 60,
+        "wins_v1": 13,
+        "losses_v1": 0,
+        "no_trade_correct_v1": 11,
+        "no_trade_missed_v1": 36,
+        "total_pnl_v1": 64.6391,
+        "win_rate_v1": 1.0,
+        "evaluation_pass_v1": 43,
+        "evaluation_fail_v1": 17
+      },
+      "learning_snapshot_v1": {
+        "total_units_v1": 22,
+        "by_status_v1": {
+          "provisional": 4,
+          "candidate": 18
+        },
+        "promoted_past_candidate_v1": 4
+      },
+      "decision_diff_vs_prev_v1": null
+    },
+    {
+      "cycle_v1": 2,
+      "created_at_v1": "2026-05-02T01:45:36Z",
+      "metrics_v1": {
+        "cases_v1": 60,
+        "decisions_v1": 60,
+        "wins_v1": 25,
+        "losses_v1": 0,
+        "no_trade_correct_v1": 11,
+        "no_trade_missed_v1": 24,
+        "total_pnl_v1": 122.30885,
+        "win_rate_v1": 1.0,
+        "evaluation_pass_v1": 55,
+        "evaluation_fail_v1": 5
+      },
+      "learning_snapshot_v1": {
+        "total_units_v1": 22,
+        "by_status_v1": {
+          "provisional": 6,
+          "retired": 1,
+          "candidate": 15
+        },
+        "promoted_past_candidate_v1": 6
+      },
+      "decision_diff_vs_prev_v1": {
+        "overlap_cases_v1": 60,
+        "decisions_changed_v1": 12,
+        "changes_v1": [
+          {
+            "case_id": "syn_solperp_breakout_0045",
+            "prev": "NO_TRADE",
+            "curr": "ENTER_LONG"
+          },
+          {
+            "case_id": "syn_solperp_breakout_0051",
+            "prev": "NO_TRADE",
+            "curr": "ENTER_LONG"
+          },
+          {
+            "case_id": "syn_solperp_marginal_long_0005",
+            "prev": "NO_TRADE",
+            "curr": "ENTER_LONG"
+          },
+          {
+            "case_id": "syn_solperp_marginal_long_0011",
+            "prev": "NO_TRADE",
+            "curr": "ENTER_LONG"
+          },
+          {
+            "case_id": "syn_solperp_marginal_long_0017",
+            "prev": "NO_TRADE",
+            "curr": "ENTER_LONG"
+          },
+          {
+            "case_id": "syn_solperp_marginal_long_0023",
+            "prev": "NO_TRADE",
+            "curr": "ENTER_LONG"
+          },
+          {
+            "case_id": "syn_solperp_marginal_long_0029",
+            "prev": "NO_TRADE",
+            "curr": "ENTER_LONG"
+          },
+          {
+            "case_id": "syn_solperp_marginal_long_0035",
+            "prev": "NO_TRADE",
+            "curr": "ENTER_LONG"
+          },
+          {
+            "case_id": "syn_solperp_marginal_long_0041",
+            "prev": "NO_TRADE",
+            "curr": "ENTER_LONG"
+          },
+          {
+            "case_id": "syn_solperp_marginal_long_0047",
+            "prev": "NO_TRADE",
+            "curr": "ENTER_LONG"
+          }
+        ]
+      }
+    },
+    {
+      "cycle_v1": 3,
+      "created_at_v1": "2026-05-02T01:45:36Z",
+      "metrics_v1": {
+        "cases_v1": 60,
+        "decisions_v1": 60,
+        "wins_v1": 25,
+        "losses_v1": 0,
+        "no_trade_correct_v1": 11,
+        "no_trade_missed_v1": 24,
+        "total_pnl_v1": 122.30885,
+        "win_rate_v1": 1.0,
+        "evaluation_pass_v1": 55,
+        "evaluation_fail_v1": 5
+      },
+      "learning_snapshot_v1": {
+        "total_units_v1": 22,
+        "by_status_v1": {
+          "validated": 1,
+          "retired": 2,
+          "provisional": 11,
+          "candidate": 8
+        },
+        "promoted_past_candidate_v1": 12
+      },
+      "decision_diff_vs_prev_v1": {
+        "overlap_cases_v1": 60,
+        "decisions_changed_v1": 0,
+        "changes_v1": []
+      }
+    },
+    {
+      "cycle_v1": 4,
+      "created_at_v1": "2026-05-02T01:45:36Z",
+      "metrics_v1": {
+        "cases_v1": 60,
+        "decisions_v1": 60,
+        "wins_v1": 25,
+        "losses_v1": 0,
+        "no_trade_correct_v1": 11,
+        "no_trade_missed_v1": 24,
+        "total_pnl_v1": 122.30885,
+        "win_rate_v1": 1.0,
+        "evaluation_pass_v1": 55,
+        "evaluation_fail_v1": 5
+      },
+      "learning_snapshot_v1": {
+        "total_units_v1": 22,
+        "by_status_v1": {
+          "active": 1,
+          "retired": 4,
+          "provisional": 9,
+          "candidate": 8
+        },
+        "promoted_past_candidate_v1": 10
+      },
+      "decision_diff_vs_prev_v1": {
+        "overlap_cases_v1": 60,
+        "decisions_changed_v1": 0,
+        "changes_v1": []
+      }
+    }
+  ],
+  "verdict_v1": {
+    "overall_v1": "PASS",
+    "successes_v1": [
+      "PASS: agent accumulated 25 wins across cycles",
+      "PASS: 10 pattern(s) promoted past candidate (by_status={'active': 1, 'retired': 4, 'provisional': 9, 'candidate': 8})",
+      "PASS: at least one case produced a different action between cycles (learning influenced decisions)"
+    ],
+    "issues_v1": [],
+    "max_wins_v1": 25,
+    "promoted_past_candidate_v1": 10,
+    "any_behavioral_change_v1": true,
+    "final_unit_status_v1": {
+      "active": 1,
+      "retired": 4,
+      "provisional": 9,
+      "candidate": 8
+    }
+  },
+  "shared_jsonl_v1": "/Users/bigmac/Documents/code_projects/blackbox/finquant/unified/agent_lab/outputs/train_20260502T014536Z_aa0fb6b2/shared_learning_records_training.jsonl",
+  "units_dir_v1": "/Users/bigmac/Documents/code_projects/blackbox/finquant/unified/agent_lab/outputs/train_20260502T014536Z_aa0fb6b2/learning_units",
+  "loop_dir_v1": "/Users/bigmac/Documents/code_projects/blackbox/finquant/unified/agent_lab/outputs/train_20260502T014536Z_aa0fb6b2"
+}

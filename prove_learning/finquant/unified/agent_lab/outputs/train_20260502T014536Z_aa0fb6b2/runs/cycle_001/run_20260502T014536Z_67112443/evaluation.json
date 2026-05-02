@@ -1,0 +1,21 @@
+{
+  "schema": "finquant_lifecycle_evaluation_v1",
+  "case_id": "syn_solperp_bull_trend_0006",
+  "final_status_v1": "PASS",
+  "entry_quality_v1": "entered_as_expected",
+  "exit_quality_v1": "no_exit_needed",
+  "hold_quality_v1": "hold_steps=0",
+  "no_trade_correctness_v1": "traded_as_expected",
+  "actions_taken": [
+    "ENTER_LONG"
+  ],
+  "final_action": "ENTER_LONG",
+  "step_decisions_emitted": 1,
+  "learning_labels_v1": [
+    "entry_quality"
+  ],
+  "notes": [
+    "step 20: action=ENTER_LONG source=deterministic_stub_v1",
+    "leakage_audit: causal_context_only confirmed (rule-only path)"
+  ]
+}

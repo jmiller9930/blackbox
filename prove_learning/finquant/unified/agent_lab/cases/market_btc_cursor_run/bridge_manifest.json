@@ -1,0 +1,39 @@
+{
+  "schema": "finquant_market_bridge_manifest_v1",
+  "db_path": "data/sqlite/finquant_btcusdt_5m_lab.db",
+  "symbol": "BTC-USD",
+  "interval_minutes": 15,
+  "months_total": 18,
+  "seed_months": 12,
+  "from_utc": "2024-11-08T00:31:21Z",
+  "to_utc": "2026-05-02T00:31:21Z",
+  "seed_boundary_utc": "2025-11-03T00:31:21Z",
+  "seed_cases_count": 14,
+  "test_cases_count": 7,
+  "seed_case_paths": [
+    "finquant/unified/agent_lab/cases/market_btc_cursor_run/seed_btcusd_15m_0000_20241108.json",
+    "finquant/unified/agent_lab/cases/market_btc_cursor_run/seed_btcusd_15m_0001_20241204.json",
+    "finquant/unified/agent_lab/cases/market_btc_cursor_run/seed_btcusd_15m_0002_20241230.json",
+    "finquant/unified/agent_lab/cases/market_btc_cursor_run/seed_btcusd_15m_0003_20250125.json",
+    "finquant/unified/agent_lab/cases/market_btc_cursor_run/seed_btcusd_15m_0004_20250220.json",
+    "finquant/unified/agent_lab/cases/market_btc_cursor_run/seed_btcusd_15m_0005_20250318.json",
+    "finquant/unified/agent_lab/cases/market_btc_cursor_run/seed_btcusd_15m_0006_20250413.json",
+    "finquant/unified/agent_lab/cases/market_btc_cursor_run/seed_btcusd_15m_0007_20250509.json",
+    "finquant/unified/agent_lab/cases/market_btc_cursor_run/seed_btcusd_15m_0008_20250604.json",
+    "finquant/unified/agent_lab/cases/market_btc_cursor_run/seed_btcusd_15m_0009_20250630.json",
+    "finquant/unified/agent_lab/cases/market_btc_cursor_run/seed_btcusd_15m_0010_20250726.json",
+    "finquant/unified/agent_lab/cases/market_btc_cursor_run/seed_btcusd_15m_0011_20250821.json",
+    "finquant/unified/agent_lab/cases/market_btc_cursor_run/seed_btcusd_15m_0012_20250916.json",
+    "finquant/unified/agent_lab/cases/market_btc_cursor_run/seed_btcusd_15m_0013_20251012.json"
+  ],
+  "test_case_paths": [
+    "finquant/unified/agent_lab/cases/market_btc_cursor_run/test_btcusd_15m_0000_20251103.json",
+    "finquant/unified/agent_lab/cases/market_btc_cursor_run/test_btcusd_15m_0001_20251129.json",
+    "finquant/unified/agent_lab/cases/market_btc_cursor_run/test_btcusd_15m_0002_20251225.json",
+    "finquant/unified/agent_lab/cases/market_btc_cursor_run/test_btcusd_15m_0003_20260120.json",
+    "finquant/unified/agent_lab/cases/market_btc_cursor_run/test_btcusd_15m_0004_20260215.json",
+    "finquant/unified/agent_lab/cases/market_btc_cursor_run/test_btcusd_15m_0005_20260313.json",
+    "finquant/unified/agent_lab/cases/market_btc_cursor_run/test_btcusd_15m_0006_20260408.json"
+  ],
+  "cases_dir": "finquant/unified/agent_lab/cases/market_btc_cursor_run"
+}

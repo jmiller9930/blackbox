@@ -1,0 +1,159 @@
+{
+  "ts": 1777403844.805713,
+  "base": "/Users/bigmac/Documents/code_projects/blackbox/finquant",
+  "exchange_docs": [
+    {
+      "slug": "binance",
+      "url": "https://binance-docs.github.io/apidocs/futures/en/",
+      "path": "/Users/bigmac/Documents/code_projects/blackbox/finquant/sources/raw/exchange_docs/binance.html",
+      "http_status": 200,
+      "sha256": "a317413c70327c3b457c24b6619cecbfa842082201c832ffaec6dd1e4aff1af2",
+      "bytes": 325
+    },
+    {
+      "slug": "binance_mark_price",
+      "url": "https://binance-docs.github.io/apidocs/futures/en/#mark-price",
+      "path": "/Users/bigmac/Documents/code_projects/blackbox/finquant/sources/raw/exchange_docs/binance_mark_price.html",
+      "http_status": 200,
+      "sha256": "a317413c70327c3b457c24b6619cecbfa842082201c832ffaec6dd1e4aff1af2",
+      "bytes": 325
+    },
+    {
+      "slug": "binance_funding",
+      "url": "https://binance-docs.github.io/apidocs/futures/en/#funding-rate",
+      "path": "/Users/bigmac/Documents/code_projects/blackbox/finquant/sources/raw/exchange_docs/binance_funding.html",
+      "http_status": 200,
+      "sha256": "a317413c70327c3b457c24b6619cecbfa842082201c832ffaec6dd1e4aff1af2",
+      "bytes": 325
+    },
+    {
+      "slug": "binance_liquidation",
+      "url": "https://binance-docs.github.io/apidocs/futures/en/#liquidation-orders",
+      "path": "/Users/bigmac/Documents/code_projects/blackbox/finquant/sources/raw/exchange_docs/binance_liquidation.html",
+      "http_status": 200,
+      "sha256": "a317413c70327c3b457c24b6619cecbfa842082201c832ffaec6dd1e4aff1af2",
+      "bytes": 325
+    },
+    {
+      "slug": "deribit",
+      "url": "https://docs.deribit.com/",
+      "path": "/Users/bigmac/Documents/code_projects/blackbox/finquant/sources/raw/exchange_docs/deribit.html",
+      "http_status": 200,
+      "sha256": "5c6b417455c3327308d249f8d36c7ae02451e68bf18713470b39e44b080e2a05",
+      "bytes": 946621
+    },
+    {
+      "slug": "deribit_public",
+      "url": "https://docs.deribit.com/#public-methods",
+      "path": "/Users/bigmac/Documents/code_projects/blackbox/finquant/sources/raw/exchange_docs/deribit_public.html",
+      "http_status": 200,
+      "sha256": "5c6b417455c3327308d249f8d36c7ae02451e68bf18713470b39e44b080e2a05",
+      "bytes": 946621
+    },
+    {
+      "slug": "bybit",
+      "url": "https://bybit-exchange.github.io/docs/",
+      "path": "/Users/bigmac/Documents/code_projects/blackbox/finquant/sources/raw/exchange_docs/bybit.html",
+      "http_status": 200,
+      "sha256": "bd3437f59469e82531140055a121ebe6c585e18e33f96692dcb4b881b79bfc6f",
+      "bytes": 22204
+    },
+    {
+      "slug": "bybit_linear",
+      "url": "https://bybit-exchange.github.io/docs/v5/market/mark-kline",
+      "path": "/Users/bigmac/Documents/code_projects/blackbox/finquant/sources/raw/exchange_docs/bybit_linear.html",
+      "http_status": 200,
+      "sha256": "15af12563825281070d67b0e4708147941a5281c332352aa60bd581ba25258d1",
+      "bytes": 75386
+    },
+    {
+      "slug": "kraken",
+      "url": "https://docs.kraken.com/api/",
+      "path": "/Users/bigmac/Documents/code_projects/blackbox/finquant/sources/raw/exchange_docs/kraken.html",
+      "http_status": 200,
+      "sha256": "81c1d0123231559942a24489e3ec03062f80a5c3223743b07cdd4018c1245ede",
+      "bytes": 14243
+    },
+    {
+      "slug": "kraken_futures",
+      "url": "https://docs.kraken.com/api/docs/futures-api/trading/introduction/",
+      "error": "<HTTPError 404: 'Not Found'>"
+    }
+  ],
+  "wikipedia_rest": [
+    {
+      "title": "Z-score",
+      "url": "https://en.wikipedia.org/api/rest_v1/page/summary/Z-score",
+      "path": "/Users/bigmac/Documents/code_projects/blackbox/finquant/sources/raw/wikipedia_rest/Z-score.json",
+      "http_status": 200,
+      "sha256": "ebcb5657cde5016bd6ce32303223f4f2ffcb94e401231b00bffcc5636fba94a6"
+    },
+    {
+      "title": "Volatility_(finance)",
+      "url": "https://en.wikipedia.org/api/rest_v1/page/summary/Volatility_%28finance%29",
+      "path": "/Users/bigmac/Documents/code_projects/blackbox/finquant/sources/raw/wikipedia_rest/Volatility_(finance).json",
+      "http_status": 200,
+      "sha256": "06dcaa4eb23d924f6d5c8b044e2271a7236ae203647fd2271b620d9578836f8d"
+    },
+    {
+      "title": "Cointegration",
+      "url": "https://en.wikipedia.org/api/rest_v1/page/summary/Cointegration",
+      "path": "/Users/bigmac/Documents/code_projects/blackbox/finquant/sources/raw/wikipedia_rest/Cointegration.json",
+      "http_status": 200,
+      "sha256": "f54315afd075f901e3faaf8c56610ff640a428d3609bf94ec19d775f74f28654"
+    },
+    {
+      "title": "Relative_strength_index",
+      "url": "https://en.wikipedia.org/api/rest_v1/page/summary/Relative_strength_index",
+      "path": "/Users/bigmac/Documents/code_projects/blackbox/finquant/sources/raw/wikipedia_rest/Relative_strength_index.json",
+      "http_status": 200,
+      "sha256": "4551d58186ce8e863700348c2bf7e0f16170965222a6fb7d9886703e624858a3"
+    },
+    {
+      "title": "Average_true_range",
+      "url": "https://en.wikipedia.org/api/rest_v1/page/summary/Average_true_range",
+      "path": "/Users/bigmac/Documents/code_projects/blackbox/finquant/sources/raw/wikipedia_rest/Average_true_range.json",
+      "http_status": 200,
+      "sha256": "a78a17ea4b5f154215fb2f785625fac2793911780a8d08fa71f6d6b05d73a8fc"
+    }
+  ],
+  "investopedia": [
+    {
+      "url": "https://www.investopedia.com/terms/r/rsi.asp",
+      "http_status": 200,
+      "bytes": 835276
+    },
+    {
+      "url": "https://www.investopedia.com/terms/a/atr.asp",
+      "http_status": 200,
+      "bytes": 826226
+    }
+  ],
+  "huggingface": [
+    {
+      "dataset": "ibm-research/finqa",
+      "splits": [
+        "train",
+        "validation",
+        "test"
+      ],
+      "elapsed_s": 166.96,
+      "ok": true
+    },
+    {
+      "dataset": "hendrycks/competition_math",
+      "ok": false,
+      "error": "DatasetNotFoundError(\"Dataset 'hendrycks/competition_math' doesn't exist on the Hub or cannot be accessed.\")",
+      "elapsed_s": 0.31
+    },
+    {
+      "dataset": "AI-MO/NuminaMath-CoT",
+      "splits": [
+        "train",
+        "test"
+      ],
+      "elapsed_s": 148.75,
+      "ok": true
+    }
+  ]
+}

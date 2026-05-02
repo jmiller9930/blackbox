@@ -1,0 +1,9 @@
+{
+  "schema": "finquant_training_cycle_manifest_v1",
+  "cycle_id": "cycle_20260501T230753Z_034a6165",
+  "seed_run_id": "run_20260501T230753Z_2bfad64b",
+  "control_run_id": "run_20260501T230753Z_8f16b7e9",
+  "candidate_run_id": "run_20260501T230753Z_0a474335",
+  "report_path": "finquant/unified/agent_lab/outputs/cycle_20260501T230753Z_034a6165/student_learning_referee_report_v1.json",
+  "shared_learning_store_path": "finquant/unified/agent_lab/outputs/cycle_20260501T230753Z_034a6165/shared_learning_records.jsonl"
+}

@@ -53,19 +53,44 @@ export function getVisibleDashboardBlockIds(args: {
 }): DashboardBlockId[] {
   const { dashboard, execId, aj, featuredId, tc, st } = args;
   const vis = new Set<DashboardBlockId>();
+  const hasActiveExecution = !!execId;
+  const liveTrainingTelemetry =
+    !!dashboard?.training_telemetry &&
+    !!execId &&
+    dashboard.dashboard_status_label === "TRAINING";
+  const remediationMode =
+    !hasActiveExecution &&
+    (dashboard?.system_posture === "FAILED" || dashboard?.system_posture === "BLOCKED");
+
+  /**
+   * Active run mode: keep operator view minimal and non-duplicative.
+   * Training status hero + one run panel is enough while execution is active.
+   */
+  if (hasActiveExecution) {
+    if (liveTrainingTelemetry) {
+      vis.add("training-telemetry");
+    } else if (aj) {
+      vis.add("job-in-progress");
+    }
+    return DASHBOARD_BLOCK_ORDER_DEFAULT.filter((id) => vis.has(id));
+  }
+
+  /** Broken/blocked mode: collapse to operator recovery view only. */
+  if (remediationMode) {
+    vis.add("system-status");
+    if (tc) vis.add("advance-training");
+    return DASHBOARD_BLOCK_ORDER_DEFAULT.filter((id) => vis.has(id));
+  }
 
   vis.add("system-status");
 
-  if (
-    dashboard?.training_telemetry &&
-    execId &&
-    dashboard.dashboard_status_label === "TRAINING"
-  ) {
+  if (liveTrainingTelemetry) {
     vis.add("training-telemetry");
   }
 
   if (dashboard?.certified_feature_summary) vis.add("certified-summary");
-  if (execId && aj) vis.add("job-in-progress");
+  /** Avoid duplicate operator copy: telemetry panel supersedes "Job in progress" during live training. */
+  if (execId && aj && !liveTrainingTelemetry) vis.add("job-in-progress");
   if (
     featuredId &&
     dashboard &&

@@ -1,0 +1,442 @@
+[
+  {
+    "schema": "finquant_lifecycle_decision_v1",
+    "agent_id": "finquant",
+    "case_id": "trend_entry_exit_v1",
+    "step_index": 0,
+    "symbol": "SOL-PERP",
+    "action": "NO_TRADE",
+    "thesis_v1": "Only one candle visible; insufficient context for trend entry.",
+    "invalidation_v1": "Need at least 2 candles to form a thesis.",
+    "risk_state_v1": "insufficient_context",
+    "observed_context_v1": {
+      "candles_visible": 1,
+      "last_close": 100.2,
+      "last_rsi_14": 52.0,
+      "last_ema_20": 98.8,
+      "last_atr_14": 2.1,
+      "last_volume": 2000
+    },
+    "input_packet_v1": {
+      "schema": "finquant_input_packet_v1",
+      "case_id": "trend_entry_exit_v1",
+      "step_index": 0,
+      "symbol": "SOL-PERP",
+      "timeframe_minutes": 60,
+      "runtime_data_window_months_v1": 12,
+      "runtime_interval_v1": "1h",
+      "candles_visible_v1": 1,
+      "market_math_v1": {
+        "close_v1": 100.2,
+        "prev_close_v1": 100.2,
+        "price_delta_v1": 0.0,
+        "pct_change_v1": 0.0,
+        "ema_gap_v1": 1.4,
+        "atr_14_v1": 2.1,
+        "rsi_14_v1": 52.0,
+        "volume_delta_v1": 0.0
+      },
+      "market_context_v1": {
+        "price_above_ema_v1": true,
+        "price_up_v1": false,
+        "volume_expand_v1": false,
+        "atr_expanded_v1": true,
+        "rsi_state_v1": "bullish_range",
+        "volatility_state_v1": "expanded"
+      },
+      "memory_context_v1": {
+        "matched_record_count_v1": 0,
+        "matched_record_ids_v1": [],
+        "long_bias_count_v1": 0,
+        "short_bias_count_v1": 0,
+        "no_trade_bias_count_v1": 0,
+        "best_grade_v1": "UNKNOWN",
+        "memory_influence_available_v1": false
+      },
+      "strategy_hypotheses_v1": [
+        {
+          "strategy_family_v1": "trend_continuation",
+          "action_v1": "ENTER_LONG",
+          "score_v1": 0.5
+        },
+        {
+          "strategy_family_v1": "pullback_continuation",
+          "action_v1": "ENTER_LONG",
+          "score_v1": 0.5
+        },
+        {
+          "strategy_family_v1": "breakout_expansion",
+          "action_v1": "ENTER_LONG",
+          "score_v1": 0.15
+        },
+        {
+          "strategy_family_v1": "mean_reversion_fade",
+          "action_v1": "ENTER_SHORT",
+          "score_v1": 0.0
+        },
+        {
+          "strategy_family_v1": "no_trade_guard",
+          "action_v1": "NO_TRADE",
+          "score_v1": 0.5
+        }
+      ],
+      "baseline_strategy_families_v1": [
+        "trend_continuation",
+        "pullback_continuation",
+        "breakout_expansion",
+        "mean_reversion_fade",
+        "no_trade_guard"
+      ]
+    },
+    "confidence_band_v1": "low",
+    "supporting_indicators_v1": [],
+    "conflicting_indicators_v1": [
+      "insufficient_context"
+    ],
+    "risk_notes_v1": "Do not size risk from a one-candle view.",
+    "memory_used_v1": [],
+    "llm_used_v1": false,
+    "decision_source_v1": "deterministic_stub_v1",
+    "causal_context_only_v1": true,
+    "thesis": "Only one candle visible; insufficient context for trend entry.",
+    "invalidation": "Need at least 2 candles to form a thesis.",
+    "confidence_band": "low",
+    "supporting_indicators": [],
+    "conflicting_indicators": [
+      "insufficient_context"
+    ],
+    "risk_notes": "Do not size risk from a one-candle view."
+  },
+  {
+    "schema": "finquant_lifecycle_decision_v1",
+    "agent_id": "finquant",
+    "case_id": "trend_entry_exit_v1",
+    "step_index": 1,
+    "symbol": "SOL-PERP",
+    "action": "ENTER_LONG",
+    "thesis_v1": "Uptrend: close 100.20\u2192102.50, RSI=58.4, volume expanding, ATR=2.40.",
+    "invalidation_v1": "Exit if close drops below 101.99 or RSI decays with volume collapse.",
+    "risk_state_v1": "entry_long rsi=58.4 atr=2.40",
+    "observed_context_v1": {
+      "candles_visible": 2,
+      "last_close": 102.5,
+      "last_rsi_14": 58.4,
+      "last_ema_20": 99.8,
+      "last_atr_14": 2.4,
+      "last_volume": 3200
+    },
+    "input_packet_v1": {
+      "schema": "finquant_input_packet_v1",
+      "case_id": "trend_entry_exit_v1",
+      "step_index": 1,
+      "symbol": "SOL-PERP",
+      "timeframe_minutes": 60,
+      "runtime_data_window_months_v1": 12,
+      "runtime_interval_v1": "1h",
+      "candles_visible_v1": 2,
+      "market_math_v1": {
+        "close_v1": 102.5,
+        "prev_close_v1": 100.2,
+        "price_delta_v1": 2.3,
+        "pct_change_v1": 0.022954,
+        "ema_gap_v1": 2.7,
+        "atr_14_v1": 2.4,
+        "rsi_14_v1": 58.4,
+        "volume_delta_v1": 1200.0
+      },
+      "market_context_v1": {
+        "price_above_ema_v1": true,
+        "price_up_v1": true,
+        "volume_expand_v1": true,
+        "atr_expanded_v1": true,
+        "rsi_state_v1": "bullish_range",
+        "volatility_state_v1": "expanded"
+      },
+      "memory_context_v1": {
+        "matched_record_count_v1": 0,
+        "matched_record_ids_v1": [],
+        "long_bias_count_v1": 0,
+        "short_bias_count_v1": 0,
+        "no_trade_bias_count_v1": 0,
+        "best_grade_v1": "UNKNOWN",
+        "memory_influence_available_v1": false
+      },
+      "strategy_hypotheses_v1": [
+        {
+          "strategy_family_v1": "trend_continuation",
+          "action_v1": "ENTER_LONG",
+          "score_v1": 0.9
+        },
+        {
+          "strategy_family_v1": "pullback_continuation",
+          "action_v1": "ENTER_LONG",
+          "score_v1": 0.15
+        },
+        {
+          "strategy_family_v1": "breakout_expansion",
+          "action_v1": "ENTER_LONG",
+          "score_v1": 0.4
+        },
+        {
+          "strategy_family_v1": "mean_reversion_fade",
+          "action_v1": "ENTER_SHORT",
+          "score_v1": 0.0
+        },
+        {
+          "strategy_family_v1": "no_trade_guard",
+          "action_v1": "NO_TRADE",
+          "score_v1": 0.2
+        }
+      ],
+      "baseline_strategy_families_v1": [
+        "trend_continuation",
+        "pullback_continuation",
+        "breakout_expansion",
+        "mean_reversion_fade",
+        "no_trade_guard"
+      ]
+    },
+    "confidence_band_v1": "high",
+    "supporting_indicators_v1": [
+      "close_up=True",
+      "rsi_midrange=True",
+      "volume_expand=True",
+      "atr_expand=True"
+    ],
+    "conflicting_indicators_v1": [],
+    "risk_notes_v1": "Strong trend-continuation evidence.",
+    "memory_used_v1": [],
+    "llm_used_v1": false,
+    "decision_source_v1": "deterministic_stub_v1",
+    "causal_context_only_v1": true,
+    "thesis": "Uptrend: close 100.20\u2192102.50, RSI=58.4, volume expanding, ATR=2.40.",
+    "invalidation": "Exit if close drops below 101.99 or RSI decays with volume collapse.",
+    "confidence_band": "high",
+    "supporting_indicators": [
+      "close_up=True",
+      "rsi_midrange=True",
+      "volume_expand=True",
+      "atr_expand=True"
+    ],
+    "conflicting_indicators": [],
+    "risk_notes": "Strong trend-continuation evidence."
+  },
+  {
+    "schema": "finquant_lifecycle_decision_v1",
+    "agent_id": "finquant",
+    "case_id": "trend_entry_exit_v1",
+    "step_index": 2,
+    "symbol": "SOL-PERP",
+    "action": "HOLD",
+    "thesis_v1": "Position open. RSI=63.1, close=104.80. No exit signal.",
+    "invalidation_v1": "Exit if RSI < 45, price retreats 0.5%, or resistance recaptured.",
+    "risk_state_v1": "holding entry=102.50",
+    "observed_context_v1": {
+      "candles_visible": 3,
+      "last_close": 104.8,
+      "last_rsi_14": 63.1,
+      "last_ema_20": 101.2,
+      "last_atr_14": 2.5,
+      "last_volume": 4100
+    },
+    "input_packet_v1": {
+      "schema": "finquant_input_packet_v1",
+      "case_id": "trend_entry_exit_v1",
+      "step_index": 2,
+      "symbol": "SOL-PERP",
+      "timeframe_minutes": 60,
+      "runtime_data_window_months_v1": 12,
+      "runtime_interval_v1": "1h",
+      "candles_visible_v1": 3,
+      "market_math_v1": {
+        "close_v1": 104.8,
+        "prev_close_v1": 102.5,
+        "price_delta_v1": 2.3,
+        "pct_change_v1": 0.022439,
+        "ema_gap_v1": 3.6,
+        "atr_14_v1": 2.5,
+        "rsi_14_v1": 63.1,
+        "volume_delta_v1": 900.0
+      },
+      "market_context_v1": {
+        "price_above_ema_v1": true,
+        "price_up_v1": true,
+        "volume_expand_v1": true,
+        "atr_expanded_v1": true,
+        "rsi_state_v1": "bullish_range",
+        "volatility_state_v1": "expanded"
+      },
+      "memory_context_v1": {
+        "matched_record_count_v1": 0,
+        "matched_record_ids_v1": [],
+        "long_bias_count_v1": 0,
+        "short_bias_count_v1": 0,
+        "no_trade_bias_count_v1": 0,
+        "best_grade_v1": "UNKNOWN",
+        "memory_influence_available_v1": false
+      },
+      "strategy_hypotheses_v1": [
+        {
+          "strategy_family_v1": "trend_continuation",
+          "action_v1": "ENTER_LONG",
+          "score_v1": 0.9
+        },
+        {
+          "strategy_family_v1": "pullback_continuation",
+          "action_v1": "ENTER_LONG",
+          "score_v1": 0.15
+        },
+        {
+          "strategy_family_v1": "breakout_expansion",
+          "action_v1": "ENTER_LONG",
+          "score_v1": 0.4
+        },
+        {
+          "strategy_family_v1": "mean_reversion_fade",
+          "action_v1": "ENTER_SHORT",
+          "score_v1": 0.0
+        },
+        {
+          "strategy_family_v1": "no_trade_guard",
+          "action_v1": "NO_TRADE",
+          "score_v1": 0.2
+        }
+      ],
+      "baseline_strategy_families_v1": [
+        "trend_continuation",
+        "pullback_continuation",
+        "breakout_expansion",
+        "mean_reversion_fade",
+        "no_trade_guard"
+      ]
+    },
+    "confidence_band_v1": "medium",
+    "supporting_indicators_v1": [
+      "RSI=63.1",
+      "close=104.80"
+    ],
+    "conflicting_indicators_v1": [],
+    "risk_notes_v1": "Hold while thesis remains intact.",
+    "memory_used_v1": [],
+    "llm_used_v1": false,
+    "decision_source_v1": "deterministic_stub_v1",
+    "causal_context_only_v1": true,
+    "thesis": "Position open. RSI=63.1, close=104.80. No exit signal.",
+    "invalidation": "Exit if RSI < 45, price retreats 0.5%, or resistance recaptured.",
+    "confidence_band": "medium",
+    "supporting_indicators": [
+      "RSI=63.1",
+      "close=104.80"
+    ],
+    "conflicting_indicators": [],
+    "risk_notes": "Hold while thesis remains intact."
+  },
+  {
+    "schema": "finquant_lifecycle_decision_v1",
+    "agent_id": "finquant",
+    "case_id": "trend_entry_exit_v1",
+    "step_index": 3,
+    "symbol": "SOL-PERP",
+    "action": "EXIT",
+    "thesis_v1": "Thesis invalidated: RSI decayed 63.1\u219255.1, volume collapsed.",
+    "invalidation_v1": "RSI reclaims prior level or price clears resistance.",
+    "risk_state_v1": "exit_triggered RSI decayed 63.1\u219255.1, volume collapsed",
+    "observed_context_v1": {
+      "candles_visible": 4,
+      "last_close": 103.8,
+      "last_rsi_14": 55.1,
+      "last_ema_20": 102.0,
+      "last_atr_14": 2.3,
+      "last_volume": 1800
+    },
+    "input_packet_v1": {
+      "schema": "finquant_input_packet_v1",
+      "case_id": "trend_entry_exit_v1",
+      "step_index": 3,
+      "symbol": "SOL-PERP",
+      "timeframe_minutes": 60,
+      "runtime_data_window_months_v1": 12,
+      "runtime_interval_v1": "1h",
+      "candles_visible_v1": 4,
+      "market_math_v1": {
+        "close_v1": 103.8,
+        "prev_close_v1": 104.8,
+        "price_delta_v1": -1.0,
+        "pct_change_v1": -0.009542,
+        "ema_gap_v1": 1.8,
+        "atr_14_v1": 2.3,
+        "rsi_14_v1": 55.1,
+        "volume_delta_v1": -2300.0
+      },
+      "market_context_v1": {
+        "price_above_ema_v1": true,
+        "price_up_v1": false,
+        "volume_expand_v1": false,
+        "atr_expanded_v1": true,
+        "rsi_state_v1": "bullish_range",
+        "volatility_state_v1": "expanded"
+      },
+      "memory_context_v1": {
+        "matched_record_count_v1": 0,
+        "matched_record_ids_v1": [],
+        "long_bias_count_v1": 0,
+        "short_bias_count_v1": 0,
+        "no_trade_bias_count_v1": 0,
+        "best_grade_v1": "UNKNOWN",
+        "memory_influence_available_v1": false
+      },
+      "strategy_hypotheses_v1": [
+        {
+          "strategy_family_v1": "trend_continuation",
+          "action_v1": "ENTER_LONG",
+          "score_v1": 0.5
+        },
+        {
+          "strategy_family_v1": "pullback_continuation",
+          "action_v1": "ENTER_LONG",
+          "score_v1": 0.5
+        },
+        {
+          "strategy_family_v1": "breakout_expansion",
+          "action_v1": "ENTER_LONG",
+          "score_v1": 0.15
+        },
+        {
+          "strategy_family_v1": "mean_reversion_fade",
+          "action_v1": "ENTER_SHORT",
+          "score_v1": 0.0
+        },
+        {
+          "strategy_family_v1": "no_trade_guard",
+          "action_v1": "NO_TRADE",
+          "score_v1": 0.2
+        }
+      ],
+      "baseline_strategy_families_v1": [
+        "trend_continuation",
+        "pullback_continuation",
+        "breakout_expansion",
+        "mean_reversion_fade",
+        "no_trade_guard"
+      ]
+    },
+    "confidence_band_v1": "high",
+    "supporting_indicators_v1": [
+      "RSI decayed 63.1\u219255.1, volume collapsed"
+    ],
+    "conflicting_indicators_v1": [],
+    "risk_notes_v1": "Exit was triggered by explicit invalidation rules.",
+    "memory_used_v1": [],
+    "llm_used_v1": false,
+    "decision_source_v1": "deterministic_stub_v1",
+    "causal_context_only_v1": true,
+    "thesis": "Thesis invalidated: RSI decayed 63.1\u219255.1, volume collapsed.",
+    "invalidation": "RSI reclaims prior level or price clears resistance.",
+    "confidence_band": "high",
+    "supporting_indicators": [
+      "RSI decayed 63.1\u219255.1, volume collapsed"
+    ],
+    "conflicting_indicators": [],
+    "risk_notes": "Exit was triggered by explicit invalidation rules."
+  }
+]

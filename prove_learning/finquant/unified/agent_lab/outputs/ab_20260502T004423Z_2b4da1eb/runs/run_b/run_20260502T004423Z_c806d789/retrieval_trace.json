@@ -1,0 +1,18 @@
+{
+  "schema": "finquant_retrieval_trace_v1",
+  "run_id": "run_20260502T004423Z_c806d789",
+  "entries": [
+    {
+      "reason": "retrieval_disabled",
+      "record_id": "lr_2e1f5bb2216c41cb9242b445de688e26"
+    },
+    {
+      "reason": "retrieved",
+      "record_id": "lr_689e8c84df034cd8ac99f396a147df74"
+    },
+    {
+      "reason": "retrieved",
+      "record_id": "lr_17a9d9c0ca1e4e6ea5cd8ee9f95aca60"
+    }
+  ]
+}

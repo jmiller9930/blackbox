@@ -1,0 +1,31 @@
+{
+  "schema": "finquant_run_ab_manifest_v1",
+  "cycle_id": "ab_20260502T005548Z_450aeb6f",
+  "cycle_dir": "finquant/unified/agent_lab/outputs/ab_20260502T005548Z_450aeb6f",
+  "run_a_case_count_v1": 100,
+  "run_b_case_count_v1": 100,
+  "run_b_mode_v1": "replay_run_a",
+  "governed_memory_path_v1": "finquant/unified/agent_lab/outputs/ab_20260502T005548Z_450aeb6f/shared_learning_records_ab.jsonl",
+  "snapshot_after_a_v1": {
+    "total_units_v1": 29,
+    "by_status_v1": {
+      "candidate": 22,
+      "provisional": 6,
+      "retired": 1
+    },
+    "events_path_v1": "finquant/unified/agent_lab/outputs/ab_20260502T005548Z_450aeb6f/learning_units/events.jsonl",
+    "units_path_v1": "finquant/unified/agent_lab/outputs/ab_20260502T005548Z_450aeb6f/learning_units/units.json"
+  },
+  "snapshot_after_b_v1": {
+    "total_units_v1": 29,
+    "by_status_v1": {
+      "candidate": 13,
+      "provisional": 9,
+      "retired": 7
+    },
+    "events_path_v1": "finquant/unified/agent_lab/outputs/ab_20260502T005548Z_450aeb6f/learning_units/events.jsonl",
+    "units_path_v1": "finquant/unified/agent_lab/outputs/ab_20260502T005548Z_450aeb6f/learning_units/units.json"
+  },
+  "comparison_path_v1": "finquant/unified/agent_lab/outputs/ab_20260502T005548Z_450aeb6f/run_ab_comparison_v1.json",
+  "learning_units_dir_v1": "finquant/unified/agent_lab/outputs/ab_20260502T005548Z_450aeb6f/learning_units"
+}

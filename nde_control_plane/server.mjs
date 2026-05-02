@@ -313,7 +313,151 @@ function buildActiveCycleSnapshot(domain, runId) {
   };
 }
 
+/** Safe fixes Studio may apply on each dashboard refresh (no graph/state mutation). */
+function applySafeAdvanceRemediation(domain) {
+  const applied = [];
+  const lock = path.join(DATA_NDE, domain, ".advance_spawning.lock");
+  try {
+    if (fs.existsSync(lock)) {
+      const ageMs = Date.now() - fs.statSync(lock).mtimeMs;
+      if (ageMs > 120000) {
+        fs.unlinkSync(lock);
+        applied.push(
+          "Automatic: removed stale .advance_spawning.lock (>120s) so Advance can POST again after an interrupted spawn."
+        );
+      }
+    }
+  } catch (e) {
+    applied.push(`Advance lock auto-cleanup failed: ${String(e?.message || e)}`);
+  }
+  return applied;
+}
+
+function findFirstFailedGraphNode(domain, runId) {
+  const rows = listNodeStatuses(runRoot(domain, runId));
+  for (const row of rows) {
+    const st = String(row.status || "").toUpperCase();
+    if (st === "FAIL" || st === "FAILED") {
+      const fr =
+        row.failure_reason ||
+        (Array.isArray(row.errors) && row.errors.length ? String(row.errors[0]) : null);
+      return { node: row.node, failure_reason: fr };
+    }
+  }
+  return null;
+}
+
+function buildAdvanceBlockingExplainer(domain, tcSummary) {
+  const empty = {
+    why_advance_is_locked: null,
+    why_snapshot_shows_failed: null,
+    root_cause_plain: null,
+    failed_node_id: null,
+    remaining_operator_actions: [],
+  };
+
+  if (tcSummary.can_advance) {
+    return {
+      ...empty,
+      why_advance_is_locked:
+        "Advance is unlocked: a certified baseline exists and no LangGraph cycle is blocking the next version bump.",
+    };
+  }
+
+  if (tcSummary.advance_disabled_reason === "no_certified_version") {
+    return {
+      ...empty,
+      why_advance_is_locked:
+        "Advance is locked because this domain has no certified training version on disk yet (see certified runs under /data/NDE/…/runs/).",
+      remaining_operator_actions: [
+        "Complete the pipeline through certify once, or ingest a certified state, then use Advance again.",
+      ],
+    };
+  }
+
+  const block = tcSummary.active_blocking_candidate;
+  const runId = block?.run_id;
+  if (!runId) {
+    return {
+      ...empty,
+      why_advance_is_locked:
+        "Advance is locked (active_run_in_progress) but Studio could not resolve a blocking run id — check runs directory layout.",
+      remaining_operator_actions: ["Verify /data/NDE disk mount and domain folder naming."],
+    };
+  }
+
+  const root = runRoot(domain, runId);
+  const stPath = path.join(root, "state.json");
+  const st = fs.existsSync(stPath) ? readJsonSafe(stPath) : null;
+  const snap = tcSummary.active_cycle;
+  const failedNode = findFirstFailedGraphNode(domain, runId);
+
+  const remaining = [];
+  let whyLocked =
+    `Advance is locked while LangGraph cycle "${runId}" is still treated as active or escalated. ` +
+    `Studio policy: finish or remediate this candidate before allocating another bump.`;
+
+  let whyFailed = null;
+  let rootCause = null;
+  let failedNodeId = null;
+
+  if (!st) {
+    whyFailed =
+      "If the snapshot looks odd: state.json is missing — the runner may still be starting, or the run dir was created but the graph has not synced state yet.";
+    rootCause = block?.detail ? String(block.detail) : null;
+    remaining.push(`Watch for ${stPath} to appear; if it never does, check host logs for run_graph / nde_graph_runner.`);
+  } else if (st.escalated === true) {
+    whyFailed =
+      '"FAILED" / escalated means LangGraph set escalated=true (often after retries): this run will keep blocking Advance until an operator fixes the underlying issue or archives/remediates the run per ops policy.';
+    rootCause = String(
+      st.escalate_reason || st.last_error || block?.detail || snap?.last_error || ""
+    ).trim() || null;
+    failedNodeId = failedNode?.node || null;
+    remaining.push(`Read escalate_reason and last_error in ${stPath}.`);
+    if (failedNodeId) {
+      remaining.push(`Inspect ${path.join(root, "nodes", failedNodeId, "stderr.log")} (and stdout.log).`);
+    } else {
+      remaining.push(`Inspect nodes/*/stderr.log under ${root} for the first FAIL.`);
+    }
+  } else if (failedNode) {
+    whyFailed = `FAILED is literal: graph node "${failedNode.node}" has node_status.json status FAIL — the factory stopped at that stage.`;
+    failedNodeId = failedNode.node;
+    rootCause =
+      failedNode.failure_reason ||
+      (st.last_error != null ? String(st.last_error).trim() : null) ||
+      null;
+    remaining.push(`Open ${path.join(root, "nodes", failedNode.node, "node_status.json")}.`);
+    remaining.push(`Open ${path.join(root, "nodes", failedNode.node, "stderr.log")} for the traceback or trainer message.`);
+    remaining.push(
+      "Fix environment/config (GPU visible to train process, paths, approvals), then start a new approved cycle or resume per your procedure."
+    );
+  } else if (snap && /\(FAILED\)|\bFAIL\b/i.test(snap.current_step || "")) {
+    whyFailed =
+      "The blocking snapshot shows FAILED because the pipeline summary maps the current LangGraph stage to a failure posture (from node proofs + state), not because of the optimizer tqdm bar.";
+    rootCause =
+      (snap.last_error != null ? String(snap.last_error) : null) ||
+      (block?.detail ? String(block.detail) : null) ||
+      (st.last_error != null ? String(st.last_error).trim() : null) ||
+      null;
+    remaining.push(`Cross-check Pipeline detail / timeline for run ${runId}.`);
+  } else {
+    whyFailed =
+      "The percentage here is LangGraph factory progress (roughly seven stages), not Hugging Face steps — RUNNING does not mean advance is allowed until this candidate completes or clears.";
+    rootCause = block?.detail ? String(block.detail) : st ? summarizeStatus(st) : null;
+    remaining.push(`Monitor ${root}; when training finishes, eval/gate nodes must pass before certify unlocks advance.`);
+  }
+
+  return {
+    why_advance_is_locked: whyLocked,
+    why_snapshot_shows_failed: whyFailed,
+    root_cause_plain: rootCause,
+    failed_node_id: failedNodeId,
+    remaining_operator_actions: remaining,
+  };
+}
+
 function buildTrainingCycleSummary(domain) {
+  const advance_auto_remediation = applySafeAdvanceRemediation(domain);
   const certified = findLatestCertifiedTrainingVersion(domain);
   const blocking = findBlockingCycleCandidate(domain);
   const nextVer = certified ? bumpMinorTrainingVersion(certified.version) : null;
@@ -325,7 +469,7 @@ function buildTrainingCycleSummary(domain) {
   else if (blocking) advanceDisabledReason = "active_run_in_progress";
   const activeRunId = blocking?.run_id ?? null;
   const active_cycle = activeRunId ? buildActiveCycleSnapshot(domain, activeRunId) : null;
-  return {
+  const base = {
     latest_certified_version: certified?.version ?? null,
     latest_certified_run_id: certified?.run_id ?? null,
     next_candidate_version: nextVer,
@@ -339,6 +483,11 @@ function buildTrainingCycleSummary(domain) {
     graph_entrypoint: RUN_GRAPH_SCRIPT,
     default_mode: "smoke",
     full_training_requires_admin_approved: true,
+    advance_auto_remediation,
+  };
+  return {
+    ...base,
+    advance_blocking_explainer: buildAdvanceBlockingExplainer(domain, base),
   };
 }
 
@@ -625,6 +774,13 @@ function classifyPrimaryTier(domain, runId) {
     return null;
   }
   if (st?.escalated === true || isTerminalCycleFailure(st)) return 2;
+  /**
+   * Fallback for partial / stale state.json: derive status from node proofs.
+   * If pipeline already resolved FAILED/BLOCKED, this run is not in-flight.
+   */
+  const pv = derivePipelineVisual(domain, runId);
+  if (pv?.dashboard_status === "CERTIFIED") return null;
+  if (pv?.dashboard_status === "FAILED" || pv?.dashboard_status === "BLOCKED") return 2;
   return 1;
 }
 
@@ -1466,15 +1622,27 @@ function buildSystemControlPlaneSlice(domain, executionRunId, featuredRunId, tcS
     const posture = postureFromDashboardStatus(pv?.dashboard_status);
     const aj = pv?.active_job;
     const lines = [];
-    if (posture === "RUNNING") lines.push("Job in progress.");
-    else if (posture === "BLOCKED") lines.push("Job blocked.");
-    else lines.push("Job failed.");
+    if (posture === "RUNNING") {
+      lines.push("Job in progress.");
+      lines.push(`Run: ${executionRunId}`);
+      if (epf.pipeline_focus_label) lines.push(epf.pipeline_focus_label);
+      if (aj?.elapsed_display) lines.push(`Elapsed: ${aj.elapsed_display}`);
+      return {
+        system_posture: posture,
+        execution_active_run_id: executionRunId,
+        featured_run_id: featuredRunId,
+        latest_certified_run_id,
+        system_status_lines: lines,
+      };
+    }
+    /** Broken/blocked is full-stop from operator POV; no active execution should be surfaced. */
+    lines.push("No active job running.");
+    lines.push(posture === "BLOCKED" ? "Job blocked (full stop)." : "Job failed (full stop).");
     lines.push(`Run: ${executionRunId}`);
     if (epf.pipeline_focus_label) lines.push(epf.pipeline_focus_label);
-    if (aj?.elapsed_display) lines.push(`Elapsed: ${aj.elapsed_display}`);
     return {
       system_posture: posture,
-      execution_active_run_id: executionRunId,
+      execution_active_run_id: null,
       featured_run_id: featuredRunId,
       latest_certified_run_id,
       system_status_lines: lines,
@@ -1487,9 +1655,7 @@ function buildSystemControlPlaneSlice(domain, executionRunId, featuredRunId, tcS
     const err = pv?.latest_error ? String(pv.latest_error).trim() : "";
     const lines = [
       "No active job running.",
-      posture === "BLOCKED"
-        ? "Remediation: a cycle finished blocked."
-        : "Remediation: a cycle finished failed.",
+      posture === "BLOCKED" ? "Job blocked (full stop)." : "Job failed (full stop).",
       `Run: ${featuredRunId}`,
     ];
     if (err) lines.push(`Reason: ${err.slice(0, 400)}`);
@@ -2247,28 +2413,32 @@ async function buildTrainingTelemetry(domain, runId, state) {
   const ts = deriveRunTimestamps(domain, runId, state, []);
   const elapsed = formatElapsed(ts.elapsed_ms);
 
-  const trainStdout = path.join(
-    DATA_NDE,
-    domain,
-    "runs",
-    runId,
-    "nodes",
-    "smoke_train",
-    "stdout.log"
-  );
+  const trainStdouts = [
+    path.join(DATA_NDE, domain, "runs", runId, "nodes", "smoke_train", "stdout.log"),
+    path.join(DATA_NDE, domain, "runs", runId, "nodes", "full_train", "stdout.log"),
+  ];
   let train_log_bytes = 0;
-  try {
-    if (fs.existsSync(trainStdout)) train_log_bytes = fs.statSync(trainStdout).size;
-  } catch {
-    train_log_bytes = 0;
+  for (const p of trainStdouts) {
+    try {
+      if (fs.existsSync(p)) train_log_bytes = Math.max(train_log_bytes, fs.statSync(p).size);
+    } catch {
+      /* ignore */
+    }
   }
 
-  let eta = "ETA: calculating";
+  let eta = "calculating";
   const cur = parsed.train_step_current;
-  const tot = parsed.train_step_total;
+  const inferredTot =
+    parsed.train_step_total ??
+    (hints.full_max_steps != null && cur != null ? hints.full_max_steps : null);
+  const tot = inferredTot;
+  const progressPercentResolved =
+    cur != null && tot != null && tot > 0
+      ? Math.round((cur / tot) * 1000) / 10
+      : parsed.progress_percent;
   if (cur != null && tot != null && tot > 0 && cur >= 0 && ts.elapsed_ms > 1000) {
     if (cur < 1) {
-      eta = "ETA: waiting for step ≥ 1 in logs (step 0 cannot estimate finish time)";
+      eta = "waiting for step >= 1";
     } else {
       const rate = cur / ts.elapsed_ms;
       if (rate > 0) {
@@ -2277,12 +2447,11 @@ async function buildTrainingTelemetry(domain, runId, state) {
       }
     }
   } else if (
-    eta === "ETA: calculating" &&
+    eta === "calculating" &&
     train_log_bytes > 400 &&
     (cur == null || tot == null)
   ) {
-    eta =
-      "ETA: need step fraction in logs (e.g. 123/3000)—check Training telemetry log tail";
+    eta = "need step/total in trainer logs";
   }
 
   const gpu = await sampleNvidiaSmi();
@@ -2307,9 +2476,11 @@ async function buildTrainingTelemetry(domain, runId, state) {
 
   let operator_headline = "";
   let operator_detail = "";
-  if (parsed.train_step_current != null && parsed.train_step_total != null) {
-    operator_headline = `Training loop ${parsed.train_step_current} / ${parsed.train_step_total}`;
-    operator_detail = `${parsed.progress_percent ?? "—"}% of optimizer steps (from trainer logs — same as terminal tqdm).`;
+  if (cur != null && tot != null) {
+    operator_headline = `Training loop ${cur} / ${tot}`;
+    const pctTxt =
+      progressPercentResolved != null ? progressPercentResolved : parsed.progress_percent ?? "—";
+    operator_detail = `${pctTxt}% of optimizer steps (from trainer logs — same as terminal tqdm).`;
   } else if (gpuEngaged) {
     operator_headline = `Training on GPU (${gpu_util_pct ?? "?"}% util${vram_used_mb != null ? `, ${Math.round(vram_used_mb)} MiB VRAM` : ""})`;
     operator_detail =
@@ -2319,6 +2490,10 @@ async function buildTrainingTelemetry(domain, runId, state) {
   } else if (train_log_bytes > 400) {
     operator_headline = `Trainer running (${Math.max(1, Math.round(train_log_bytes / 1024))} KB log output)`;
     operator_detail = "Subprocess is emitting output; GPU metrics may lag briefly.";
+  } else if (ts.elapsed_ms > 5 * 60 * 1000) {
+    operator_headline = "No live trainer output detected";
+    operator_detail =
+      "No train node stdout yet; check runner/log path on host so step/ETA lines can be tailed.";
   } else {
     operator_headline = "Starting trainer…";
     operator_detail = "Waiting for GPU activity or trainer log output.";
@@ -2350,9 +2525,9 @@ async function buildTrainingTelemetry(domain, runId, state) {
     dataset_rows: rows,
     checkpoint_shards_loaded: parsed.checkpoint_shards_loaded ?? 0,
     checkpoint_shards_total: parsed.checkpoint_shards_total ?? 0,
-    train_step_current: parsed.train_step_current,
-    train_step_total: parsed.train_step_total,
-    progress_percent: parsed.progress_percent,
+    train_step_current: cur,
+    train_step_total: tot,
+    progress_percent: progressPercentResolved,
     training_initializing,
     gpu_util_pct,
     train_log_bytes,
@@ -2525,7 +2700,7 @@ async function buildDashboardPayload(domain) {
       const loopLbl = `loop ${tt.train_step_current}/${tt.train_step_total}`;
       aj.training_live_summary = pipeLbl ? `${pipeLbl} · ${loopLbl}` : loopLbl;
       base.progress_percent = bar;
-      if (tt.eta && tt.eta !== "ETA: calculating") {
+      if (tt.eta && tt.eta !== "calculating") {
         base.progress_label = tt.eta;
       }
     } else {

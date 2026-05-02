@@ -1,0 +1,146 @@
+{
+  "schema": "finquant_retrieval_trace_v1",
+  "run_id": "run_20260502T012620Z_eeedaaf9",
+  "entries": [
+    {
+      "reason": "retrieval_disabled",
+      "record_id": "lr_a39f1bceb81b4bd9bbbf8d7234bc065d"
+    },
+    {
+      "reason": "retrieval_disabled",
+      "record_id": "lr_b3bc1bc9c0e74dccb192ae59a6ba8f06"
+    },
+    {
+      "reason": "retrieval_disabled",
+      "record_id": "lr_72857b5d26b94fc3b4d5cd3bf5d0216d"
+    },
+    {
+      "reason": "retrieval_disabled",
+      "record_id": "lr_a970e75a4aac4e05b7f9ca3738d68625"
+    },
+    {
+      "reason": "retrieval_disabled",
+      "record_id": "lr_06cd8ccf56c84f93991720b28d93f136"
+    },
+    {
+      "reason": "retrieval_disabled",
+      "record_id": "lr_775538a63a564827af78d9498c2cb52c"
+    },
+    {
+      "reason": "retrieval_disabled",
+      "record_id": "lr_868fb11d52aa448783c37de50ba21687"
+    },
+    {
+      "reason": "retrieval_disabled",
+      "record_id": "lr_dbf153aa04854d8ca9e0e028a4b8a3fb"
+    },
+    {
+      "reason": "retrieval_disabled",
+      "record_id": "lr_6d9b5f8d17374a678fd795f059025e14"
+    },
+    {
+      "reason": "retrieval_disabled",
+      "record_id": "lr_196754ae76574b8091a109dce7264977"
+    },
+    {
+      "reason": "retrieved",
+      "record_id": "lr_25dacd3e4e7941cf9419b337e71d7b46"
+    },
+    {
+      "reason": "retrieved",
+      "record_id": "lr_ceccaa6cd44a4bd298a65d4320b8b862"
+    },
+    {
+      "reason": "retrieved",
+      "record_id": "lr_d358b0d62816438f954372a8b61bfc7d"
+    },
+    {
+      "reason": "retrieved",
+      "record_id": "lr_205e9c2f0c9a47da834c0507d3956d2d"
+    },
+    {
+      "reason": "retrieved",
+      "record_id": "lr_5ccee52991a64e1c819f53b9dc70549d"
+    },
+    {
+      "reason": "retrieved",
+      "record_id": "lr_c98f6f344fed47edb8aef5cef1c4f0f5"
+    },
+    {
+      "reason": "retrieved",
+      "record_id": "lr_71ab4c4a9a0a47969f45ee62ab515a48"
+    },
+    {
+      "reason": "retrieved",
+      "record_id": "lr_6e19d5273f494e3288cdfe42d426c177"
+    },
+    {
+      "reason": "retrieved",
+      "record_id": "lr_3311c2e753cd463abc16c1a0a7fefe44"
+    },
+    {
+      "reason": "retrieved",
+      "record_id": "lr_9a501ca8ae0943b0aadde3255db91cae"
+    },
+    {
+      "reason": "retrieved",
+      "record_id": "lr_b0e973a5997f405987c76f0de6da24f4"
+    },
+    {
+      "reason": "retrieved",
+      "record_id": "lr_7ef30a64850348c299f0df227bf51b77"
+    },
+    {
+      "reason": "retrieved",
+      "record_id": "lr_5dd3a7743d724d5b830804fdf4f21be9"
+    },
+    {
+      "reason": "retrieved",
+      "record_id": "lr_c3e8d3c40f244be0a96db9c018c94604"
+    },
+    {
+      "reason": "retrieved",
+      "record_id": "lr_af106404b9574b32bee8b8929db31027"
+    },
+    {
+      "reason": "retrieved",
+      "record_id": "lr_3d5edcbbd81a4ea99d71bc44d7bc65d1"
+    },
+    {
+      "reason": "retrieved",
+      "record_id": "lr_eb7245f2a1c14fa88e1553f16aa0a489"
+    },
+    {
+      "reason": "retrieved",
+      "record_id": "lr_9fa4dc3bc4bf491083c6970f79b0ee34"
+    },
+    {
+      "reason": "retrieved",
+      "record_id": "lr_b0ff7d7529c241188bf509071881bee6"
+    },
+    {
+      "reason": "retrieved",
+      "record_id": "lr_6e2fb88d7f924e85b49befd238ae5873"
+    },
+    {
+      "reason": "retrieved",
+      "record_id": "lr_ff4937b71e184dc494d4a61be0d81d35"
+    },
+    {
+      "reason": "retrieved",
+      "record_id": "lr_73187c0884004471b5ea56ad9ffae6c7"
+    },
+    {
+      "reason": "retrieved",
+      "record_id": "lr_bdfbd4d198e84499b25c1bef8b7b1196"
+    },
+    {
+      "reason": "retrieved",
+      "record_id": "lr_acc7c3036882495b982abce02b345d6a"
+    },
+    {
+      "reason": "retrieved",
+      "record_id": "lr_6ad07d81c1724c5d891aca710814ab1f"
+    }
+  ]
+}

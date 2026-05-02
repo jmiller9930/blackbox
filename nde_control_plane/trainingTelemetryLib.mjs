@@ -292,14 +292,35 @@ export function parseTrainerFromLog(text) {
     trainTot = 3000;
   }
   if (trainCur == null) {
+    /** Explicit training-step notations seen across tqdm / trainer logs. */
+    const stepCtxRe =
+      /\b(?:step|steps|global_step|train_step)\b[^\n\r]{0,24}?(\d+)\s*\/\s*(\d+)\b/gi;
+    while ((m = stepCtxRe.exec(chunk)) !== null) {
+      const cur = parseInt(m[1], 10);
+      const tot = parseInt(m[2], 10);
+      if (tot > 0 && tot < 1e9 && cur >= 0) {
+        trainCur = cur;
+        trainTot = tot;
+      }
+    }
+  }
+  if (trainCur == null) {
     const stepRe = /(\d+)\s*\/\s*(\d+)\b/g;
     while ((m = stepRe.exec(chunk)) !== null) {
       const cur = parseInt(m[1], 10);
       const tot = parseInt(m[2], 10);
-      if (tot > 0 && tot < 1e9 && cur >= 0 && (tot >= 50 || tot === 3000)) {
+      if (tot > 0 && tot < 1e9 && cur >= 0 && (tot >= 20 || tot === 3000)) {
         trainCur = cur;
         trainTot = tot;
       }
+    }
+  }
+  if (trainCur == null) {
+    /** Fallback for logs that print only current step (no denominator). */
+    const stepOnlyRe = /\b(?:step|steps|global_step|train_step)\b[^\n\r]{0,24}?(\d+)\b/gi;
+    while ((m = stepOnlyRe.exec(chunk)) !== null) {
+      const cur = parseInt(m[1], 10);
+      if (cur >= 0) trainCur = cur;
     }
   }
 

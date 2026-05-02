@@ -1,0 +1,10 @@
+{
+  "schema": "finquant_retrieval_trace_v1",
+  "run_id": "run_20260502T003123Z_ef2f3443",
+  "entries": [
+    {
+      "reason": "retrieval_disabled",
+      "record_id": "lr_366309786ba244949310615540ef2828"
+    }
+  ]
+}

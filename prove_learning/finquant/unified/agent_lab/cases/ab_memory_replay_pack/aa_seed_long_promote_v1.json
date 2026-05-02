@@ -1,0 +1,57 @@
+{
+  "schema": "finquant_lifecycle_case_v1",
+  "case_id": "aa_seed_long_promote_v1",
+  "symbol": "SOL-PERP",
+  "timeframe_minutes": 60,
+  "description": "Seed case: strong trend bar so deterministic stub ENTER_LONG; writes a PROMOTE lesson with ENTER_LONG for retrieval.",
+  "decision_start_index": 1,
+  "decision_end_index": 1,
+  "hidden_future_start_index": 2,
+  "expected_learning_focus_v1": ["entry_quality"],
+  "candles": [
+    {
+      "timestamp": "2024-01-10T00:00:00Z",
+      "open": 99.0,
+      "high": 101.0,
+      "low": 98.5,
+      "close": 100.0,
+      "volume": 2000,
+      "rsi_14": 52.0,
+      "ema_20": 99.0,
+      "atr_14": 2.0
+    },
+    {
+      "timestamp": "2024-01-10T01:00:00Z",
+      "open": 100.0,
+      "high": 103.0,
+      "low": 99.5,
+      "close": 102.0,
+      "volume": 3500,
+      "rsi_14": 58.0,
+      "ema_20": 99.6,
+      "atr_14": 2.2
+    },
+    {
+      "timestamp": "2024-01-10T02:00:00Z",
+      "open": 102.0,
+      "high": 103.5,
+      "low": 101.5,
+      "close": 102.8,
+      "volume": 3200,
+      "rsi_14": 59.0,
+      "ema_20": 100.5,
+      "atr_14": 2.1
+    },
+    {
+      "timestamp": "2024-01-10T03:00:00Z",
+      "open": 102.8,
+      "high": 104.0,
+      "low": 102.0,
+      "close": 103.5,
+      "volume": 3000,
+      "rsi_14": 60.0,
+      "ema_20": 101.2,
+      "atr_14": 2.0
+    }
+  ]
+}

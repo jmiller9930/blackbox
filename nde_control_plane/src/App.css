@@ -462,7 +462,8 @@ body {
 
 .progress-fill {
   height: 100%;
-  background: linear-gradient(90deg, #3d7ab8, var(--accent));
+  background: linear-gradient(90deg, #5cb878, #b8f2b8);
+  box-shadow: 0 0 8px rgba(120, 220, 140, 0.35);
   transition: width 0.35s ease;
 }
 
@@ -485,7 +486,7 @@ body {
   background: linear-gradient(
     90deg,
     transparent,
-    var(--accent, #5eb3ff),
+    rgba(160, 235, 175, 0.95),
     transparent
   );
   animation: nde-progress-indeterminate 1.15s ease-in-out infinite;

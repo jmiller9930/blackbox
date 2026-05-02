@@ -1,0 +1,144 @@
+[
+  {
+    "schema": "finquant_lifecycle_decision_v1",
+    "agent_id": "finquant",
+    "case_id": "syn_solperp_breakout_0003",
+    "step_index": 20,
+    "symbol": "SOL-PERP",
+    "action": "ENTER_LONG",
+    "thesis_v1": "Breakout above resistance=112.0019: close=112.3027, RSI=64.0, ATR%=2.102%.",
+    "invalidation_v1": "Exit if close falls back below resistance 112.0019.",
+    "risk_state_v1": "breakout_long res=112.0019 rsi=64.0",
+    "observed_context_v1": {
+      "candles_visible": 21,
+      "last_close": 112.3027,
+      "last_rsi_14": 64.0,
+      "last_ema_20": 110.0658,
+      "last_atr_14": 2.3609,
+      "last_volume": 4255.85
+    },
+    "input_packet_v1": {
+      "schema": "finquant_input_packet_v1",
+      "case_id": "syn_solperp_breakout_0003",
+      "step_index": 20,
+      "symbol": "SOL-PERP",
+      "timeframe_minutes": 15,
+      "runtime_data_window_months_v1": null,
+      "runtime_interval_v1": null,
+      "candles_visible_v1": 21,
+      "market_math_v1": {
+        "close_v1": 112.3027,
+        "prev_close_v1": 111.4463,
+        "price_delta_v1": 0.8564,
+        "pct_change_v1": 0.007684,
+        "ema_gap_v1": 2.2369,
+        "atr_14_v1": 2.3609,
+        "rsi_14_v1": 64.0,
+        "volume_delta_v1": -168.16
+      },
+      "market_context_v1": {
+        "price_above_ema_v1": true,
+        "price_up_v1": true,
+        "volume_expand_v1": false,
+        "atr_expanded_v1": true,
+        "atr_pct_v1": 0.021023,
+        "rsi_state_v1": "bullish_range",
+        "volatility_state_v1": "expanded"
+      },
+      "memory_context_v1": {
+        "matched_record_count_v1": 0,
+        "matched_record_ids_v1": [],
+        "long_bias_count_v1": 0,
+        "short_bias_count_v1": 0,
+        "no_trade_bias_count_v1": 0,
+        "best_grade_v1": "UNKNOWN",
+        "memory_influence_available_v1": false
+      },
+      "strategy_hypotheses_v1": [
+        {
+          "strategy_family_v1": "trend_continuation",
+          "action_v1": "ENTER_LONG",
+          "score_v1": 0.75
+        },
+        {
+          "strategy_family_v1": "pullback_continuation",
+          "action_v1": "ENTER_LONG",
+          "score_v1": 0.15
+        },
+        {
+          "strategy_family_v1": "breakout_expansion",
+          "action_v1": "ENTER_LONG",
+          "score_v1": 0.75
+        },
+        {
+          "strategy_family_v1": "mean_reversion_fade",
+          "action_v1": "ENTER_SHORT",
+          "score_v1": 0.0
+        },
+        {
+          "strategy_family_v1": "no_trade_guard",
+          "action_v1": "NO_TRADE",
+          "score_v1": 0.2
+        }
+      ],
+      "baseline_strategy_families_v1": [
+        "trend_continuation",
+        "pullback_continuation",
+        "breakout_expansion",
+        "mean_reversion_fade",
+        "no_trade_guard"
+      ]
+    },
+    "confidence_band_v1": "high",
+    "supporting_indicators_v1": [
+      "breakout_above_resistance=112.0019",
+      "RSI=64.0",
+      "ATR%=2.102%"
+    ],
+    "conflicting_indicators_v1": [],
+    "risk_notes_v1": "ATR-based risk geometry should be applied if opened.",
+    "memory_used_v1": [],
+    "llm_used_v1": false,
+    "decision_source_v1": "deterministic_stub_v1",
+    "causal_context_only_v1": true,
+    "thesis": "Breakout above resistance=112.0019: close=112.3027, RSI=64.0, ATR%=2.102%.",
+    "invalidation": "Exit if close falls back below resistance 112.0019.",
+    "confidence_band": "high",
+    "supporting_indicators": [
+      "breakout_above_resistance=112.0019",
+      "RSI=64.0",
+      "ATR%=2.102%"
+    ],
+    "conflicting_indicators": [],
+    "risk_notes": "ATR-based risk geometry should be applied if opened.",
+    "pattern_signature_v1": {
+      "pattern_id_v1": "e7e141ccd19dfa78",
+      "components_v1": {
+        "symbol_v1": "SOL-PERP",
+        "timeframe_minutes_v1": 15,
+        "trend_v1": "trend_up",
+        "rsi_bucket_v1": "rsi_60_65",
+        "atr_bucket_v1": "atr_2_3",
+        "volatility_v1": "vol_high",
+        "volume_v1": "vol_contract",
+        "position_v1": "pos_flat"
+      },
+      "human_label_v1": "trend_up | rsi_60_65 | vol_high | pos_flat",
+      "canonical_v1": "{\"atr_bucket_v1\":\"atr_2_3\",\"position_v1\":\"pos_flat\",\"rsi_bucket_v1\":\"rsi_60_65\",\"symbol_v1\":\"SOL-PERP\",\"timeframe_minutes_v1\":15,\"trend_v1\":\"trend_up\",\"volatility_v1\":\"vol_high\",\"volume_v1\":\"vol_contract\"}"
+    },
+    "decision_explanation_v1": {
+      "schema": "finquant_decision_explanation_v1",
+      "pattern_id_v1": "e7e141ccd19dfa78",
+      "human_label_v1": "trend_up | rsi_60_65 | vol_high | pos_flat",
+      "primary_unit_v1": null,
+      "primary_attributable_v1": false,
+      "challenger_units_v1": [],
+      "observer_unit_count_v1": 0,
+      "suppressor_units_v1": [],
+      "competition_reason_v1": "no eligible active unit",
+      "final_action_v1": "ENTER_LONG",
+      "final_decision_source_v1": "deterministic_stub_v1",
+      "narrative_v1": "No ACTIVE learning unit matched signature [trend_up | rsi_60_65 | vol_high | pos_flat] (id=e7e141ccd19dfa78). The decision was driven by source=deterministic_stub_v1, not by validated learning."
+    }
+  }
+]

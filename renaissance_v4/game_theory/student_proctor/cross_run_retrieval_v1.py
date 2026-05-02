@@ -40,6 +40,24 @@ from renaissance_v4.game_theory.student_proctor.student_learning_loop_governance
 )
 
 
+def _is_retrieval_eligible_v1(rec: dict[str, Any]) -> bool:
+    """
+    Guard for cross-run retrieval: returns False for governance-rejected or degraded rows.
+
+    Rules:
+    * ``retrieval_enabled_v1 = False`` (explicit flag set by operator seam on REJECT rows) → not eligible.
+    * ``degraded_v1 = True`` → not eligible.
+    * Legacy rows without either flag (written before this change) → eligible (backward compat).
+    """
+    if not isinstance(rec, dict):
+        return False
+    if rec.get("retrieval_enabled_v1") is False:
+        return False
+    if rec.get("degraded_v1") is True:
+        return False
+    return True
+
+
 def project_student_learning_record_to_retrieval_slice_v1(
     record: dict[str, Any],
 ) -> tuple[dict[str, Any] | None, list[str]]:
@@ -138,6 +156,8 @@ def build_student_decision_packet_v1_with_cross_run_retrieval(
     cap = resolved_max_retrieval_slices_v1(max_retrieval_slices)
     slices: list[dict[str, Any]] = []
     for rec in matches[:cap]:
+        if not _is_retrieval_eligible_v1(rec):
+            continue
         sl, _perr = project_student_learning_record_to_retrieval_slice_v1(rec)
         if sl is not None:
             slices.append(sl)
@@ -161,6 +181,7 @@ def build_student_decision_packet_v1_with_cross_run_retrieval(
 
 
 __all__ = [
+    "_is_retrieval_eligible_v1",
     "build_student_decision_packet_v1_with_cross_run_retrieval",
     "project_student_learning_record_to_retrieval_slice_v1",
 ]

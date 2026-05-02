@@ -1,0 +1,25 @@
+{
+  "schema": "finquant_agent_lab_run_summary_v1",
+  "run_id": "run_20260502T012620Z_88acf008",
+  "agent_id": "finquant",
+  "case_id": "syn_solperp_false_break_0010",
+  "symbol": "SOL-PERP",
+  "timeframe_minutes": 15,
+  "mode": "deterministic_stub_v1",
+  "use_llm_v1": false,
+  "runtime_data_window_months_v1": null,
+  "runtime_interval_v1": null,
+  "runtime_interval_minutes_v1": null,
+  "decisions_emitted": 1,
+  "learning_records_written": 1,
+  "final_status_v1": "PASS",
+  "retrieval_records_used": 35,
+  "artifacts": [
+    "decision_trace.json",
+    "learning_records.jsonl",
+    "retrieval_trace.json",
+    "evaluation.json",
+    "run_summary.json"
+  ],
+  "output_dir": "/Users/bigmac/Documents/code_projects/blackbox/finquant/unified/agent_lab/outputs/train_20260502T012619Z_e9abfd05/runs/cycle_004/run_20260502T012620Z_88acf008"
+}

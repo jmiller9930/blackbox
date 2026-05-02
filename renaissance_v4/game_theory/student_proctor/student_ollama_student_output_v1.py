@@ -105,6 +105,7 @@ def _ollama_chat_once_v1(
     timeout_s: float = 180.0,
     options: dict[str, Any] | None = None,
     system_prompt: str | None = None,
+    format_json: bool = False,
 ) -> tuple[str | None, str | None]:
     """Returns ``(assistant_text, error)``."""
     base = base_url.rstrip("/")
@@ -116,14 +117,15 @@ def _ollama_chat_once_v1(
     if isinstance(system_prompt, str) and system_prompt.strip():
         messages.append({"role": "system", "content": system_prompt.strip()})
     messages.append({"role": "user", "content": user_prompt})
-    payload = json.dumps(
-        {
-            "model": model,
-            "messages": messages,
-            "stream": False,
-            "options": opts,
-        }
-    ).encode("utf-8")
+    body: dict[str, Any] = {
+        "model": model,
+        "messages": messages,
+        "stream": False,
+        "options": opts,
+    }
+    if format_json:
+        body["format"] = "json"
+    payload = json.dumps(body).encode("utf-8")
     req = urllib.request.Request(
         url,
         data=payload,
@@ -381,6 +383,41 @@ def _gt037_validation_length_hints_v1(doc: dict[str, Any]) -> str:
     return "\n".join(lines) if lines else ""
 
 
+_GT037_MISSING_KEY_REMEDIES: dict[str, str] = {
+    "context_interpretation_v1": (
+        "ADD context_interpretation_v1: string of >=16 chars summarising only what the packet shows "
+        "(OHLCV, regime, fusion, indicators). No invented bars."
+    ),
+    "hypothesis_kind_v1": (
+        "ADD hypothesis_kind_v1: exactly one of trend_continuation | mean_reversion | no_clear_edge"
+    ),
+    "hypothesis_text_v1": (
+        "ADD hypothesis_text_v1: one concise sentence stating the trade idea or explicit lack of edge."
+    ),
+    "supporting_indicators": (
+        "ADD supporting_indicators: non-empty array of strings — at least one packet-derived label."
+    ),
+    "conflicting_indicators": (
+        f'ADD conflicting_indicators: non-empty array; use ["{CONFLICTING_INDICATORS_NO_CONFLICT_PACKET_LABEL_V1}"] '
+        "when no contrary evidence is visible."
+    ),
+    "confidence_band": "ADD confidence_band: exactly one of low | medium | high.",
+    "context_fit": "ADD context_fit: short string (trend | chop | reversal | breakout | range | unknown).",
+    "invalidation_text": "ADD invalidation_text: concrete conditions that void the thesis.",
+    "student_action_v1": "ADD student_action_v1: exactly one of enter_long | enter_short | no_trade.",
+}
+
+
+def _gt037_missing_keys_section_v1(validation_errors: list[str]) -> str:
+    """Extract 'missing <key>' patterns from validation errors and produce explicit ADD instructions."""
+    lines: list[str] = []
+    for e in validation_errors:
+        for key, remedy in _GT037_MISSING_KEY_REMEDIES.items():
+            if f"missing {key}" in str(e) and remedy not in lines:
+                lines.append(f"  {remedy}")
+    return "\n".join(lines)
+
+
 def _gt037_validation_repair_prompt_v1(
     *,
     failed_parsed_json: dict[str, Any],
@@ -396,19 +433,27 @@ def _gt037_validation_repair_prompt_v1(
         blob = blob[:28000] + "\n...[truncated]..."
     errs = [str(x) for x in validation_errors][:40]
     length_hints = _gt037_validation_length_hints_v1(failed_parsed_json)
+    missing_keys_section = _gt037_missing_keys_section_v1(errs)
     return (
         "GT_DIRECTIVE_037 — VALIDATION REPAIR (exactly one attempt).\n"
         "Your JSON parsed but FAILED validation/thesis rules below.\n"
         "Return ONLY one corrected JSON object. No markdown. No ``` fences. No prose outside JSON.\n"
         "Preserve the intended decision (act / direction / student_action_v1) unless those fields "
         "contradict each other or the packet — fix invalid fields only.\n\n"
-        "VALIDATION ERRORS (fix every item):\n"
+        + (
+            "MISSING KEYS — you MUST ADD each of these key-value pairs to the JSON object:\n"
+            + missing_keys_section
+            + "\n\n"
+            if missing_keys_section
+            else ""
+        )
+        + "VALIDATION ERRORS (fix every item):\n"
         + ("\n".join(f"- {e}" for e in errs) or "- (unspecified)")
         + "\n\nLENGTH / SHAPE FIXES (mandatory when applicable):\n"
         + (length_hints if length_hints else "- (see constraints below)")
         + "\n\nFIELD CONSTRAINTS (must all be satisfied):\n"
         + thesis_constraint_reminder
-        + "\n\nFAILED PARSED JSON (emit a corrected single object):\n"
+        + "\n\nFAILED PARSED JSON (emit a corrected single object — add the missing keys above):\n"
         + blob
     )
 
@@ -549,8 +594,25 @@ def emit_student_output_via_ollama_v1(
         "Keys required: act (boolean), direction (string: long | short | flat), confidence_01 (number 0..1), "
         "pattern_recipe_ids (array of strings, non-empty), reasoning_text (short string; may echo protocol).\n"
     )
+    mandatory_keys_check = ""
+    if require_directional_thesis_v1:
+        mandatory_keys_check = (
+            "MANDATORY KEYS CHECK — your JSON object MUST contain ALL of the following keys; "
+            "omitting any one key causes immediate rejection:\n"
+            "  context_interpretation_v1  (string, >=16 chars, packet-only summary)\n"
+            "  hypothesis_kind_v1         (exactly: trend_continuation | mean_reversion | no_clear_edge)\n"
+            "  hypothesis_text_v1         (string, one trade-idea sentence)\n"
+            "  supporting_indicators      (array of strings, min 1 entry)\n"
+            "  conflicting_indicators     (array of strings, min 1 entry; use "
+            f'"{CONFLICTING_INDICATORS_NO_CONFLICT_PACKET_LABEL_V1}" when no contrary evidence)\n'
+            "  confidence_band            (exactly: low | medium | high)\n"
+            "  context_fit                (short string: trend | chop | reversal | breakout | range | unknown)\n"
+            "  invalidation_text          (string, concrete invalidation conditions)\n"
+            "  student_action_v1          (exactly: enter_long | enter_short | no_trade)\n\n"
+        )
     user = (
         gt036_banner
+        + mandatory_keys_check
         + intro
         + thesis_block
         + pre_reveal_notice
@@ -572,6 +634,9 @@ def emit_student_output_via_ollama_v1(
         llm_io_capture_v1["student_llm_contract_repair_path_v1"] = bool(llm_repair_path_v1)
 
     sys1 = _GT036_SYSTEM_PROMPT_V1 if llm_repair_path_v1 else None
+    # GT_DIRECTIVE_036b: constrain model output at tokenizer level when in repair / student-test path.
+    # Ollama format:"json" prevents markdown prose responses; does not enforce key presence.
+    _fmt_json = bool(llm_repair_path_v1)
     _chat_calls = [0]
 
     def _ollama_chat_counted_v1(**kwargs: Any) -> tuple[str | None, str | None]:
@@ -585,6 +650,7 @@ def emit_student_output_via_ollama_v1(
             user_prompt=user,
             options=ollama_opts,
             system_prompt=sys1,
+            format_json=_fmt_json,
         )
         if isinstance(llm_io_capture_v1, dict):
             llm_io_capture_v1["raw_assistant_text_attempt_1_v1"] = text1 if isinstance(text1, str) else None
@@ -635,6 +701,7 @@ def emit_student_output_via_ollama_v1(
                 user_prompt=repair_user,
                 options=ollama_opts,
                 system_prompt=sys1,
+                format_json=_fmt_json,
             )
             json_repair_attempted_v1 = True
             if isinstance(llm_io_capture_v1, dict):
@@ -698,6 +765,7 @@ def emit_student_output_via_ollama_v1(
             user_prompt=val_prompt,
             options=ollama_opts,
             system_prompt=sys1,
+            format_json=_fmt_json,
         )
         validation_repair_attempted_v1 = True
         if isinstance(llm_io_capture_v1, dict):

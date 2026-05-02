@@ -153,6 +153,15 @@ export type TrainingTelemetryPayload = {
   log_tail: string;
 };
 
+/** Populated server-side: why Advance is blocked / why FAILED appears / safe auto-fixes already applied. */
+export type AdvanceBlockingExplainer = {
+  why_advance_is_locked: string | null;
+  why_snapshot_shows_failed: string | null;
+  root_cause_plain: string | null;
+  failed_node_id: string | null;
+  remaining_operator_actions: string[];
+};
+
 export type TrainingCyclePayload = {
   latest_certified_version: string | null;
   latest_certified_run_id: string | null;
@@ -167,6 +176,9 @@ export type TrainingCyclePayload = {
   graph_entrypoint: string;
   default_mode: string;
   full_training_requires_admin_approved: boolean;
+  /** Actions Studio already performed this refresh (e.g. stale lock removal). */
+  advance_auto_remediation?: string[];
+  advance_blocking_explainer?: AdvanceBlockingExplainer | null;
 };
 
 export type DashboardPayload = {
@@ -245,15 +257,26 @@ export function StudioProvider({ children }: { children: ReactNode }) {
   const refresh = useCallback(async () => {
     setPolling(true);
     try {
+      let effectiveDomain = domain;
       const domRes = await getJson<{ domains?: string[] }>("/api/domains");
       if (domRes.domains?.length) {
         setDomains(domRes.domains);
-        setDomain((cur) =>
-          domRes.domains!.includes(cur) ? cur : domRes.domains![0]
-        );
+        /** Resolve fetch domain immediately to avoid one-cycle stale dashboard after deep-link switch. */
+        const want = (() => {
+          try {
+            return new URLSearchParams(window.location.search).get("domain");
+          } catch {
+            return null;
+          }
+        })();
+        const resolved =
+          (want && domRes.domains.includes(want) ? want : null) ??
+          (domRes.domains.includes(domain) ? domain : domRes.domains[0]);
+        effectiveDomain = resolved;
+        setDomain((cur) => (cur === resolved ? cur : resolved));
       }
 
-      const dEnc = encodeURIComponent(domain);
+      const dEnc = encodeURIComponent(effectiveDomain);
       const [dash, runList] = await Promise.all([
         getJson<DashboardPayload>(`/api/dashboard/${dEnc}`),
         getJson<{ runs?: RunListRow[] }>(`/api/runs/${dEnc}`),

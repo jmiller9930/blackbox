@@ -1,0 +1,25 @@
+{
+  "schema": "finquant_agent_lab_run_summary_v1",
+  "run_id": "run_20260502T003123Z_ef2f3443",
+  "agent_id": "finquant",
+  "case_id": "test_btcusd_15m_0001_20251129",
+  "symbol": "BTC-USD",
+  "timeframe_minutes": 15,
+  "mode": "deterministic_stub_v1",
+  "use_llm_v1": false,
+  "runtime_data_window_months_v1": null,
+  "runtime_interval_v1": "15m",
+  "runtime_interval_minutes_v1": 15,
+  "decisions_emitted": 3,
+  "learning_records_written": 1,
+  "final_status_v1": "PASS",
+  "retrieval_records_used": 1,
+  "artifacts": [
+    "decision_trace.json",
+    "learning_records.jsonl",
+    "retrieval_trace.json",
+    "evaluation.json",
+    "run_summary.json"
+  ],
+  "output_dir": "finquant/unified/agent_lab/outputs/ab_20260502T003123Z_62906bfa/runs/run_b/run_20260502T003123Z_ef2f3443"
+}

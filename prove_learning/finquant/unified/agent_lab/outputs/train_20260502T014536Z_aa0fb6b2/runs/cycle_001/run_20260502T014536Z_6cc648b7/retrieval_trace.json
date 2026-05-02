@@ -1,0 +1,9 @@
+{
+  "schema": "finquant_retrieval_trace_v1",
+  "run_id": "run_20260502T014536Z_6cc648b7",
+  "entries": [
+    {
+      "reason": "retrieval_disabled_by_config"
+    }
+  ]
+}

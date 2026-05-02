@@ -1,0 +1,10 @@
+{
+  "schema": "finquant_retrieval_trace_v1",
+  "run_id": "run_20260502T003123Z_7db53262",
+  "entries": [
+    {
+      "reason": "shared_store_not_found",
+      "path": "finquant/unified/agent_lab/outputs/ab_20260502T003123Z_62906bfa/shared_learning_records_run_b.jsonl"
+    }
+  ]
+}

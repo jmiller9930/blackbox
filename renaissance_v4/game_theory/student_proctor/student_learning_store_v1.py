@@ -98,6 +98,24 @@ def append_student_learning_record_v1(
         fh.write(line)
 
 
+def _raw_append_degraded_record_v1(
+    store_path: Path | str,
+    record: dict[str, Any],
+) -> None:
+    """
+    Write a **degraded** record directly, bypassing schema validation.
+
+    Only called by the operator seam when ``_build_degraded_learning_record_v1`` produces a row
+    that still fails ``validate_student_learning_record_v1``.  Preserves always-append invariant.
+    ``degraded_v1=True`` must already be set by the caller.
+    """
+    p = Path(store_path)
+    p.parent.mkdir(parents=True, exist_ok=True)
+    line = json.dumps(record, separators=(",", ":"), ensure_ascii=False, default=str) + "\n"
+    with p.open("a", encoding="utf-8") as fh:
+        fh.write(line)
+
+
 def load_student_learning_records_v1(store_path: Path | str) -> list[dict[str, Any]]:
     """Load all JSONL records (order preserved). Skips malformed lines."""
     p = Path(store_path)

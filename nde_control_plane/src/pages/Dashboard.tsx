@@ -185,28 +185,56 @@ function TrainingStatusUnified({
     (cur != null && tot != null && tot > 0
       ? Math.round((cur / tot) * 10000) / 100
       : null);
+  const progressBarPct =
+    pct != null
+      ? Math.max(0, Math.min(100, pct))
+      : aj.training_progress_bar_percent != null
+        ? Math.max(0, Math.min(100, aj.training_progress_bar_percent))
+        : null;
+  const showIndeterminate =
+    progressBarPct == null &&
+    (tt.training_initializing === true || aj.training_progress_indeterminate === true);
 
   return (
-    <dl className="training-unified-dl">
-      <dt className="muted">LangGraph pipeline</dt>
-      <dd className="mono">{pipe}</dd>
-      <dt className="muted">Training loop</dt>
-      <dd className="mono">
-        {cur != null && tot != null && tot > 0 ? (
-          <>
-            <strong className="accent">{cur}</strong> / <strong>{tot}</strong>
-            {pct != null ? <> · {pct}%</> : null}
-          </>
-        ) : tt.config_max_steps_full != null ? (
-          <>
-            — / — · YAML <strong className="accent">max_steps</strong>{" "}
-            <strong className="accent">{tt.config_max_steps_full}</strong>
-          </>
-        ) : (
-          <>— / —</>
-        )}
-      </dd>
-    </dl>
+    <>
+      <dl className="training-unified-dl">
+        <dt className="muted">LangGraph pipeline</dt>
+        <dd className="mono">{pipe}</dd>
+        <dt className="muted">Training loop</dt>
+        <dd className="mono">
+          {cur != null && tot != null && tot > 0 ? (
+            <>
+              <strong className="accent">{cur}</strong> / <strong>{tot}</strong>
+              {pct != null ? <> · {pct}%</> : null}
+            </>
+          ) : tt.config_max_steps_full != null ? (
+            <>
+              — / — · YAML <strong className="accent">max_steps</strong>{" "}
+              <strong className="accent">{tt.config_max_steps_full}</strong>
+            </>
+          ) : (
+            <>— / —</>
+          )}
+        </dd>
+      </dl>
+      {progressBarPct != null ? (
+        <>
+          <div className="progress-bar" style={{ marginTop: "0.45rem" }}>
+            <div className="progress-fill" style={{ width: `${progressBarPct}%` }} />
+          </div>
+          <p className="mono small muted" style={{ marginTop: "0.3rem", marginBottom: 0 }}>
+            Progress bar: <strong>{progressBarPct}%</strong>
+          </p>
+        </>
+      ) : showIndeterminate ? (
+        <div
+          className="progress-bar progress-bar-indeterminate"
+          role="progressbar"
+          aria-valuetext={aj.operator_headline ?? "Training in progress"}
+          style={{ marginTop: "0.45rem" }}
+        />
+      ) : null}
+    </>
   );
 }
 
@@ -240,6 +268,7 @@ export default function Dashboard() {
   const pollLive = !!(polling && execId);
 
   const isTrainingPhase = dashboard?.dashboard_status_label === "TRAINING";
+  const hasLiveTrainingTelemetry = !!(dashboard?.training_telemetry && isTrainingPhase && execId);
   const pctLegacy =
     dashboard?.progress_percent != null
       ? dashboard.progress_percent
@@ -336,6 +365,8 @@ export default function Dashboard() {
   const renderBlock = (blockId: DashboardBlockId) => {
     switch (blockId) {
       case "system-status":
+        {
+          const isBrokenFullStop = posture === "FAILED" || posture === "BLOCKED";
         return (
           <CollapsibleDashboardSection
             panelKey={`${domain}:system-status`}
@@ -352,8 +383,36 @@ export default function Dashboard() {
                 ))}
               </ul>
             ) : null}
+            {isBrokenFullStop && !execId ? (
+              <div className="card-inner-muted mt" style={{ marginTop: "0.75rem" }}>
+                <p className="small" style={{ margin: 0 }}>
+                  Broken means full stop: no training is executing until recovery is started.
+                </p>
+                <div className="row-actions mt" style={{ gap: "0.75rem", flexWrap: "wrap" }}>
+                  <button
+                    type="button"
+                    className="btn-primary"
+                    disabled={advancing || !tc?.can_advance}
+                    title={
+                      tc?.can_advance
+                        ? "Start next recovery cycle (smoke)"
+                        : tc?.advance_disabled_reason ?? "Recovery currently blocked"
+                    }
+                    onClick={() => void runAdvanceCycle("smoke")}
+                  >
+                    {advancing ? "Starting…" : "Start recovery cycle"}
+                  </button>
+                </div>
+                {!tc?.can_advance ? (
+                  <p className="small muted wrap" style={{ margin: "0.45rem 0 0" }}>
+                    Recovery blocked: {tc?.advance_disabled_reason ?? "unknown reason"}.
+                  </p>
+                ) : null}
+              </div>
+            ) : null}
           </CollapsibleDashboardSection>
         );
+        }
 
       case "training-telemetry": {
         const tt = dashboard?.training_telemetry;
@@ -465,6 +524,24 @@ export default function Dashboard() {
                     · ETA / pace: {aj.training_eta_hint ?? aj.progress_label}
                   </span>
                 ) : null}
+              </li>
+              <li>
+                {aj.training_progress_indeterminate ? (
+                  <div
+                    className="progress-bar progress-bar-indeterminate"
+                    role="progressbar"
+                    aria-valuetext={aj.operator_headline ?? "Training in progress"}
+                  />
+                ) : (
+                  <div className="progress-bar">
+                    <div
+                      className="progress-fill"
+                      style={{
+                        width: `${Math.min(100, Math.max(0, aj.training_progress_bar_percent ?? aj.progress_percent ?? 0))}%`,
+                      }}
+                    />
+                  </div>
+                )}
               </li>
               <li>
                 Elapsed: <strong>{aj.elapsed_display}</strong>
@@ -659,67 +736,82 @@ export default function Dashboard() {
               {execId ? (
                 isTrainingPhase && aj ? (
                   <>
-                    {aj.operator_headline ? (
-                      <p className="mono small accent wrap" style={{ marginBottom: "0.35rem" }}>
-                        {aj.operator_headline}
-                      </p>
-                    ) : null}
-                    {aj.pipeline_stage_label ? (
-                      <p className="mono small" style={{ marginBottom: "0.35rem" }}>
-                        LangGraph pipeline:{" "}
-                        <strong className="accent">{aj.pipeline_stage_label}</strong>
-                      </p>
-                    ) : null}
-                    <p className="mono small" style={{ marginBottom: "0.5rem" }}>
-                      Training loop:{" "}
-                      <strong className="accent">
-                        {aj.training_progress_detail ?? "—"}
-                      </strong>
-                      {aj.training_progress_bar_percent != null &&
-                      !aj.training_progress_indeterminate ? (
-                        <span className="muted">
-                          {" "}
-                          ({aj.training_progress_bar_percent}%)
-                        </span>
-                      ) : null}
-                    </p>
-                    {aj.training_progress_indeterminate ? (
-                      <div
-                        className="progress-bar progress-bar-indeterminate"
-                        role="progressbar"
-                        aria-valuetext={
-                          aj.operator_headline ?? "Training in progress"
-                        }
-                      />
+                    {hasLiveTrainingTelemetry ? (
+                      <>
+                        <p className="mono small accent wrap" style={{ marginBottom: "0.35rem" }}>
+                          Live training details are in the Training status + Training telemetry panels.
+                        </p>
+                        <p className="mono small">
+                          Run <strong className="accent">{execId}</strong> ·{" "}
+                          <strong>{aj.pipeline_stage_label ?? "—"}</strong>
+                          {pollLive ? <span className="muted"> · syncing…</span> : null}
+                        </p>
+                      </>
                     ) : (
                       <>
-                        <div className="progress-bar">
+                        {aj.operator_headline ? (
+                          <p className="mono small accent wrap" style={{ marginBottom: "0.35rem" }}>
+                            {aj.operator_headline}
+                          </p>
+                        ) : null}
+                        {aj.pipeline_stage_label ? (
+                          <p className="mono small" style={{ marginBottom: "0.35rem" }}>
+                            LangGraph pipeline:{" "}
+                            <strong className="accent">{aj.pipeline_stage_label}</strong>
+                          </p>
+                        ) : null}
+                        <p className="mono small" style={{ marginBottom: "0.5rem" }}>
+                          Training loop:{" "}
+                          <strong className="accent">
+                            {aj.training_progress_detail ?? "—"}
+                          </strong>
+                          {aj.training_progress_bar_percent != null &&
+                          !aj.training_progress_indeterminate ? (
+                            <span className="muted">
+                              {" "}
+                              ({aj.training_progress_bar_percent}%)
+                            </span>
+                          ) : null}
+                        </p>
+                        {aj.training_progress_indeterminate ? (
                           <div
-                            className="progress-fill"
-                            style={{
-                              width: `${Math.min(100, aj.training_progress_bar_percent ?? 0)}%`,
-                            }}
+                            className="progress-bar progress-bar-indeterminate"
+                            role="progressbar"
+                            aria-valuetext={
+                              aj.operator_headline ?? "Training in progress"
+                            }
                           />
-                        </div>
-                        {aj.training_progress_bar_percent != null ? (
+                        ) : (
+                          <>
+                            <div className="progress-bar">
+                              <div
+                                className="progress-fill"
+                                style={{
+                                  width: `${Math.min(100, aj.training_progress_bar_percent ?? 0)}%`,
+                                }}
+                              />
+                            </div>
+                            {aj.training_progress_bar_percent != null ? (
+                              <p className="mono small muted" style={{ marginTop: "0.35rem" }}>
+                                Percent:{" "}
+                                <strong>{aj.training_progress_bar_percent}%</strong> (from training
+                                loop)
+                              </p>
+                            ) : null}
+                          </>
+                        )}
+                        <p className="mono small" style={{ marginTop: "0.35rem" }}>
+                          {aj.training_live_summary ?? "—"}
+                          {pollLive ? <span className="muted"> · syncing…</span> : null}
+                        </p>
+                        {dashboard?.progress_label &&
+                        dashboard.progress_label !== "calculating" ? (
                           <p className="mono small muted" style={{ marginTop: "0.35rem" }}>
-                            Percent:{" "}
-                            <strong>{aj.training_progress_bar_percent}%</strong> (from training
-                            loop)
+                            ETA: <strong>{dashboard.progress_label}</strong>
                           </p>
                         ) : null}
                       </>
                     )}
-                    <p className="mono small" style={{ marginTop: "0.35rem" }}>
-                      {aj.training_live_summary ?? "—"}
-                      {pollLive ? <span className="muted"> · syncing…</span> : null}
-                    </p>
-                    {dashboard?.progress_label &&
-                    dashboard.progress_label !== "ETA: calculating" ? (
-                      <p className="mono small muted" style={{ marginTop: "0.35rem" }}>
-                        ETA: <strong>{dashboard.progress_label}</strong>
-                      </p>
-                    ) : null}
                   </>
                 ) : (
                   <>
@@ -812,43 +904,141 @@ export default function Dashboard() {
 
       case "advance-training":
         if (!tc) return null;
-        return (
+        {
+          const expl = tc.advance_blocking_explainer;
+          const autoFix = tc.advance_auto_remediation ?? [];
+          const blockerRunId = tc.active_run_id ?? null;
+          const blockerIsCurrent =
+            !!(execId && blockerRunId && String(execId) === String(blockerRunId));
+          const blockerPct = tc.active_cycle?.progress_percent ?? null;
+          const blockerStage =
+            tc.active_cycle?.current_step ??
+            tc.active_blocking_candidate?.detail ??
+            "—";
+          const blockerCause = String(
+            expl?.root_cause_plain ??
+              tc.active_cycle?.last_error ??
+              tc.active_blocking_candidate?.detail ??
+              ""
+          ).trim();
+          const blockerLooksFailed =
+            !!tc.active_cycle &&
+            (/\bFAIL(?:ED)?\b/i.test(String(tc.active_cycle.current_step || "")) ||
+              String(tc.active_cycle.pipeline_status || "").toLowerCase() === "escalated" ||
+              String(tc.active_cycle.pipeline_status || "").toLowerCase() === "failed");
+          const blockerAction =
+            expl?.remaining_operator_actions?.[0] ??
+            "Open Pipeline detail for the blocker run and inspect failing node stderr.log.";
+          const hasActiveExecution = !!execId;
+          const runningNow =
+            execId && aj
+              ? `${execId} · ${aj.pipeline_stage_label ?? "stage unknown"}`
+              : execId
+                ? String(execId)
+                : "none";
+          const advanceState = tc.can_advance
+            ? "ready"
+            : blockerRunId
+              ? blockerIsCurrent
+                ? `blocked by current run ${blockerRunId}`
+                : `blocked by prior run ${blockerRunId}`
+              : `blocked (${tc.advance_disabled_reason ?? "unknown"})`;
+          return (
           <CollapsibleDashboardSection
             panelKey={`${domain}:advance-training`}
-            title="Advance Training Cycle"
+            title="Advance Training Cycle (LangGraph)"
             className="card wide"
           >
-            <p className="small muted" style={{ marginTop: 0 }}>
-              Reads certified runs from{" "}
-              <span className="mono">/data/NDE/{domain}/runs/*/state.json</span>, bumps{" "}
-              <span className="mono">vX.Y → vX.(Y+1)</span>, then invokes{" "}
-              <span className="mono">run_graph.sh</span> only (smoke by default). No training
-              execution inside this container.
-            </p>
-            <ul className="small mono validate-list">
-              <li>
-                Current certified version:{" "}
-                <strong>{tc.latest_certified_version ?? "—"}</strong>{" "}
-                <span className="muted">({tc.latest_certified_run_id ?? "—"})</span>
-              </li>
-              <li>
-                Next candidate version:{" "}
-                <strong>{tc.next_candidate_version ?? "—"}</strong>
-              </li>
-              <li>
-                Active run ID (blocks advance):{" "}
-                <strong>{tc.active_run_id ?? "—"}</strong>
-              </li>
-              <li>
-                Planned run id (when advance allowed):{" "}
-                <strong>{tc.next_run_id_would_be ?? "—"}</strong>
-              </li>
-            </ul>
+            <div className="card-inner-muted" style={{ marginTop: 0, marginBottom: "0.65rem" }}>
+              <p className="small" style={{ margin: "0 0 0.35rem" }}>
+                <strong>Running now:</strong> {runningNow}
+              </p>
+              {!hasActiveExecution ? (
+                <p className="small" style={{ margin: 0 }}>
+                  <strong>Advance:</strong> {advanceState}
+                </p>
+              ) : (
+                <p className="small muted" style={{ margin: 0 }}>
+                  Advance controls unlock after the current run completes.
+                </p>
+              )}
+              {!hasActiveExecution && blockerRunId ? (
+                <p className="small" style={{ margin: "0.35rem 0 0" }}>
+                  <strong>Blocker progress:</strong>{" "}
+                  {blockerPct != null ? `${blockerPct}%` : "—"} ·{" "}
+                  <strong className="accent">{blockerStage}</strong>
+                </p>
+              ) : null}
+              {!hasActiveExecution && blockerLooksFailed && blockerCause ? (
+                <p className="small err-inline wrap" style={{ margin: "0.35rem 0 0" }}>
+                  <strong>Blocker cause:</strong> {blockerCause}
+                </p>
+              ) : null}
+              {!hasActiveExecution && blockerLooksFailed ? (
+                <p className="small" style={{ margin: "0.35rem 0 0" }}>
+                  <strong>Action:</strong> {blockerAction}
+                </p>
+              ) : null}
+              {!hasActiveExecution && !tc.can_advance && blockerRunId && !blockerIsCurrent ? (
+                <p className="small muted" style={{ margin: "0.35rem 0 0" }}>
+                  This blocker is separate from the currently executing run.
+                </p>
+              ) : null}
+            </div>
 
-            {tc.active_cycle ? (
+            {autoFix.length > 0 ? (
+              <div className="advance-auto-remediation mt" style={{ marginBottom: "0.65rem" }}>
+                <h4 className="small ok" style={{ margin: "0 0 0.35rem" }}>
+                  Automatic remediation (this page load)
+                </h4>
+                <ul className="small mono validate-list" style={{ marginBottom: 0 }}>
+                  {autoFix.map((line, i) => (
+                    <li key={i}>{line}</li>
+                  ))}
+                </ul>
+              </div>
+            ) : null}
+
+            <details className="card-inner-muted mt" style={{ marginBottom: "0.65rem" }}>
+              <summary className="small muted">Show diagnostics</summary>
+              <ul className="small mono validate-list" style={{ marginTop: "0.5rem" }}>
+                <li>
+                  Current certified version:{" "}
+                  <strong>{tc.latest_certified_version ?? "—"}</strong>{" "}
+                  <span className="muted">({tc.latest_certified_run_id ?? "—"})</span>
+                </li>
+                <li>
+                  Active run ID (blocks advance): <strong>{tc.active_run_id ?? "—"}</strong>
+                </li>
+                <li>
+                  Next candidate version: <strong>{tc.next_candidate_version ?? "—"}</strong>
+                </li>
+                <li>
+                  Planned run id (when advance allowed):{" "}
+                  <strong>{tc.next_run_id_would_be ?? "—"}</strong>
+                </li>
+                {expl?.why_advance_is_locked ? (
+                  <li className="wrap">Advance lock: {expl.why_advance_is_locked}</li>
+                ) : null}
+                {expl?.failed_node_id ? (
+                  <li>
+                    First failing node id: <strong>{expl.failed_node_id}</strong>
+                  </li>
+                ) : null}
+                <li>
+                  Graph entrypoint: <strong>{tc.graph_entrypoint}</strong>
+                </li>
+              </ul>
+              {tc.active_cycle?.log_tail ? (
+                <pre className="log-pre mt">{tc.active_cycle.log_tail}</pre>
+              ) : null}
+            </details>
+
+            {!blockerRunId || blockerIsCurrent ? (
+              tc.active_cycle ? (
               <div className="mt">
                 <h4 className="small muted" style={{ marginBottom: "0.35rem" }}>
-                  Blocking candidate snapshot
+                  Blocking candidate snapshot (LangGraph stages — not HF steps)
                 </h4>
                 <div className="progress-bar">
                   <div
@@ -863,125 +1053,126 @@ export default function Dashboard() {
                 <p className="small mono">
                   Candidate version field: {tc.active_cycle.version ?? "—"}
                 </p>
-                {tc.active_cycle.log_tail ? (
-                  <pre className="log-pre mt">{tc.active_cycle.log_tail}</pre>
-                ) : null}
               </div>
+              ) : null
             ) : null}
 
-            <p className="small muted wrap mono">{tc.graph_entrypoint}</p>
-
-            <div className="advance-gates-panel card-inner-muted mt">
-              <h4 className="small muted" style={{ margin: "0 0 0.5rem" }}>
-                Advance gates (operator)
-              </h4>
-              <ul className="small mono validate-list" style={{ marginBottom: "0.65rem" }}>
-                <li>
-                  <span className="muted">can_advance:</span>{" "}
-                  <strong>{tc.can_advance ? "true" : "false"}</strong>
-                </li>
-                <li>
-                  <span className="muted">admin approved (full):</span>{" "}
-                  <strong>{fullAdminOk ? "true" : "false"}</strong>
-                </li>
-                <li>
-                  <span className="muted">advancing:</span>{" "}
-                  <strong>{advancing ? "true" : "false"}</strong>
-                </li>
-              </ul>
-
-              <div className="advance-disable-explain">
-                <p className="small mono" style={{ margin: "0 0 0.35rem" }}>
-                  <strong className="muted">Smoke</strong>{" "}
-                  {advancing || !tc.can_advance ? (
-                    <span className="muted">— disabled</span>
-                  ) : (
-                    <span className="ok">— enabled</span>
-                  )}
-                </p>
-                {advancing || !tc.can_advance ? (
-                  <ul className="small mono validate-list advance-reason-list">
-                    {advancing ? (
-                      <li>advancing request in flight</li>
-                    ) : null}
-                    {!tc.can_advance ? (
-                      <li>
-                        can_advance=false
-                        {tc.advance_disabled_reason != null &&
-                        String(tc.advance_disabled_reason).length > 0
-                          ? `: ${tc.advance_disabled_reason}`
-                          : ": (no reason code)"}
-                      </li>
-                    ) : null}
+            {!hasActiveExecution ? (
+              <>
+                <div className="advance-gates-panel card-inner-muted mt">
+                  <h4 className="small muted" style={{ margin: "0 0 0.5rem" }}>
+                    Advance gates (operator)
+                  </h4>
+                  <ul className="small mono validate-list" style={{ marginBottom: "0.65rem" }}>
+                    <li>
+                      <span className="muted">can_advance:</span>{" "}
+                      <strong>{tc.can_advance ? "true" : "false"}</strong>
+                    </li>
+                    <li>
+                      <span className="muted">admin approved (full):</span>{" "}
+                      <strong>{fullAdminOk ? "true" : "false"}</strong>
+                    </li>
+                    <li>
+                      <span className="muted">advancing:</span>{" "}
+                      <strong>{advancing ? "true" : "false"}</strong>
+                    </li>
                   </ul>
-                ) : null}
 
-                <p className="small mono" style={{ margin: "0.55rem 0 0.35rem" }}>
-                  <strong className="muted">Full</strong>{" "}
-                  {advancing || !tc.can_advance || !fullAdminOk ? (
-                    <span className="muted">— disabled</span>
-                  ) : (
-                    <span className="ok">— enabled</span>
-                  )}
-                </p>
-                {advancing || !tc.can_advance || !fullAdminOk ? (
-                  <ul className="small mono validate-list advance-reason-list">
-                    {!fullAdminOk ? <li>admin approval unchecked</li> : null}
-                    {advancing ? (
-                      <li>advancing request in flight</li>
+                  <div className="advance-disable-explain">
+                    <p className="small mono" style={{ margin: "0 0 0.35rem" }}>
+                      <strong className="muted">Smoke</strong>{" "}
+                      {advancing || !tc.can_advance ? (
+                        <span className="muted">— disabled</span>
+                      ) : (
+                        <span className="ok">— enabled</span>
+                      )}
+                    </p>
+                    {advancing || !tc.can_advance ? (
+                      <ul className="small mono validate-list advance-reason-list">
+                        {advancing ? (
+                          <li>advancing request in flight</li>
+                        ) : null}
+                        {!tc.can_advance ? (
+                          <li>
+                            can_advance=false
+                            {tc.advance_disabled_reason != null &&
+                            String(tc.advance_disabled_reason).length > 0
+                              ? `: ${tc.advance_disabled_reason}`
+                              : ": (no reason code)"}
+                          </li>
+                        ) : null}
+                      </ul>
                     ) : null}
-                    {!tc.can_advance ? (
-                      <li>
-                        can_advance=false
-                        {tc.advance_disabled_reason != null &&
-                        String(tc.advance_disabled_reason).length > 0
-                          ? `: ${tc.advance_disabled_reason}`
-                          : ": (no reason code)"}
-                      </li>
-                    ) : null}
-                  </ul>
-                ) : null}
-              </div>
-            </div>
 
-            <div className="row-actions mt" style={{ gap: "0.75rem", flexWrap: "wrap" }}>
-              <button
-                type="button"
-                className="btn-primary"
-                disabled={advancing || !tc.can_advance}
-                title={
-                  tc.can_advance
-                    ? "POST /api/advance/:domain (smoke)"
-                    : tc.advance_disabled_reason ?? "Cannot advance"
-                }
-                onClick={() => void runAdvanceCycle("smoke")}
-              >
-                {advancing ? "Starting…" : "Advance Training Cycle"}
-              </button>
-              <label
-                className="small"
-                style={{ display: "inline-flex", alignItems: "center", gap: 6 }}
-              >
-                <input
-                  type="checkbox"
-                  checked={fullAdminOk}
-                  onChange={(e) => setFullAdminOk(e.target.checked)}
-                />
-                Admin approve full training
-              </label>
-              <button
-                type="button"
-                className="btn-ghost"
-                disabled={advancing || !tc.can_advance || !fullAdminOk}
-                title="Writes APPROVED and runs --mode full --require-approval"
-                onClick={() => void runAdvanceCycle("full")}
-              >
-                Advance (full)
-              </button>
-            </div>
+                    <p className="small mono" style={{ margin: "0.55rem 0 0.35rem" }}>
+                      <strong className="muted">Full</strong>{" "}
+                      {advancing || !tc.can_advance || !fullAdminOk ? (
+                        <span className="muted">— disabled</span>
+                      ) : (
+                        <span className="ok">— enabled</span>
+                      )}
+                    </p>
+                    {advancing || !tc.can_advance || !fullAdminOk ? (
+                      <ul className="small mono validate-list advance-reason-list">
+                        {!fullAdminOk ? <li>admin approval unchecked</li> : null}
+                        {advancing ? (
+                          <li>advancing request in flight</li>
+                        ) : null}
+                        {!tc.can_advance ? (
+                          <li>
+                            can_advance=false
+                            {tc.advance_disabled_reason != null &&
+                            String(tc.advance_disabled_reason).length > 0
+                              ? `: ${tc.advance_disabled_reason}`
+                              : ": (no reason code)"}
+                          </li>
+                        ) : null}
+                      </ul>
+                    ) : null}
+                  </div>
+                </div>
+
+                <div className="row-actions mt" style={{ gap: "0.75rem", flexWrap: "wrap" }}>
+                  <button
+                    type="button"
+                    className="btn-primary"
+                    disabled={advancing || !tc.can_advance}
+                    title={
+                      tc.can_advance
+                        ? "POST /api/advance/:domain (smoke)"
+                        : tc.advance_disabled_reason ?? "Cannot advance"
+                    }
+                    onClick={() => void runAdvanceCycle("smoke")}
+                  >
+                    {advancing ? "Starting…" : "Advance Training Cycle"}
+                  </button>
+                  <label
+                    className="small"
+                    style={{ display: "inline-flex", alignItems: "center", gap: 6 }}
+                  >
+                    <input
+                      type="checkbox"
+                      checked={fullAdminOk}
+                      onChange={(e) => setFullAdminOk(e.target.checked)}
+                    />
+                    Admin approve full training
+                  </label>
+                  <button
+                    type="button"
+                    className="btn-ghost"
+                    disabled={advancing || !tc.can_advance || !fullAdminOk}
+                    title="Writes APPROVED and runs --mode full --require-approval"
+                    onClick={() => void runAdvanceCycle("full")}
+                  >
+                    Advance (full)
+                  </button>
+                </div>
+              </>
+            ) : null}
             {advanceMsg ? <p className="small mono wrap">{advanceMsg}</p> : null}
           </CollapsibleDashboardSection>
-        );
+          );
+        }
 
       case "staging":
         if (!st?.staging_path) return null;

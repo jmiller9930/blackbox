@@ -1,0 +1,87 @@
+{
+  "schema": "finquant_run_ab_comparison_v1",
+  "created_at_v1": "2026-05-02T00:31:23Z",
+  "run_a_metrics_v1": {
+    "cases_v1": 14,
+    "decisions_v1": 42,
+    "learning_observations_v1": 42,
+    "wins_v1": 3,
+    "losses_v1": 3,
+    "no_trade_correct_v1": 26,
+    "no_trade_missed_v1": 0,
+    "total_pnl_v1": -590.44975,
+    "win_rate_v1": 0.5,
+    "expectancy_v1": -98.408292,
+    "evaluation_pass_v1": 1,
+    "evaluation_fail_v1": 13,
+    "evaluation_info_v1": 0,
+    "decision_quality_pass_rate_v1": 0.0714
+  },
+  "run_b_metrics_v1": {
+    "cases_v1": 7,
+    "decisions_v1": 21,
+    "learning_observations_v1": 21,
+    "wins_v1": 2,
+    "losses_v1": 2,
+    "no_trade_correct_v1": 13,
+    "no_trade_missed_v1": 0,
+    "total_pnl_v1": 60.61,
+    "win_rate_v1": 0.5,
+    "expectancy_v1": 15.1525,
+    "evaluation_pass_v1": 4,
+    "evaluation_fail_v1": 3,
+    "evaluation_info_v1": 0,
+    "decision_quality_pass_rate_v1": 0.5714
+  },
+  "delta_v1": {
+    "delta_wins_v1": -1.0,
+    "delta_losses_v1": -1.0,
+    "delta_no_trade_correct_v1": -13.0,
+    "delta_no_trade_missed_v1": 0.0,
+    "delta_total_pnl_v1": 651.05975,
+    "delta_win_rate_v1": 0.0,
+    "delta_expectancy_v1": 113.560792,
+    "delta_evaluation_pass_v1": 3.0,
+    "delta_evaluation_fail_v1": -10.0,
+    "delta_decision_quality_pass_rate_v1": 0.5
+  },
+  "decision_diff_v1": {
+    "overlap_cases_v1": 0,
+    "decisions_same_v1": 0,
+    "decisions_changed_v1": 0,
+    "decision_change_rate_v1": 0.0,
+    "first_10_diffs_v1": []
+  },
+  "units_after_run_a_v1": {
+    "total_units_v1": 30,
+    "by_status_v1": {
+      "candidate": 30
+    },
+    "events_path_v1": "finquant/unified/agent_lab/outputs/ab_20260502T003123Z_62906bfa/learning_units/events.jsonl",
+    "units_path_v1": "finquant/unified/agent_lab/outputs/ab_20260502T003123Z_62906bfa/learning_units/units.json"
+  },
+  "units_after_run_b_v1": {
+    "total_units_v1": 35,
+    "by_status_v1": {
+      "candidate": 34,
+      "provisional": 1
+    },
+    "events_path_v1": "finquant/unified/agent_lab/outputs/ab_20260502T003123Z_62906bfa/learning_units/events.jsonl",
+    "units_path_v1": "finquant/unified/agent_lab/outputs/ab_20260502T003123Z_62906bfa/learning_units/units.json"
+  },
+  "units_status_delta_v1": {
+    "candidate": 4,
+    "provisional": 1
+  },
+  "verdict_v1": {
+    "overall_v1": "PASS",
+    "successes_v1": [
+      "PASS: 42 learning observations recorded in Run A",
+      "PASS: 30 learning units accumulated evidence in Run A",
+      "PASS: 1 patterns reached provisional+ status by end of Run B",
+      "PASS: Run B engaged 21 learning observations",
+      "PASS: pipeline executed end-to-end without store write errors"
+    ],
+    "issues_v1": []
+  }
+}

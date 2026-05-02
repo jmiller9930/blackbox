@@ -1,0 +1,441 @@
+[
+  {
+    "schema": "finquant_lifecycle_decision_v1",
+    "agent_id": "finquant",
+    "case_id": "test_btcusd_15m_0005_20260313",
+    "step_index": 20,
+    "symbol": "BTC-USD",
+    "action": "ENTER_LONG",
+    "thesis_v1": "Uptrend: close 53537.45\u219253537.58, RSI=54.2, volume expanding, ATR=352.36.",
+    "invalidation_v1": "Exit if close drops below 53269.89 or RSI decays with volume collapse.",
+    "risk_state_v1": "entry_long rsi=54.2 atr=352.36",
+    "observed_context_v1": {
+      "candles_visible": 21,
+      "last_close": 53537.58,
+      "last_rsi_14": 54.2116,
+      "last_ema_20": 53480.7422,
+      "last_atr_14": 352.3631,
+      "last_volume": 878.1205
+    },
+    "input_packet_v1": {
+      "schema": "finquant_input_packet_v1",
+      "case_id": "test_btcusd_15m_0005_20260313",
+      "step_index": 20,
+      "symbol": "BTC-USD",
+      "timeframe_minutes": 15,
+      "runtime_data_window_months_v1": null,
+      "runtime_interval_v1": "15m",
+      "candles_visible_v1": 21,
+      "market_math_v1": {
+        "close_v1": 53537.58,
+        "prev_close_v1": 53537.45,
+        "price_delta_v1": 0.13,
+        "pct_change_v1": 2e-06,
+        "ema_gap_v1": 56.8378,
+        "atr_14_v1": 352.3631,
+        "rsi_14_v1": 54.2116,
+        "volume_delta_v1": 529.5449
+      },
+      "market_context_v1": {
+        "price_above_ema_v1": true,
+        "price_up_v1": true,
+        "volume_expand_v1": true,
+        "atr_expanded_v1": true,
+        "rsi_state_v1": "bullish_range",
+        "volatility_state_v1": "expanded"
+      },
+      "memory_context_v1": {
+        "matched_record_count_v1": 2,
+        "matched_record_ids_v1": [
+          "lr_68c98aba7ceb45cdbd2ba63f99c9214e",
+          "lr_a1f3582fa34047d6b4e6b41a1a0f58b7"
+        ],
+        "long_bias_count_v1": 2,
+        "short_bias_count_v1": 0,
+        "no_trade_bias_count_v1": 0,
+        "best_grade_v1": "PASS",
+        "memory_influence_available_v1": true
+      },
+      "strategy_hypotheses_v1": [
+        {
+          "strategy_family_v1": "trend_continuation",
+          "action_v1": "ENTER_LONG",
+          "score_v1": 1.0
+        },
+        {
+          "strategy_family_v1": "pullback_continuation",
+          "action_v1": "ENTER_LONG",
+          "score_v1": 0.25
+        },
+        {
+          "strategy_family_v1": "breakout_expansion",
+          "action_v1": "ENTER_LONG",
+          "score_v1": 0.4
+        },
+        {
+          "strategy_family_v1": "mean_reversion_fade",
+          "action_v1": "ENTER_SHORT",
+          "score_v1": 0.0
+        },
+        {
+          "strategy_family_v1": "no_trade_guard",
+          "action_v1": "NO_TRADE",
+          "score_v1": 0.35
+        }
+      ],
+      "baseline_strategy_families_v1": [
+        "trend_continuation",
+        "pullback_continuation",
+        "breakout_expansion",
+        "mean_reversion_fade",
+        "no_trade_guard"
+      ]
+    },
+    "confidence_band_v1": "high",
+    "supporting_indicators_v1": [
+      "close_up=True",
+      "rsi_midrange=True",
+      "volume_expand=True",
+      "atr_expand=True"
+    ],
+    "conflicting_indicators_v1": [],
+    "risk_notes_v1": "Strong trend-continuation evidence.",
+    "memory_used_v1": [
+      "lr_68c98aba7ceb45cdbd2ba63f99c9214e",
+      "lr_a1f3582fa34047d6b4e6b41a1a0f58b7"
+    ],
+    "llm_used_v1": false,
+    "decision_source_v1": "deterministic_stub_v1",
+    "causal_context_only_v1": true,
+    "thesis": "Uptrend: close 53537.45\u219253537.58, RSI=54.2, volume expanding, ATR=352.36.",
+    "invalidation": "Exit if close drops below 53269.89 or RSI decays with volume collapse.",
+    "confidence_band": "high",
+    "supporting_indicators": [
+      "close_up=True",
+      "rsi_midrange=True",
+      "volume_expand=True",
+      "atr_expand=True"
+    ],
+    "conflicting_indicators": [],
+    "risk_notes": "Strong trend-continuation evidence.",
+    "pattern_signature_v1": {
+      "pattern_id_v1": "b777a2186ebfa408",
+      "components_v1": {
+        "symbol_v1": "BTC-USD",
+        "timeframe_minutes_v1": 15,
+        "trend_v1": "trend_up",
+        "rsi_bucket_v1": "rsi_50_55",
+        "atr_bucket_v1": "atr_3plus",
+        "volatility_v1": "vol_high",
+        "volume_v1": "vol_expand",
+        "position_v1": "pos_flat"
+      },
+      "human_label_v1": "trend_up | rsi_50_55 | vol_high | pos_flat",
+      "canonical_v1": "{\"atr_bucket_v1\":\"atr_3plus\",\"position_v1\":\"pos_flat\",\"rsi_bucket_v1\":\"rsi_50_55\",\"symbol_v1\":\"BTC-USD\",\"timeframe_minutes_v1\":15,\"trend_v1\":\"trend_up\",\"volatility_v1\":\"vol_high\",\"volume_v1\":\"vol_expand\"}"
+    },
+    "decision_explanation_v1": {
+      "schema": "finquant_decision_explanation_v1",
+      "pattern_id_v1": "b777a2186ebfa408",
+      "human_label_v1": "trend_up | rsi_50_55 | vol_high | pos_flat",
+      "primary_unit_v1": null,
+      "primary_attributable_v1": false,
+      "challenger_units_v1": [],
+      "observer_unit_count_v1": 1,
+      "suppressor_units_v1": [],
+      "competition_reason_v1": "no eligible active unit",
+      "final_action_v1": "ENTER_LONG",
+      "final_decision_source_v1": "deterministic_stub_v1",
+      "narrative_v1": "No ACTIVE learning unit matched signature [trend_up | rsi_50_55 | vol_high | pos_flat] (id=b777a2186ebfa408). 1 candidate/provisional unit(s) were observing \u2014 they cannot drive decisions yet. The decision was driven by source=deterministic_stub_v1, not by validated learning."
+    }
+  },
+  {
+    "schema": "finquant_lifecycle_decision_v1",
+    "agent_id": "finquant",
+    "case_id": "test_btcusd_15m_0005_20260313",
+    "step_index": 21,
+    "symbol": "BTC-USD",
+    "action": "HOLD",
+    "thesis_v1": "Position open. RSI=57.1, close=53605.69. No exit signal.",
+    "invalidation_v1": "Exit if RSI < 45, price retreats 0.5%, or resistance recaptured.",
+    "risk_state_v1": "holding entry=53537.58",
+    "observed_context_v1": {
+      "candles_visible": 22,
+      "last_close": 53605.69,
+      "last_rsi_14": 57.107,
+      "last_ema_20": 53492.642,
+      "last_atr_14": 347.5393,
+      "last_volume": 651.5862000000001
+    },
+    "input_packet_v1": {
+      "schema": "finquant_input_packet_v1",
+      "case_id": "test_btcusd_15m_0005_20260313",
+      "step_index": 21,
+      "symbol": "BTC-USD",
+      "timeframe_minutes": 15,
+      "runtime_data_window_months_v1": null,
+      "runtime_interval_v1": "15m",
+      "candles_visible_v1": 22,
+      "market_math_v1": {
+        "close_v1": 53605.69,
+        "prev_close_v1": 53537.58,
+        "price_delta_v1": 68.11,
+        "pct_change_v1": 0.001272,
+        "ema_gap_v1": 113.048,
+        "atr_14_v1": 347.5393,
+        "rsi_14_v1": 57.107,
+        "volume_delta_v1": -226.5343
+      },
+      "market_context_v1": {
+        "price_above_ema_v1": true,
+        "price_up_v1": true,
+        "volume_expand_v1": false,
+        "atr_expanded_v1": true,
+        "rsi_state_v1": "bullish_range",
+        "volatility_state_v1": "expanded"
+      },
+      "memory_context_v1": {
+        "matched_record_count_v1": 2,
+        "matched_record_ids_v1": [
+          "lr_68c98aba7ceb45cdbd2ba63f99c9214e",
+          "lr_a1f3582fa34047d6b4e6b41a1a0f58b7"
+        ],
+        "long_bias_count_v1": 2,
+        "short_bias_count_v1": 0,
+        "no_trade_bias_count_v1": 0,
+        "best_grade_v1": "PASS",
+        "memory_influence_available_v1": true
+      },
+      "strategy_hypotheses_v1": [
+        {
+          "strategy_family_v1": "trend_continuation",
+          "action_v1": "ENTER_LONG",
+          "score_v1": 0.85
+        },
+        {
+          "strategy_family_v1": "pullback_continuation",
+          "action_v1": "ENTER_LONG",
+          "score_v1": 0.25
+        },
+        {
+          "strategy_family_v1": "breakout_expansion",
+          "action_v1": "ENTER_LONG",
+          "score_v1": 0.25
+        },
+        {
+          "strategy_family_v1": "mean_reversion_fade",
+          "action_v1": "ENTER_SHORT",
+          "score_v1": 0.0
+        },
+        {
+          "strategy_family_v1": "no_trade_guard",
+          "action_v1": "NO_TRADE",
+          "score_v1": 0.2
+        }
+      ],
+      "baseline_strategy_families_v1": [
+        "trend_continuation",
+        "pullback_continuation",
+        "breakout_expansion",
+        "mean_reversion_fade",
+        "no_trade_guard"
+      ]
+    },
+    "confidence_band_v1": "medium",
+    "supporting_indicators_v1": [
+      "RSI=57.1",
+      "close=53605.69"
+    ],
+    "conflicting_indicators_v1": [],
+    "risk_notes_v1": "Hold while thesis remains intact.",
+    "memory_used_v1": [
+      "lr_68c98aba7ceb45cdbd2ba63f99c9214e",
+      "lr_a1f3582fa34047d6b4e6b41a1a0f58b7"
+    ],
+    "llm_used_v1": false,
+    "decision_source_v1": "deterministic_stub_v1",
+    "causal_context_only_v1": true,
+    "thesis": "Position open. RSI=57.1, close=53605.69. No exit signal.",
+    "invalidation": "Exit if RSI < 45, price retreats 0.5%, or resistance recaptured.",
+    "confidence_band": "medium",
+    "supporting_indicators": [
+      "RSI=57.1",
+      "close=53605.69"
+    ],
+    "conflicting_indicators": [],
+    "risk_notes": "Hold while thesis remains intact.",
+    "pattern_signature_v1": {
+      "pattern_id_v1": "dbde7002f77420c1",
+      "components_v1": {
+        "symbol_v1": "BTC-USD",
+        "timeframe_minutes_v1": 15,
+        "trend_v1": "trend_up",
+        "rsi_bucket_v1": "rsi_55_60",
+        "atr_bucket_v1": "atr_3plus",
+        "volatility_v1": "vol_high",
+        "volume_v1": "vol_contract",
+        "position_v1": "pos_open"
+      },
+      "human_label_v1": "trend_up | rsi_55_60 | vol_high | pos_open",
+      "canonical_v1": "{\"atr_bucket_v1\":\"atr_3plus\",\"position_v1\":\"pos_open\",\"rsi_bucket_v1\":\"rsi_55_60\",\"symbol_v1\":\"BTC-USD\",\"timeframe_minutes_v1\":15,\"trend_v1\":\"trend_up\",\"volatility_v1\":\"vol_high\",\"volume_v1\":\"vol_contract\"}"
+    },
+    "decision_explanation_v1": {
+      "schema": "finquant_decision_explanation_v1",
+      "pattern_id_v1": "dbde7002f77420c1",
+      "human_label_v1": "trend_up | rsi_55_60 | vol_high | pos_open",
+      "primary_unit_v1": null,
+      "primary_attributable_v1": false,
+      "challenger_units_v1": [],
+      "observer_unit_count_v1": 1,
+      "suppressor_units_v1": [],
+      "competition_reason_v1": "no eligible active unit",
+      "final_action_v1": "HOLD",
+      "final_decision_source_v1": "deterministic_stub_v1",
+      "narrative_v1": "No ACTIVE learning unit matched signature [trend_up | rsi_55_60 | vol_high | pos_open] (id=dbde7002f77420c1). 1 candidate/provisional unit(s) were observing \u2014 they cannot drive decisions yet. The decision was driven by source=deterministic_stub_v1, not by validated learning."
+    }
+  },
+  {
+    "schema": "finquant_lifecycle_decision_v1",
+    "agent_id": "finquant",
+    "case_id": "test_btcusd_15m_0005_20260313",
+    "step_index": 22,
+    "symbol": "BTC-USD",
+    "action": "HOLD",
+    "thesis_v1": "Position open. RSI=57.4, close=53612.61. No exit signal.",
+    "invalidation_v1": "Exit if RSI < 45, price retreats 0.5%, or resistance recaptured.",
+    "risk_state_v1": "holding entry=53537.58",
+    "observed_context_v1": {
+      "candles_visible": 23,
+      "last_close": 53612.61,
+      "last_rsi_14": 57.4018,
+      "last_ema_20": 53504.0676,
+      "last_atr_14": 350.5758,
+      "last_volume": 836.7199
+    },
+    "input_packet_v1": {
+      "schema": "finquant_input_packet_v1",
+      "case_id": "test_btcusd_15m_0005_20260313",
+      "step_index": 22,
+      "symbol": "BTC-USD",
+      "timeframe_minutes": 15,
+      "runtime_data_window_months_v1": null,
+      "runtime_interval_v1": "15m",
+      "candles_visible_v1": 23,
+      "market_math_v1": {
+        "close_v1": 53612.61,
+        "prev_close_v1": 53605.69,
+        "price_delta_v1": 6.92,
+        "pct_change_v1": 0.000129,
+        "ema_gap_v1": 108.5424,
+        "atr_14_v1": 350.5758,
+        "rsi_14_v1": 57.4018,
+        "volume_delta_v1": 185.1337
+      },
+      "market_context_v1": {
+        "price_above_ema_v1": true,
+        "price_up_v1": true,
+        "volume_expand_v1": true,
+        "atr_expanded_v1": true,
+        "rsi_state_v1": "bullish_range",
+        "volatility_state_v1": "expanded"
+      },
+      "memory_context_v1": {
+        "matched_record_count_v1": 2,
+        "matched_record_ids_v1": [
+          "lr_68c98aba7ceb45cdbd2ba63f99c9214e",
+          "lr_a1f3582fa34047d6b4e6b41a1a0f58b7"
+        ],
+        "long_bias_count_v1": 2,
+        "short_bias_count_v1": 0,
+        "no_trade_bias_count_v1": 0,
+        "best_grade_v1": "PASS",
+        "memory_influence_available_v1": true
+      },
+      "strategy_hypotheses_v1": [
+        {
+          "strategy_family_v1": "trend_continuation",
+          "action_v1": "ENTER_LONG",
+          "score_v1": 1.0
+        },
+        {
+          "strategy_family_v1": "pullback_continuation",
+          "action_v1": "ENTER_LONG",
+          "score_v1": 0.25
+        },
+        {
+          "strategy_family_v1": "breakout_expansion",
+          "action_v1": "ENTER_LONG",
+          "score_v1": 0.4
+        },
+        {
+          "strategy_family_v1": "mean_reversion_fade",
+          "action_v1": "ENTER_SHORT",
+          "score_v1": 0.0
+        },
+        {
+          "strategy_family_v1": "no_trade_guard",
+          "action_v1": "NO_TRADE",
+          "score_v1": 0.2
+        }
+      ],
+      "baseline_strategy_families_v1": [
+        "trend_continuation",
+        "pullback_continuation",
+        "breakout_expansion",
+        "mean_reversion_fade",
+        "no_trade_guard"
+      ]
+    },
+    "confidence_band_v1": "medium",
+    "supporting_indicators_v1": [
+      "RSI=57.4",
+      "close=53612.61"
+    ],
+    "conflicting_indicators_v1": [],
+    "risk_notes_v1": "Hold while thesis remains intact.",
+    "memory_used_v1": [
+      "lr_68c98aba7ceb45cdbd2ba63f99c9214e",
+      "lr_a1f3582fa34047d6b4e6b41a1a0f58b7"
+    ],
+    "llm_used_v1": false,
+    "decision_source_v1": "deterministic_stub_v1",
+    "causal_context_only_v1": true,
+    "thesis": "Position open. RSI=57.4, close=53612.61. No exit signal.",
+    "invalidation": "Exit if RSI < 45, price retreats 0.5%, or resistance recaptured.",
+    "confidence_band": "medium",
+    "supporting_indicators": [
+      "RSI=57.4",
+      "close=53612.61"
+    ],
+    "conflicting_indicators": [],
+    "risk_notes": "Hold while thesis remains intact.",
+    "pattern_signature_v1": {
+      "pattern_id_v1": "2f0840f33c866d1c",
+      "components_v1": {
+        "symbol_v1": "BTC-USD",
+        "timeframe_minutes_v1": 15,
+        "trend_v1": "trend_up",
+        "rsi_bucket_v1": "rsi_55_60",
+        "atr_bucket_v1": "atr_3plus",
+        "volatility_v1": "vol_high",
+        "volume_v1": "vol_expand",
+        "position_v1": "pos_open"
+      },
+      "human_label_v1": "trend_up | rsi_55_60 | vol_high | pos_open",
+      "canonical_v1": "{\"atr_bucket_v1\":\"atr_3plus\",\"position_v1\":\"pos_open\",\"rsi_bucket_v1\":\"rsi_55_60\",\"symbol_v1\":\"BTC-USD\",\"timeframe_minutes_v1\":15,\"trend_v1\":\"trend_up\",\"volatility_v1\":\"vol_high\",\"volume_v1\":\"vol_expand\"}"
+    },
+    "decision_explanation_v1": {
+      "schema": "finquant_decision_explanation_v1",
+      "pattern_id_v1": "2f0840f33c866d1c",
+      "human_label_v1": "trend_up | rsi_55_60 | vol_high | pos_open",
+      "primary_unit_v1": null,
+      "primary_attributable_v1": false,
+      "challenger_units_v1": [],
+      "observer_unit_count_v1": 1,
+      "suppressor_units_v1": [],
+      "competition_reason_v1": "no eligible active unit",
+      "final_action_v1": "HOLD",
+      "final_decision_source_v1": "deterministic_stub_v1",
+      "narrative_v1": "No ACTIVE learning unit matched signature [trend_up | rsi_55_60 | vol_high | pos_open] (id=2f0840f33c866d1c). 1 candidate/provisional unit(s) were observing \u2014 they cannot drive decisions yet. The decision was driven by source=deterministic_stub_v1, not by validated learning."
+    }
+  }
+]
