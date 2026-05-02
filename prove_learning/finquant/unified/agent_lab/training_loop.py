@@ -329,6 +329,8 @@ def main() -> None:
     parser.add_argument("--config", required=True, help="Lab config JSON path")
     parser.add_argument("--output-dir", required=True, help="Output base directory")
     parser.add_argument("--cycles", type=int, default=5, help="Number of training cycles")
+    parser.add_argument("--max-cases", type=int, default=None,
+                        help="Limit case count (useful for fast LLM iteration)")
     parser.add_argument(
         "--generate-synthetic",
         action="store_true",
@@ -359,6 +361,10 @@ def main() -> None:
         if not case_paths:
             print(f"[train] ERROR: no cases found under {args.cases_dir}", file=sys.stderr)
             sys.exit(1)
+
+    if args.max_cases and len(case_paths) > args.max_cases:
+        print(f"[train] limiting to {args.max_cases} cases (--max-cases)")
+        case_paths = case_paths[:args.max_cases]
 
     report = run_training_loop(
         case_paths=case_paths,
