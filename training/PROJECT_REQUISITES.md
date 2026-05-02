@@ -73,6 +73,16 @@ One entry point on the GPU host after `cd` to repo root:
 - `python3 training/test.py --help` (alias)
 - `python3 training/run_finquant_rtx40_event.py --help`
 
-Flow: validate agentic corpus → optional QLoRA (`--train smoke|full|none`) → **verifier exam** via `training/verifier_eval_finquant.py` (or `FINQUANT_VERIFIER_EVAL_PY` / `--eval-script` for a `/data` copy). Normative `final_exam_v1.json` is **announced** (`FINQUANT_FINAL_EXAM_JSON` or `/data/NDE/finquant/eval/final_exam_v1.json`); when `cases` is non-empty, quant LLM grading can be added later without renaming the launcher.
+**Smoke vs production:** the launcher prints an explicit **TRAIN PROFILE** banner and a distinct final line:
+
+| `--train` | Meaning | Confirmation |
+|-----------|---------|--------------|
+| `smoke` (default) | Short QLoRA — wiring / sanity | None |
+| `full` | Production-length run per YAML | **Requires `--confirm-production-train`** |
+| `none` | Validate (and optional exam) only | None |
+
+Final lines: `FINQUANT_RTX40_EVENT_COMPLETE_TRAIN_SMOKE`, `…_TRAIN_FULL_PRODUCTION`, or `…_NO_TRAIN`.
+
+Flow: validate agentic corpus → optional QLoRA → **verifier exam** via `training/verifier_eval_finquant.py` (or `FINQUANT_VERIFIER_EVAL_PY` / `--eval-script`). Normative `final_exam_v1.json` is **announced** (`FINQUANT_FINAL_EXAM_JSON` or `/data/NDE/finquant/eval/final_exam_v1.json`); when `cases` is non-empty, quant LLM grading can be added later without renaming the launcher.
 
 Suggested `/data` layout under `FINQUANT_BASE` (e.g. `/data/NDE/finquant/agentic_v05`): `datasets/`, `finquant_memory/`, `adapters/`, `reports/`.

@@ -7,7 +7,12 @@ Typical use (from your Mac: SSH into trx40, attach tmux, then):
   export BLACKBOX_REPO_ROOT=~/blackbox    # or /data/NDE/blackbox
   export FINQUANT_BASE=/data/NDE/finquant/agentic_v05
   cd \"$BLACKBOX_REPO_ROOT\"
+  # Smoke (default): short train — wiring / sanity only
   python3 training/test.py --train smoke --adapter adapters/finquant-agentic-v05-smoke
+
+  # Production full train — long run; requires explicit confirmation flag
+  python3 training/test.py --train full --confirm-production-train \\
+    --adapter adapters/finquant-agentic-v05-prod
 
 What runs where:
   * **Execution** is on the GPU host (trx40) inside your SSH/tmux session — not on your laptop.
@@ -60,6 +65,37 @@ def _default_final_exam(finquant_base: Path) -> Path:
     return Path("/data/NDE/finquant/eval/final_exam_v1.json")
 
 
+def _banner_train_profile(train_mode: str, *, corpus: Path, adapter_arg: str, base: Path) -> None:
+    """Make smoke vs production visually unmistakable in tmux logs."""
+    if train_mode == "none":
+        print(
+            "\n=== FINQUANT RTX40 — TRAIN PROFILE: none (validate ± exam only) ===\n"
+            f"FINQUANT_BASE={base}\n"
+            f"corpus={corpus}\n",
+            flush=True,
+        )
+        return
+    if train_mode == "smoke":
+        print(
+            "\n=== FINQUANT RTX40 — TRAIN PROFILE: SMOKE ===\n"
+            "Short QLoRA run (low max_steps). Use for pipeline checks — not a release-quality adapter.\n"
+            f"FINQUANT_BASE={base}\n"
+            f"corpus={corpus}\n"
+            f"adapter (for exam step)={adapter_arg}\n",
+            flush=True,
+        )
+        return
+    # full
+    print(
+        "\n=== FINQUANT RTX40 — TRAIN PROFILE: PRODUCTION (full) ===\n"
+        "Long QLoRA run per config — real GPU/time/disk cost. Do not mistake this for smoke.\n"
+        f"FINQUANT_BASE={base}\n"
+        f"corpus={corpus}\n"
+        f"adapter (for exam step)={adapter_arg}\n",
+        flush=True,
+    )
+
+
 def _announce_final_exam(path: Path) -> None:
     if not path.is_file():
         print(
@@ -77,7 +113,7 @@ def _announce_final_exam(path: Path) -> None:
     if len(cases) == 0:
         print(
             f"NOTE: {path} has empty cases (placeholder). "
-            "Training gate for this version = verifier exam (eval_finquant.py).",
+            "Training gate for this version = verifier exam (`training/verifier_eval_finquant.py`).",
             flush=True,
         )
     else:
@@ -114,13 +150,24 @@ def main() -> int:
         "--train",
         choices=("none", "smoke", "full"),
         default="smoke",
-        help="QLoRA train step (default: smoke)",
+        help=(
+            "QLoRA: smoke = short wiring run (default); full = production-length run "
+            "(requires --confirm-production-train); none = skip train"
+        ),
+    )
+    ap.add_argument(
+        "--confirm-production-train",
+        action="store_true",
+        help="Must be set with --train full — acknowledges a long production training run on GPU",
     )
     ap.add_argument(
         "--adapter",
         type=str,
         default="adapters/finquant-agentic-v05-smoke",
-        help="Adapter dir relative to FINQUANT_BASE (used for exam step)",
+        help=(
+            "Adapter dir relative to FINQUANT_BASE (exam step). Default matches smoke; "
+            "use your production adapter path when --train full"
+        ),
     )
     ap.add_argument("--config", type=Path, default=None, help="train_qlora YAML (default: training/config_v0.1.yaml)")
     ap.add_argument("--model", type=str, default="deepseek-ai/DeepSeek-R1-Distill-Qwen-7B", help="Base HF model id")
@@ -136,6 +183,14 @@ def main() -> int:
         help="Verifier eval Python file (default: env FINQUANT_VERIFIER_EVAL_PY or training/verifier_eval_finquant.py)",
     )
     args = ap.parse_args()
+
+    if args.train == "full" and not args.confirm_production_train:
+        print(
+            "ERROR: --train full requires --confirm-production-train "
+            "(smoke uses --train smoke; see --help).",
+            file=sys.stderr,
+        )
+        return 2
 
     repo = _repo_root(args.repo_root)
     base = (args.finquant_base or _default_finquant_base()).resolve()
@@ -159,6 +214,8 @@ def main() -> int:
 
     env = os.environ.copy()
     env["FINQUANT_BASE"] = str(base)
+
+    _banner_train_profile(args.train, corpus=corpus, adapter_arg=args.adapter, base=base)
 
     fe = args.final_exam_json or _default_final_exam(base)
     _announce_final_exam(fe)
@@ -213,7 +270,12 @@ def main() -> int:
         if r.returncode != 0:
             return r.returncode
 
-    print("FINQUANT_RTX40_EVENT_COMPLETE", flush=True)
+    if args.train == "full":
+        print("FINQUANT_RTX40_EVENT_COMPLETE_TRAIN_FULL_PRODUCTION", flush=True)
+    elif args.train == "smoke":
+        print("FINQUANT_RTX40_EVENT_COMPLETE_TRAIN_SMOKE", flush=True)
+    else:
+        print("FINQUANT_RTX40_EVENT_COMPLETE_NO_TRAIN", flush=True)
     return 0
 
 

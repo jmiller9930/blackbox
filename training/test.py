@@ -7,6 +7,8 @@ From trx40 (SSH / tmux), repo root:
   python3 training/test.py --help
 
 Delegates to run_finquant_rtx40_event.py.
+
+Smoke (default): `--train smoke`. Production full train: `--train full --confirm-production-train`.
 """
 from __future__ import annotations
 
