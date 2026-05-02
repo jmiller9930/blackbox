@@ -126,6 +126,12 @@ Expected: cycle 1 win_rate=62.5% (baseline). Memory must beat this.
   - Access via same DB or separate tables — confirm schema before use
   - Use the `market_data_bridge.py` to roll up to any timeframe and generate lifecycle cases
 
+- **Live data feed** — Pyth price feed is active and writing to the DB in real time
+  - SOL-PERP: live bars being appended continuously
+  - BTC: live Pyth data also available
+  - This means training cases can be generated against current market conditions, not just historical
+  - Live data makes falsification real — outcomes are actual market results, not simulated
+
 ### Compute / LLM
 - **Local LLM host**: `jmiller@172.20.2.230` — Ollama running Qwen 2.5 7B
   - Ollama URL: `http://172.20.2.230:11434`
