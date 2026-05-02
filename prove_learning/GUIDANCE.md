@@ -162,5 +162,60 @@ This means:
 
 ---
 
+---
+
+## The Reasoning Module — RMv2
+
+The primary deliverable of this lab. A self-contained, pluggable reasoning module that can be called by any application to get a governed trade decision.
+
+**File:** `prove_learning/finquant/unified/agent_lab/reasoning_module_v2.py`  
+**Version:** RMv2 (v1 exists elsewhere in the system — this is the learning-loop version)
+
+### How to build it
+
+Build in layers. Do not skip ahead.
+
+1. Clean entry point — `ReasoningModule.decide(bars, symbol, timeframe) → RMDecision`
+2. Quality-gated retrieval wired in — only validated memory influences decisions
+3. Qwen as primary reasoning layer — not a stub
+4. Regime tagging — retrieval matches regime
+5. Memory feedback loop — bad outcomes decay source records
+
+### How to test it
+
+Every layer must have a test before the next layer is built.
+
+```
+# Unit tests — run after every code change
+cd prove_learning/finquant/unified/agent_lab
+python3 -m pytest tests/ -q
+# Must show: all prior tests pass + new tests for RMv2
+
+# Integration test — run after every significant change
+python3 reasoning_module_v2.py --self-test
+# Must show: decision produced, source logged, memory used logged
+
+# Training loop test — run after wiring RMv2 into the loop
+python3 training_loop.py \
+  --cases-dir cases/market_solperp_15m_v2 \
+  --config configs/default_lab_config.json \
+  --cycles 3
+# Must show: cycle 1 win_rate >= 62.5% baseline
+#            cycle 2 win_rate WITH memory > cycle 1
+#            decisions_changed > 0
+```
+
+### Iteration rule — non-negotiable
+
+**If a test fails or win rate does not improve, do not move to the next fix.**  
+Go back. Diagnose. Correct. Re-run. Repeat until the metric improves.  
+Do not claim success on partial results.  
+Do not move forward while anything is broken.
+
+Success = win rate with memory beats 62.5% baseline AND all tests pass.  
+Until that is true, keep iterating.
+
+---
+
 **Last updated:** 2026-05-02  
-**Status:** Working on Fix 1 — quality gate on retrieval
+**Status:** Building RMv2 — starting with clean entry point + Fix 1 (quality gate)**
