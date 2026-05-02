@@ -224,11 +224,17 @@ def normalize_llm_decision(
     if spread is None and h1_conf is not None and h2_conf is not None:
         spread = round(h1_conf - h2_conf, 4)
 
-    # Mechanically enforce R-002: if spread < 0.20 and action is directional, downgrade
-    if spread is not None and spread < 0.20 and effective_action in ("ENTER_LONG", "ENTER_SHORT"):
-        effective_action = "NO_TRADE"
-        thesis = f"[R-002 gate: spread={spread:.2f}<0.20, insufficient evidence] {thesis}"
-        action = "INSUFFICIENT_DATA"
+    # Mechanically enforce R-002: only hard-block entries when spread is truly negligible (<0.10)
+    # Spreads 0.10-0.19 are converted to NO_TRADE (not INSUFFICIENT_DATA) — the agent is uncertain
+    # but not completely unable to assess. Spreads >= 0.20 proceed as decided.
+    if spread is not None and effective_action in ("ENTER_LONG", "ENTER_SHORT"):
+        if spread < 0.10:
+            effective_action = "NO_TRADE"
+            thesis = f"[R-002 hard gate: spread={spread:.2f}<0.10, contradictory signals] {thesis}"
+            action = "INSUFFICIENT_DATA"
+        elif spread < 0.20:
+            effective_action = "NO_TRADE"
+            thesis = f"[R-002 soft gate: spread={spread:.2f}<0.20, insufficient edge] {thesis}"
 
     # R-003: extract risk/reward for audit
     planned_stop = parsed.get("planned_stop")
