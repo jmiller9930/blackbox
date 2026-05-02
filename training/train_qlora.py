@@ -62,10 +62,18 @@ def read_jsonl(path: Path) -> list[dict[str, Any]]:
     return rows
 
 
+def _field_as_chat_text(value: Any) -> str:
+    if value is None:
+        return ""
+    if isinstance(value, (dict, list)):
+        return json.dumps(value, ensure_ascii=False, indent=2)
+    return str(value)
+
+
 def format_example_text(tokenizer: Any, row: dict[str, Any]) -> str:
-    instruction = str(row.get("instruction") or "")
-    inp = str(row.get("input") or "")
-    output = str(row.get("output") or "")
+    instruction = _field_as_chat_text(row.get("instruction"))
+    inp = _field_as_chat_text(row.get("input"))
+    output = _field_as_chat_text(row.get("output"))
     user = f"{instruction}\n\n{inp}".strip()
     messages = [
         {"role": "user", "content": user},

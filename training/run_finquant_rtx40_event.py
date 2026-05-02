@@ -1,0 +1,210 @@
+#!/usr/bin/env python3
+"""
+Unified FinQuant launcher for RTX 40 (trx40): validate corpus → train (optional) → verifier exam.
+
+Typical use (from your Mac: SSH into trx40, attach tmux, then):
+
+  export BLACKBOX_REPO_ROOT=~/blackbox    # or /data/NDE/blackbox
+  export FINQUANT_BASE=/data/NDE/finquant/agentic_v05
+  cd \"$BLACKBOX_REPO_ROOT\"
+  python3 training/test.py --train smoke --adapter adapters/finquant-agentic-v05-smoke
+
+What runs where:
+  * **Execution** is on the GPU host (trx40) inside your SSH/tmux session — not on your laptop.
+  * **Normative final exam JSON** (`final_exam_v1.json`) is checked for placeholder vs populated cases.
+    Today the **graded battery** wired here is `prove_learning/finquant/evals/eval_finquant.py`
+    (verifier-shaped suite). When `final_exam_v1.json` gains non-empty `cases`, a quant runner
+    can be added without changing how you invoke this script.
+
+Recommended data layout on `/data` (FINQUANT_BASE):
+
+  datasets/corpus_v05_agentic_seed.jsonl
+  finquant_memory/exemplar_store.jsonl
+  adapters/<run_name>/
+  reports/
+"""
+from __future__ import annotations
+
+import argparse
+import json
+import os
+import subprocess
+import sys
+from pathlib import Path
+
+
+def _repo_root(cli: Path | None) -> Path:
+    if cli is not None:
+        return cli.expanduser().resolve()
+    env = (os.environ.get("BLACKBOX_REPO_ROOT") or "").strip()
+    if env:
+        return Path(env).expanduser().resolve()
+    return Path.cwd().resolve()
+
+
+def _default_finquant_base() -> Path:
+    env = (os.environ.get("FINQUANT_BASE") or "").strip()
+    if env:
+        return Path(env).expanduser().resolve()
+    return Path("/data/NDE/finquant/agentic_v05")
+
+
+def _default_final_exam(finquant_base: Path) -> Path:
+    env = (os.environ.get("FINQUANT_FINAL_EXAM_JSON") or "").strip()
+    if env:
+        return Path(env).expanduser().resolve()
+    # e.g. FINQUANT_BASE=/data/NDE/finquant/agentic_v05 → .../finquant/eval/
+    sibling = finquant_base.parent / "eval" / "final_exam_v1.json"
+    if sibling.is_file():
+        return sibling
+    return Path("/data/NDE/finquant/eval/final_exam_v1.json")
+
+
+def _announce_final_exam(path: Path, repo_root: Path) -> None:
+    if not path.is_file():
+        print(
+            f"NOTE: final exam JSON not found ({path}). "
+            "Verifier eval still runs; deploy exam JSON under /data when ready.",
+            flush=True,
+        )
+        return
+    try:
+        data = json.loads(path.read_text(encoding="utf-8"))
+    except json.JSONDecodeError as e:
+        print(f"WARN: final exam JSON unreadable ({path}): {e}", flush=True)
+        return
+    cases = data.get("cases") or []
+    if len(cases) == 0:
+        print(
+            f"NOTE: {path} has empty cases (placeholder). "
+            "Training gate for this version = verifier exam (eval_finquant.py).",
+            flush=True,
+        )
+    else:
+        placeholder = repo_root / "nde_factory/layout/finquant/eval/final_exam_v1.json"
+        print(
+            f"NOTE: {path} lists {len(cases)} case(s). "
+            "Quant-exam LLM grading is not wired in this launcher yet; "
+            f"still running verifier battery only. (Repo placeholder: {placeholder})",
+            flush=True,
+        )
+
+
+def main() -> int:
+    ap = argparse.ArgumentParser(description="FinQuant RTX40 unified training + exam launcher")
+    ap.add_argument("--repo-root", type=Path, default=None, help="Blackbox repo (default: BLACKBOX_REPO_ROOT or cwd)")
+    ap.add_argument(
+        "--finquant-base",
+        type=Path,
+        default=None,
+        help="FINQUANT_BASE (default: env or /data/NDE/finquant/agentic_v05)",
+    )
+    ap.add_argument(
+        "--corpus",
+        type=Path,
+        default=None,
+        help="Agentic JSONL (default: FINQUANT_BASE/datasets/corpus_v05_agentic_seed.jsonl)",
+    )
+    ap.add_argument(
+        "--memory-store",
+        type=Path,
+        default=None,
+        help="exemplar_store.jsonl (default: FINQUANT_BASE/finquant_memory/exemplar_store.jsonl)",
+    )
+    ap.add_argument(
+        "--train",
+        choices=("none", "smoke", "full"),
+        default="smoke",
+        help="QLoRA train step (default: smoke)",
+    )
+    ap.add_argument(
+        "--adapter",
+        type=str,
+        default="adapters/finquant-agentic-v05-smoke",
+        help="Adapter dir relative to FINQUANT_BASE (used for exam step)",
+    )
+    ap.add_argument("--config", type=Path, default=None, help="train_qlora YAML (default: training/config_v0.1.yaml)")
+    ap.add_argument("--model", type=str, default="deepseek-ai/DeepSeek-R1-Distill-Qwen-7B", help="Base HF model id")
+    ap.add_argument("--skip-validate", action="store_true")
+    ap.add_argument("--skip-exam", action="store_true")
+    ap.add_argument("--exam-write-report", action="store_true", help="Pass --write-report to eval_finquant.py")
+    ap.add_argument("--final-exam-json", type=Path, default=None, help="Override path announced before exam")
+    ap.add_argument("--eval-max-new-tokens", type=int, default=768)
+    args = ap.parse_args()
+
+    repo = _repo_root(args.repo_root)
+    base = (args.finquant_base or _default_finquant_base()).resolve()
+    corpus = args.corpus or (base / "datasets" / "corpus_v05_agentic_seed.jsonl").resolve()
+    mem = args.memory_store or (base / "finquant_memory" / "exemplar_store.jsonl").resolve()
+    train_py = repo / "training" / "train_qlora.py"
+    validate_py = repo / "training" / "validate_agentic_corpus_v1.py"
+    eval_py = repo / "prove_learning" / "finquant" / "evals" / "eval_finquant.py"
+    cfg = args.config or (repo / "training" / "config_v0.1.yaml")
+
+    for label, p in ("train_qlora.py", train_py), ("validate_agentic_corpus_v1.py", validate_py), ("eval_finquant.py", eval_py):
+        if not p.is_file():
+            print(f"ERROR: missing {label} at {p}", file=sys.stderr)
+            return 2
+
+    env = os.environ.copy()
+    env["FINQUANT_BASE"] = str(base)
+
+    fe = args.final_exam_json or _default_final_exam(base)
+    _announce_final_exam(fe, repo)
+
+    if not args.skip_validate:
+        r = subprocess.run(
+            [sys.executable, str(validate_py), str(corpus), "--store", str(mem)],
+            cwd=str(repo),
+            env=env,
+        )
+        if r.returncode != 0:
+            return r.returncode
+
+    if args.train != "none":
+        cmd = [
+            sys.executable,
+            str(train_py),
+            args.train,
+            "--config",
+            str(cfg),
+            "--dataset",
+            str(corpus),
+            "--base",
+            str(base),
+        ]
+        r = subprocess.run(cmd, cwd=str(repo), env=env)
+        if r.returncode != 0:
+            return r.returncode
+
+    if not args.skip_exam:
+        adapter_resolved = Path(args.adapter)
+        if not adapter_resolved.is_absolute():
+            adapter_resolved = (base / adapter_resolved).resolve()
+        if not adapter_resolved.is_dir():
+            print(f"ERROR: adapter not found: {adapter_resolved}", file=sys.stderr)
+            return 2
+        cmd = [
+            sys.executable,
+            str(eval_py),
+            "--base",
+            str(base),
+            "--model",
+            args.model,
+            "--adapter",
+            str(adapter_resolved),
+            "--max-new-tokens",
+            str(args.eval_max_new_tokens),
+        ]
+        if args.exam_write_report:
+            cmd.append("--write-report")
+        r = subprocess.run(cmd, cwd=str(repo), env=env)
+        if r.returncode != 0:
+            return r.returncode
+
+    print("FINQUANT_RTX40_EVENT_COMPLETE", flush=True)
+    return 0
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())

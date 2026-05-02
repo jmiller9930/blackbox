@@ -3,11 +3,13 @@
 Validate finquant_agentic_qa_v1 JSONL rows against PROJECT_REQUISITES rules.
 
   python3 training/validate_agentic_corpus_v1.py [path.jsonl]
+  python3 training/validate_agentic_corpus_v1.py --corpus /data/.../corpus.jsonl --store /data/.../exemplar_store.jsonl
 
-Defaults to training/corpus_v05_agentic_seed.jsonl.
+Defaults to training/corpus_v05_agentic_seed.jsonl and repo memory store.
 """
 from __future__ import annotations
 
+import argparse
 import json
 import sys
 from pathlib import Path
@@ -107,12 +109,28 @@ def validate_row(row: dict, memory_ids: set[str], path: str, line_no: int) -> li
 def main() -> int:
     repo_training = Path(__file__).resolve().parent
     default_jsonl = repo_training / "corpus_v05_agentic_seed.jsonl"
-    target = Path(sys.argv[1]).expanduser() if len(sys.argv) > 1 else default_jsonl
+    default_store = repo_training / "finquant_memory" / "exemplar_store.jsonl"
+
+    ap = argparse.ArgumentParser(description="Validate finquant_agentic_qa_v1 JSONL")
+    ap.add_argument(
+        "corpus",
+        nargs="?",
+        type=Path,
+        default=default_jsonl,
+        help="JSONL corpus path",
+    )
+    ap.add_argument("--store", type=Path, default=None, help="exemplar_store.jsonl path")
+    args = ap.parse_args()
+    target = args.corpus
+    target = target.expanduser().resolve()
     if not target.is_file():
         _fail(f"file not found: {target}")
         return 2
 
-    store_path = repo_training / "finquant_memory" / "exemplar_store.jsonl"
+    store_path = (args.store or default_store).expanduser().resolve()
+    if not store_path.is_file():
+        _fail(f"memory store not found: {store_path}")
+        return 2
     memory_ids = set(load_store(store_path).keys())
 
     all_errs: list[str] = []

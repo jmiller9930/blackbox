@@ -57,4 +57,15 @@ Model narrative must treat breakeven win rate as \(1 / (1 + R)\) for reward:risk
 
 - File: `training/corpus_v05_agentic_seed.jsonl` (authoritative examples).
 - Memory store: `training/finquant_memory/exemplar_store.jsonl`.
-- Validator: `python3 training/validate_agentic_corpus_v1.py`.
+- Validator: `python3 training/validate_agentic_corpus_v1.py [corpus.jsonl] [--store path]`.
+
+## RTX 40 launcher (SSH / tmux)
+
+One entry point on the GPU host after `cd` to repo root:
+
+- `python3 training/test.py --help` (alias)
+- `python3 training/run_finquant_rtx40_event.py --help`
+
+Flow: validate agentic corpus → optional QLoRA (`--train smoke|full|none`) → **verifier exam** via `prove_learning/finquant/evals/eval_finquant.py`. Normative `final_exam_v1.json` is **announced** (`FINQUANT_FINAL_EXAM_JSON` or `/data/NDE/finquant/eval/final_exam_v1.json`); when `cases` is non-empty, quant LLM grading can be added later without renaming the launcher.
+
+Suggested `/data` layout under `FINQUANT_BASE` (e.g. `/data/NDE/finquant/agentic_v05`): `datasets/`, `finquant_memory/`, `adapters/`, `reports/`.
