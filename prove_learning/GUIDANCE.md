@@ -113,5 +113,36 @@ Expected: cycle 1 win_rate=62.5% (baseline). Memory must beat this.
 
 ---
 
+## Infrastructure available
+
+### Data
+- **SQLite market database** — `jmiller@172.20.2.151:/home/jmiller/blackbox/data/sqlite/market_data.db`
+  - Table: `market_bars_5m` — SOL-PERP, 5m bars from Pyth ingest
+  - 7,250+ bars covering April–May 2026 (growing live)
+  - Columns: `candle_open_utc`, `open`, `high`, `low`, `close`, `tick_count`, `volume_base`
+  - Note: `volume_base` is NULL — `tick_count` is the volume proxy (unreliable, see Problem 3)
+
+- **Extended Pyth / BTC data** — 24+ months available on clawbot
+  - Access via same DB or separate tables — confirm schema before use
+  - Use the `market_data_bridge.py` to roll up to any timeframe and generate lifecycle cases
+
+### Compute / LLM
+- **Local LLM host**: `jmiller@172.20.2.230` — Ollama running Qwen 2.5 7B
+  - Ollama URL: `http://172.20.2.230:11434`
+  - Model: `qwen2.5:7b`
+  - Timeout: 30s, max tokens: 400
+
+- **Lab execution host**: `vanayr@172.20.1.66` (trx40)
+  - Repo at `/home/vanayr/blackbox`
+  - Runs training loops, bridge generation, test suite
+  - Access via SSH from local Mac
+
+### Access pattern
+- Edit code locally → `git push` → `git pull` on trx40 → run on trx40
+- LLM calls from trx40 → Ollama at `172.20.2.230:11434`
+- Read-only access to clawbot DB when needed for extended data
+
+---
+
 **Last updated:** 2026-05-02  
 **Status:** Working on Fix 1 — quality gate on retrieval
