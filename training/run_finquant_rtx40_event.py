@@ -65,6 +65,17 @@ def _default_corpus_path(repo: Path, base: Path) -> Path:
     return primary
 
 
+def _default_memory_store_path(repo: Path, base: Path) -> Path:
+    """Prefer FINQUANT_BASE copy; fall back to repo exemplar store (validator needs memory_id sets)."""
+    primary = (base / "finquant_memory" / "exemplar_store.jsonl").resolve()
+    if primary.is_file():
+        return primary
+    shipped = (repo / "training" / "finquant_memory" / "exemplar_store.jsonl").resolve()
+    if shipped.is_file():
+        return shipped
+    return primary
+
+
 def _default_final_exam(finquant_base: Path) -> Path:
     env = (os.environ.get("FINQUANT_FINAL_EXAM_JSON") or "").strip()
     if env:
@@ -161,7 +172,10 @@ def main() -> int:
         "--memory-store",
         type=Path,
         default=None,
-        help="exemplar_store.jsonl (default: FINQUANT_BASE/finquant_memory/exemplar_store.jsonl)",
+        help=(
+            "exemplar_store.jsonl (default: FINQUANT_BASE/finquant_memory/exemplar_store.jsonl if present, "
+            "else repo training/finquant_memory/exemplar_store.jsonl)"
+        ),
     )
     ap.add_argument(
         "--train",
@@ -230,7 +244,23 @@ def main() -> int:
                 f"NOTE: corpus not found under FINQUANT_BASE ({primary}); using repo seed {corpus}",
                 flush=True,
             )
-    mem = args.memory_store or (base / "finquant_memory" / "exemplar_store.jsonl").resolve()
+    primary_mem = (base / "finquant_memory" / "exemplar_store.jsonl").resolve()
+    shipped_mem = (repo / "training" / "finquant_memory" / "exemplar_store.jsonl").resolve()
+    if args.memory_store is not None:
+        mem = args.memory_store.expanduser().resolve()
+        if not mem.is_file() and mem == primary_mem and shipped_mem.is_file():
+            print(
+                f"NOTE: memory store not found under FINQUANT_BASE ({primary_mem}); using repo store {shipped_mem}",
+                flush=True,
+            )
+            mem = shipped_mem
+    else:
+        mem = _default_memory_store_path(repo, base)
+        if mem != primary_mem and mem.is_file():
+            print(
+                f"NOTE: memory store not found under FINQUANT_BASE ({primary_mem}); using repo store {mem}",
+                flush=True,
+            )
     train_py = repo / "training" / "train_qlora.py"
     validate_py = repo / "training" / "validate_agentic_corpus_v1.py"
     env_eval = (os.environ.get("FINQUANT_VERIFIER_EVAL_PY") or "").strip()
