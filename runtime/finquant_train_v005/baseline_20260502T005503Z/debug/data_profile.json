@@ -1,0 +1,9 @@
+{
+  "symbol": "SOL-PERP",
+  "rows_total_in_table": 7244,
+  "rows_for_symbol": 7244,
+  "first_ts_utc": "2026-04-03T00:30:00Z",
+  "last_ts_utc": "2026-05-02T00:30:00Z",
+  "vol_warnings": 6568,
+  "vol_column": "volume_base"
+}

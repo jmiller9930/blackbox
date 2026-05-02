@@ -1,0 +1,68 @@
+{
+  "schema_version": "finquant_baseline_v0.05",
+  "run_started_utc": "2026-05-02T00:55:03Z",
+  "run_finished_utc": "2026-05-02T01:42:32Z",
+  "host": "trx40",
+  "repo_path": "/home/vanayr/blackbox",
+  "db_path": "/home/vanayr/blackbox/data/sqlite/market_data.db",
+  "table": "market_bars_5m",
+  "symbol": "SOL-PERP",
+  "data_profile": {
+    "symbol": "SOL-PERP",
+    "rows_total_in_table": 7244,
+    "rows_for_symbol": 7244,
+    "first_ts_utc": "2026-04-03T00:30:00Z",
+    "last_ts_utc": "2026-05-02T00:30:00Z",
+    "vol_warnings": 6568,
+    "vol_column": "volume_base"
+  },
+  "bars_15m_count": 2413,
+  "ollama_url": "http://172.20.2.230:11434",
+  "model": "deepseek-r1:14b",
+  "cases_total": 100,
+  "smoke": false,
+  "thresholds": {
+    "schema": 0.98,
+    "leakage_max": 0,
+    "risk": 0.95,
+    "learning": 0.95
+  },
+  "metrics": {
+    "schema_valid_rate": 0.07,
+    "future_leakage_count": 3,
+    "risk_reasoning_rate": 1.0,
+    "no_trade_quality_rate": 0.79,
+    "learning_record_valid_rate": 0.52,
+    "decision_distribution": {
+      "ENTER": 0,
+      "NO_TRADE": 100,
+      "OTHER": 0
+    }
+  },
+  "category_distribution": {
+    "clean_long_continuation": 7,
+    "clean_short_continuation": 8,
+    "range_chop": 13,
+    "false_breakout": 9,
+    "failed_breakdown": 4,
+    "high_volatility_trap": 13,
+    "low_volatility_dead_zone": 0,
+    "conflicting_indicators": 0,
+    "good_trade_that_loses": 17,
+    "bad_trade_that_wins": 11,
+    "missed_opportunity": 18
+  },
+  "failure_buckets": {
+    "bad_enum": 5,
+    "invalid_learning_record": 48,
+    "missing_risk_plan": 93,
+    "future_leakage_language": 3
+  },
+  "readiness_classification": "BASELINE_BLOCKED_BY_SCHEMA_OR_LEARNING_RECORDS",
+  "no_training_performed": true,
+  "read_only_db_access": true,
+  "wrote_only_under_run_dir": true,
+  "consistency_scoring_in_scope": false,
+  "directive_revision": "2026-05-01_determinism_descoped",
+  "final_line": "FINQUANT_V005_BASELINE_MEASURED_NO_TRAINING_PERFORMED"
+}

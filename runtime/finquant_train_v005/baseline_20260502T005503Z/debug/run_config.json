@@ -1,0 +1,18 @@
+{
+  "db": "data/sqlite/market_data.db",
+  "table": "market_bars_5m",
+  "symbol": null,
+  "ollama_url": "http://172.20.2.230:11434",
+  "model": "deepseek-r1:14b",
+  "cases": 100,
+  "lookback": 96,
+  "hidden": 16,
+  "temperature": 0.0,
+  "top_p": 1.0,
+  "num_predict": 2400,
+  "timeout": 300,
+  "smoke": false,
+  "seed": 20260501,
+  "out": "runtime/finquant_train_v005",
+  "repo_root": "/home/vanayr/blackbox"
+}
