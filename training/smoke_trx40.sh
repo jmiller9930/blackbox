@@ -34,7 +34,11 @@ else
   source "$FINQUANT_VENV/bin/activate"
 
   cd "$BLACKBOX_REPO_ROOT"
-  git pull origin main
+  if [[ "${FINQUANT_SKIP_GIT_PULL:-0}" != "1" ]]; then
+    git pull origin main
+  else
+    echo "[finquant] FINQUANT_SKIP_GIT_PULL=1 — skipping git pull"
+  fi
   pip install -r training/requirements-finquant-training.txt
 fi
 

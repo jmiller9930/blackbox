@@ -91,7 +91,7 @@ Suggested `/data` layout under `FINQUANT_BASE` (e.g. `/data/NDE/finquant/agentic
 `python3 -m venv /data/NDE/finquant/.venv-finquant` → `source .../bin/activate` →  
 `pip install -r training/requirements-finquant-training.txt` from the repo root, then run `python3 training/test.py`.
 
-**One script (on trx40 after SSH):** `bash training/smoke_trx40.sh` — creates venv if missing, `git pull`, installs deps, runs smoke (set `BLACKBOX_REPO_ROOT` / `FINQUANT_BASE` / `USE_REPO_CORPUS=1` if needed).
+**One script (on trx40 after SSH):** `bash training/smoke_trx40.sh` — creates venv if missing, `git pull`, installs deps, runs smoke (set `BLACKBOX_REPO_ROOT` / `FINQUANT_BASE` / `USE_REPO_CORPUS=1` if needed). If a dirty tree blocks pulls during iteration, set **`FINQUANT_SKIP_GIT_PULL=1`** once you’re on the right commit.
 
 ### Docker / GPU container (optional housekeeping)
 
