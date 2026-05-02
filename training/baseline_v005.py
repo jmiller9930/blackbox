@@ -52,7 +52,7 @@ from urllib import request as urlrequest
 
 SCHEMA_VERSION = "finquant_baseline_v0.05"
 RUN_TAG = "finquant_train_v005"
-DEFAULT_OUT_DIR = "training/runs"
+DEFAULT_OUT_DIR = os.environ.get("BLACKBOX_FINQUANT_RUNS_DIR", "training/runs")
 
 REQUIRED_TOP_FIELDS = (
     "schema_version",
