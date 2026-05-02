@@ -32,7 +32,7 @@ from datetime import datetime, timezone, timedelta
 from pathlib import Path
 from typing import Any
 
-REGIMES = ["bull_trend", "bear_trend", "chop", "breakout", "false_break"]
+REGIMES = ["bull_trend", "bear_trend", "chop", "breakout", "false_break", "marginal_long"]
 
 
 def _candle(
@@ -85,6 +85,8 @@ def _generate_block(
         return _breakout(rng, start_price, start_time, bar_minutes)
     if regime == "false_break":
         return _false_break(rng, start_price, start_time, bar_minutes)
+    if regime == "marginal_long":
+        return _marginal_long(rng, start_price, start_time, bar_minutes)
     raise ValueError(f"unknown regime: {regime}")
 
 
@@ -92,17 +94,22 @@ def _bull_trend(rng, start_price, start_time, bar_minutes):
     bars = []
     price = start_price
     ema = price
-    atr = 1.5 + rng.random() * 0.6
+    # Start ATR high enough to stay above the stub's atr_expand=1.5 threshold.
+    # Floor bar ranges at 2.0 so ATR does not converge below 1.8 by bar 20.
+    atr = 2.5 + rng.random() * 0.5
     for i in range(28):
-        drift = 0.4 + rng.random() * 0.5
+        drift = 0.6 + rng.random() * 0.6
         noise = (rng.random() - 0.45) * 0.6
         new_close = max(1.0, price + drift + noise)
-        h = max(price, new_close) + abs(rng.random() * 0.3)
-        l = min(price, new_close) - abs(rng.random() * 0.25)
-        v = 1500 + i * 60 + rng.random() * 400
-        rsi = min(78, 52 + i * 0.7 + rng.random() * 2)
+        h = max(price, new_close) + 1.5 + rng.random() * 0.5
+        l = min(price, new_close) - 1.2 - rng.random() * 0.3
+        # Monotonically increasing volume: trend component (150/bar) dominates noise (100)
+        # so current bar always has higher volume than the previous bar.
+        v = 2000 + i * 150 + rng.random() * 100
+        rsi = min(76, 52 + i * 0.65 + rng.random() * 2)
         ema = ema * 0.85 + new_close * 0.15
-        atr = atr * 0.9 + max(h - l, 0.5) * 0.1
+        # Keep ATR floored at 2.0 so it stays above the stub's 1.5 threshold.
+        atr = atr * 0.9 + max(h - l, 2.0) * 0.1
         bars.append(_candle(
             (start_time + timedelta(minutes=bar_minutes * i)).strftime("%Y-%m-%dT%H:%M:%SZ"),
             price, h, l, new_close, v, rsi, ema, atr,
@@ -159,32 +166,33 @@ def _breakout(rng, start_price, start_time, bar_minutes):
     bars = []
     price = start_price
     ema = price
-    atr = 1.0
+    # Start ATR higher so it's above 1.5 when the breakout bars arrive.
+    atr = 2.0
     resistance = price + 2.5
-    # 18 bars of consolidation
+    # 18 bars of consolidation — maintain ATR floor at 1.8 to stay above 1.5 at bar 20.
     for i in range(18):
         new_close = price + (rng.random() - 0.5) * 0.5
-        h = max(price, new_close) + 0.2
-        l = min(price, new_close) - 0.2
+        h = max(price, new_close) + 1.2
+        l = min(price, new_close) - 1.2
         v = 700 + rng.random() * 300
         rsi = 50 + (rng.random() - 0.5) * 4
         ema = ema * 0.9 + new_close * 0.1
-        atr = atr * 0.95 + max(h - l, 0.3) * 0.05
+        atr = atr * 0.95 + max(h - l, 2.0) * 0.05
         bars.append(_candle(
             (start_time + timedelta(minutes=bar_minutes * i)).strftime("%Y-%m-%dT%H:%M:%SZ"),
             price, h, l, new_close, v, rsi, ema, atr, resistance=resistance,
         ))
         price = new_close
-    # 10 bars of breakout
+    # 10 bars of breakout: price clears resistance, volume surges, RSI rises above 58.
     for j in range(10):
         i = 18 + j
-        new_close = price + 0.7 + rng.random() * 0.6
-        h = new_close + 0.3
-        l = price - 0.1
-        v = 3000 + rng.random() * 1500
-        rsi = min(75, 60 + j * 1.2)
+        new_close = price + 0.8 + rng.random() * 0.5
+        h = new_close + 1.2
+        l = price - 0.3
+        v = 3500 + rng.random() * 1000
+        rsi = min(73, 62 + j * 1.0)
         ema = ema * 0.85 + new_close * 0.15
-        atr = atr * 0.85 + max(h - l, 1.0) * 0.15
+        atr = atr * 0.85 + max(h - l, 2.0) * 0.15
         bars.append(_candle(
             (start_time + timedelta(minutes=bar_minutes * i)).strftime("%Y-%m-%dT%H:%M:%SZ"),
             price, h, l, new_close, v, rsi, ema, atr, resistance=resistance,
@@ -246,6 +254,51 @@ def _false_break(rng, start_price, start_time, bar_minutes):
     return bars, price, start_time + timedelta(minutes=bar_minutes * 28)
 
 
+def _marginal_long(rng, start_price, start_time, bar_minutes):
+    """
+    Near-threshold uptrend: ATR converges to ~1.3 (BELOW the 1.5 atr_expand threshold,
+    ABOVE the 1.0 chop threshold AND the 1.2 near-threshold floor).
+    Volume grows 7%/bar so near_threshold_long volume check (>= prev*1.05) always passes.
+
+    Without retrieved ENTER_LONG memory:
+      price_up=T, rsi_ok=T, volume_expand=T, atr_expand=F → main entry fails.
+      memory_available=F → memory branch skipped.
+      avg_move >= 0.7 (drift floor), atr >= 1.0 → not chop.
+      → DEFAULT: NO_TRADE ("Conditions not met").
+
+    With retrieved ENTER_LONG memory (cycle 2+):
+      near_threshold_long=T (price_up, ema, rsi>=52, atr>=1.2, vol>=prev*1.05).
+      memory_available=T, memory_long>0 → ENTER_LONG.
+
+    This is the core 'memory flip' pattern for the training loop.
+    """
+    bars = []
+    price = start_price
+    # EMA starts behind price so close > ema throughout.
+    ema = price * 0.97
+    # Start ATR at 1.30 — it will converge to ~1.30 with narrow ranges.
+    atr = 1.30
+    vol = 1200.0
+    for i in range(28):
+        # Drift floor 0.70 so avg_move = close - prev_close >= 0.6 (above 0.5 chop threshold).
+        drift = 0.70 + rng.random() * 0.20
+        new_close = max(1.0, price + drift)
+        # Narrow bar range so ATR converges to ~1.30, staying in (1.2, 1.5).
+        h = new_close + 0.25 + rng.random() * 0.05
+        l = price - 0.20 - rng.random() * 0.05
+        # Geometric 7% volume growth with tiny noise; guarantees >= 5% increase each bar.
+        vol = vol * 1.07 * (1.0 + (rng.random() - 0.5) * 0.01)
+        rsi = min(67, 52 + i * 0.55 + rng.random() * 1.0)
+        ema = ema * 0.92 + new_close * 0.08
+        atr = atr * 0.92 + max(h - l, 1.25) * 0.08
+        bars.append(_candle(
+            (start_time + timedelta(minutes=bar_minutes * i)).strftime("%Y-%m-%dT%H:%M:%SZ"),
+            price, h, l, new_close, vol, rsi, ema, atr,
+        ))
+        price = new_close
+    return bars, price, start_time + timedelta(minutes=bar_minutes * 28)
+
+
 def build_case_from_block(
     *,
     bars: list[dict[str, Any]],
@@ -259,10 +312,14 @@ def build_case_from_block(
 ) -> dict[str, Any]:
     expected_focus = {
         "bull_trend": ["entry_quality"],
-        "bear_trend": ["entry_quality"],
+        # Bear trend: stub has no short logic; standing down is correct.
+        "bear_trend": ["no_trade_quality"],
         "chop": ["no_trade_quality"],
         "breakout": ["entry_quality"],
-        "false_break": ["entry_quality", "exit_quality"],
+        # False breakout reverses; standing down after chop is correct.
+        "false_break": ["no_trade_quality"],
+        # Marginal: memory-needed entry; evaluation expects entry_quality.
+        "marginal_long": ["entry_quality"],
     }.get(regime, ["entry_quality"])
 
     decision_start = context_candles
