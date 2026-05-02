@@ -26,8 +26,10 @@ if [[ "$CONTAINER_MODE" == "1" ]]; then
   cd "${BLACKBOX_REPO_ROOT}"
   echo "[finquant] container mode: using image Python (no venv / no pip install / no git pull)"
 else
-  if [[ ! -d "$FINQUANT_VENV" ]]; then
-    echo "Creating venv at $FINQUANT_VENV"
+  mkdir -p "$(dirname "$FINQUANT_VENV")"
+  if [[ ! -f "$FINQUANT_VENV/bin/activate" ]]; then
+    echo "Creating or repairing venv at $FINQUANT_VENV (missing bin/activate)"
+    rm -rf "$FINQUANT_VENV"
     python3 -m venv "$FINQUANT_VENV"
   fi
   # shellcheck source=/dev/null
