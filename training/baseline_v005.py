@@ -1,21 +1,23 @@
 #!/usr/bin/env python3
 """FINQUANT Train v0.05 — Baseline Certification Harness.
 
-Implements ``finquant/training/FINQUANT_TRAIN_V005_BASELINE_SPEC.md``.
+Implements ``training/FINQUANT_TRAIN_V005_BASELINE_SPEC.md``.
 
-Workspace consolidation (operator directive 2026-05-02): all FinQuant
-training-arc work lives under ``finquant/training/``. Harness path is
-``finquant/training/baseline_v005.py`` and run outputs go to
-``finquant/training/runs/baseline_<ts>/``. This intentionally deviates
-from the literal paths named in the spec (``tools/finquant/...`` and
-``runtime/finquant_train_v005/...``) to keep the FinQuant arc in one
-folder.
+Workspace isolation (operator directive 2026-05-02, post-restructure
+commit 5b35790): all FinQuant training-arc work lives under
+``training/`` at the repo root. Harness is ``training/baseline_v005.py``,
+run outputs go to ``training/runs/baseline_<ts>/``. This intentionally
+deviates from the literal paths named in the spec (``tools/finquant/...``
+and ``runtime/finquant_train_v005/...``) so the FinQuant arc is one
+isolated folder. The unified-agent-lab learning loop work lives in
+``prove_learning/finquant/unified/agent_lab/`` and is OUT OF SCOPE
+for this harness.
 
 Hard rules enforced:
   * SQLite opened read-only (URI mode=ro).
   * No writes to production DBs / execution ledger / policy / dashboard.
   * No model training, no DPO, no weight mutation.
-  * Writes only under the run directory (default ``finquant/training/runs``).
+  * Writes only under the run directory (default ``training/runs``).
   * Final line on success: ``FINQUANT_V005_BASELINE_MEASURED_NO_TRAINING_PERFORMED``.
 
 Phase banners: PHASE_01_DATA_LOAD .. PHASE_07_REPORT_WRITE.
@@ -50,7 +52,7 @@ from urllib import request as urlrequest
 
 SCHEMA_VERSION = "finquant_baseline_v0.05"
 RUN_TAG = "finquant_train_v005"
-DEFAULT_OUT_DIR = "finquant/training/runs"
+DEFAULT_OUT_DIR = "training/runs"
 
 REQUIRED_TOP_FIELDS = (
     "schema_version",
