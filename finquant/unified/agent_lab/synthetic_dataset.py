@@ -349,12 +349,15 @@ def generate_dataset(
     case_count: int = 60,
     seed: int = 1729,
     symbol: str = "BTC-PERP",
+    start_price: float | None = None,
 ) -> dict[str, Any]:
     rng = random.Random(seed)
     out_dir.mkdir(parents=True, exist_ok=True)
 
     start_time = datetime(2024, 1, 1, 0, 0, 0, tzinfo=timezone.utc)
-    price = 42000.0
+    # Default start price: 100 so ATR values (2-4) are 2-4% of price —
+    # compatible with the price-relative ATR thresholds in lifecycle_engine.
+    price = start_price if start_price is not None else 100.0
 
     cases: list[dict[str, Any]] = []
     paths: list[str] = []
@@ -385,6 +388,7 @@ def generate_dataset(
         "symbol": symbol,
         "case_count": case_count,
         "seed": seed,
+        "start_price_v1": price,
         "regime_counts_v1": regime_counts,
         "case_paths_v1": paths,
         "out_dir": str(out_dir),
@@ -401,6 +405,8 @@ def main() -> None:
     parser.add_argument("--case-count", type=int, default=60, help="Number of cases to generate")
     parser.add_argument("--seed", type=int, default=1729, help="Deterministic RNG seed")
     parser.add_argument("--symbol", default="BTC-PERP")
+    parser.add_argument("--start-price", type=float, default=None,
+                        help="Starting price for synthetic bars (default 100.0)")
     args = parser.parse_args()
 
     manifest = generate_dataset(
@@ -408,6 +414,7 @@ def main() -> None:
         case_count=args.case_count,
         seed=args.seed,
         symbol=args.symbol,
+        start_price=args.start_price,
     )
     print(json.dumps({
         "case_count": manifest["case_count"],
