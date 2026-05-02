@@ -4,11 +4,25 @@
 
 ---
 
+## Mission
+
+Build an autonomous trading and LLM intelligence system focused on **FinQuant** and **crypto markets**.
+
+**No novel or unknown methods without agreement.** Standard, proven industry practices are required.
+
+The system must demonstrate a **productive learning loop** that:
+- Uses memory and context to exercise judgment
+- Shows a **positive change in trade outcomes** over time
+- Uses **pattern recognition** as the primary learning mechanism (unless research shows a better approach)
+- Manages risk: losses can be greater in number so long as they are **financially smaller than wins** (positive expectancy)
+- Risk management is preferred over raw win rate
+
+---
+
 ## What this folder is
 
 A self-contained lab that proves a learning module can work.
 
-That is the only goal. Not a trading system. Not an agent platform. Not a demo.
 **Prove that an agent can learn from its own decisions and measurably improve.**
 
 ---
@@ -43,7 +57,7 @@ Learning is proven when:
 - At least one pattern promoted past candidate
 - At least one decision changed because of retrieved memory
 
-Currently: baseline (no memory) = **62.5% win rate**. Memory must beat that to prove learning.
+Currently: baseline (no memory) = **62.5% win rate, positive PnL**. Memory must demonstrate **positive expectancy** — wins financially larger than losses — to prove learning. Win count alone is not sufficient.
 
 ---
 
@@ -79,13 +93,16 @@ Currently: baseline (no memory) = **62.5% win rate**. Memory must beat that to p
 
 ## Rules for working
 
-1. Read this document at the start of every session
+1. **Read this document at the start of every session**
 2. State which problem from the fix list is being worked on before writing code
-3. Run tests after every change — 129 must pass before committing
-4. Run the training loop on real data after every significant change
-5. If the result does not improve, diagnose before moving to the next fix
-6. Never claim PASS unless win rate with memory beats 62.5% baseline
-7. Do not build new features until current broken things are fixed
+3. **No novel or unknown methods without agreement** — use standard proven practices
+4. Run tests after every change — all must pass before committing
+5. Run the training loop on real data after every significant change
+6. **If tests fail or goal is not met: isolate the fault, recode, retest in a loop**
+7. Do not move to the next fix until the current one is proven
+8. Never claim PASS unless positive expectancy (wins financially larger than losses) is demonstrated
+9. Do not build new features until current broken things are fixed
+10. **Risk management takes priority** — losses smaller than wins in dollar terms, not just count
 
 ---
 
@@ -116,7 +133,8 @@ Expected: cycle 1 win_rate=62.5% (baseline). Memory must beat this.
 ## Infrastructure available
 
 ### Data
-- **SQLite market database** — `jmiller@172.20.2.151:/home/jmiller/blackbox/data/sqlite/market_data.db`
+- **Primary clawbot host**: `jmiller@clawbot.a51.corp`
+- **SQLite market database** — `/home/jmiller/blackbox/data/sqlite/market_data.db`
   - Table: `market_bars_5m` — SOL-PERP, 5m bars from Pyth ingest
   - 7,250+ bars covering April–May 2026 (growing live)
   - Columns: `candle_open_utc`, `open`, `high`, `low`, `close`, `tick_count`, `volume_base`
