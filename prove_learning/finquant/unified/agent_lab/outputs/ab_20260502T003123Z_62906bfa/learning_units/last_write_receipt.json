@@ -1,7 +1,0 @@
-{
-  "last_event_v1": "observation",
-  "pattern_id_v1": "d57683cd89c4f562",
-  "at_v1": "2026-05-02T00:31:23Z",
-  "events_path_v1": "finquant/unified/agent_lab/outputs/ab_20260502T003123Z_62906bfa/learning_units/events.jsonl",
-  "byte_size_v1": 67900
-}

@@ -130,3 +130,10 @@ finquant/datasets/*.jsonl
 finquant/datasets/staging/
 finquant/sources/
 finquant/adapters/
+
+# FinQuant agent_lab run outputs (host-local; blocks git pull when tracked/modified)
+prove_learning/finquant/unified/agent_lab/outputs/**
+!prove_learning/finquant/unified/agent_lab/outputs/.gitkeep
+# Alternate checkout layout seen on some lab hosts
+finquant/unified/agent_lab/outputs/**
+!finquant/unified/agent_lab/outputs/.gitkeep

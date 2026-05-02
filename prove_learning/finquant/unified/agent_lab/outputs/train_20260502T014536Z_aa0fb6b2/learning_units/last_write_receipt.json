@@ -1,7 +1,0 @@
-{
-  "last_event_v1": "observation",
-  "pattern_id_v1": "a6a5df820068c174",
-  "at_v1": "2026-05-02T01:45:36Z",
-  "events_path_v1": "/Users/bigmac/Documents/code_projects/blackbox/finquant/unified/agent_lab/outputs/train_20260502T014536Z_aa0fb6b2/learning_units/events.jsonl",
-  "byte_size_v1": 105354
-}
