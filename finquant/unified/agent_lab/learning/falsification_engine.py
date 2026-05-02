@@ -22,6 +22,119 @@ from __future__ import annotations
 
 from typing import Any
 
+from .outcome_simulator import simulate_outcome
+
+
+def falsify_with_simulation(
+    *,
+    proposed_action: str,
+    case: dict[str, Any],
+    horizon_bars: int = 5,
+) -> dict[str, Any]:
+    """
+    Engineering-grade falsification using the outcome simulator.
+
+    Returns:
+      {
+        "verdict_v1": "confirmed" | "rejected" | "inconclusive",
+        "verdict_reason_v1": str,
+        "outcome_v1": "win" | "loss" | "no_trade",
+        "outcome_kind_v1": "win" | "loss" | "no_trade_correct" | "no_trade_missed",
+        "pnl_v1": float,
+        "pnl_pct_v1": float,
+        "simulation_v1": {<full simulator output>}
+      }
+    """
+    sim = simulate_outcome(
+        proposed_action=proposed_action,
+        case=case,
+        horizon_bars=horizon_bars,
+    )
+
+    pnl = float(sim.get("pnl_v1", 0.0))
+    sim_outcome = str(sim.get("outcome_v1", "no_trade"))
+    no_trade_correct = sim.get("no_trade_correct_v1")
+
+    if proposed_action == "NO_TRADE":
+        if no_trade_correct is True:
+            return {
+                "verdict_v1": "confirmed",
+                "verdict_reason_v1": "Stand-down was correct: no significant move occurred.",
+                "outcome_v1": "no_trade",
+                "outcome_kind_v1": "no_trade_correct",
+                "pnl_v1": 0.0,
+                "pnl_pct_v1": 0.0,
+                "simulation_v1": sim,
+            }
+        if no_trade_correct is False:
+            return {
+                "verdict_v1": "rejected",
+                "verdict_reason_v1": "Missed opportunity: market moved beyond ATR threshold.",
+                "outcome_v1": "no_trade",
+                "outcome_kind_v1": "no_trade_missed",
+                "pnl_v1": 0.0,
+                "pnl_pct_v1": 0.0,
+                "simulation_v1": sim,
+            }
+        return {
+            "verdict_v1": "inconclusive",
+            "verdict_reason_v1": "NO_TRADE outcome could not be assessed.",
+            "outcome_v1": "no_trade",
+            "outcome_kind_v1": "",
+            "pnl_v1": 0.0,
+            "pnl_pct_v1": 0.0,
+            "simulation_v1": sim,
+        }
+
+    if proposed_action in ("ENTER_LONG", "ENTER_SHORT"):
+        if sim_outcome == "win":
+            return {
+                "verdict_v1": "confirmed",
+                "verdict_reason_v1": (
+                    f"{proposed_action} hit target (+{pnl:.4f})"
+                    if sim.get("hit_target_v1")
+                    else f"{proposed_action} closed positive at horizon (+{pnl:.4f})"
+                ),
+                "outcome_v1": "win",
+                "outcome_kind_v1": "win",
+                "pnl_v1": round(pnl, 6),
+                "pnl_pct_v1": round(float(sim.get("pnl_pct_v1", 0.0)), 6),
+                "simulation_v1": sim,
+            }
+        if sim_outcome == "loss":
+            return {
+                "verdict_v1": "rejected",
+                "verdict_reason_v1": (
+                    f"{proposed_action} hit stop ({pnl:.4f})"
+                    if sim.get("hit_stop_v1")
+                    else f"{proposed_action} closed negative at horizon ({pnl:.4f})"
+                ),
+                "outcome_v1": "loss",
+                "outcome_kind_v1": "loss",
+                "pnl_v1": round(pnl, 6),
+                "pnl_pct_v1": round(float(sim.get("pnl_pct_v1", 0.0)), 6),
+                "simulation_v1": sim,
+            }
+        return {
+            "verdict_v1": "inconclusive",
+            "verdict_reason_v1": f"{proposed_action} outcome neutral (pnl={pnl:.4f}).",
+            "outcome_v1": sim_outcome,
+            "outcome_kind_v1": "",
+            "pnl_v1": round(pnl, 6),
+            "pnl_pct_v1": round(float(sim.get("pnl_pct_v1", 0.0)), 6),
+            "simulation_v1": sim,
+        }
+
+    return {
+        "verdict_v1": "inconclusive",
+        "verdict_reason_v1": f"{proposed_action} not independently simulatable.",
+        "outcome_v1": "no_trade",
+        "outcome_kind_v1": "",
+        "pnl_v1": 0.0,
+        "pnl_pct_v1": 0.0,
+        "simulation_v1": sim,
+    }
+
 
 def _outcome_close_change(case: dict[str, Any]) -> tuple[float | None, float | None]:
     """Return (entry_close, last_outcome_close)."""

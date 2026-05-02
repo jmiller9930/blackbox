@@ -33,7 +33,8 @@ def main() -> None:
     parser = argparse.ArgumentParser(description="FinQuant operator-readable report")
     parser.add_argument("--test-run", type=str, help="Path to a test_run_* output directory")
     parser.add_argument("--cycle-dir", type=str, help="Path to a single cycle_* directory")
-    parser.add_argument("--latest", action="store_true", help="Read the most recent test run from outputs/")
+    parser.add_argument("--ab-cycle-dir", type=str, help="Path to an ab_* (Run A/B) cycle directory")
+    parser.add_argument("--latest", action="store_true", help="Read the most recent test run or ab cycle")
     parser.add_argument(
         "--output-dir",
         type=str,
@@ -43,11 +44,18 @@ def main() -> None:
     args = parser.parse_args()
 
     if args.latest:
+        ab_dir = _find_latest_ab_cycle(args.output_dir)
+        if ab_dir:
+            _print_ab_report(ab_dir)
+            return
         run_dir = _find_latest_test_run(args.output_dir)
         if not run_dir:
-            print("No test runs found in", args.output_dir)
+            print("No test runs or AB cycles found in", args.output_dir)
             sys.exit(1)
         _print_test_run_report(run_dir)
+
+    elif args.ab_cycle_dir:
+        _print_ab_report(Path(args.ab_cycle_dir))
 
     elif args.test_run:
         _print_test_run_report(Path(args.test_run))
@@ -56,7 +64,97 @@ def main() -> None:
         _print_single_cycle_report(Path(args.cycle_dir))
 
     else:
-        parser.error("Use --latest, --test-run <path>, or --cycle-dir <path>")
+        parser.error("Use --latest, --test-run, --cycle-dir, or --ab-cycle-dir")
+
+
+# ─────────────────────────────────────────────────────────────
+# Run A / Run B report
+# ─────────────────────────────────────────────────────────────
+
+def _print_ab_report(cycle_dir: Path) -> None:
+    summary_path = cycle_dir / "run_ab_comparison_v1.json"
+    if not summary_path.exists():
+        print(f"No run_ab_comparison_v1.json in {cycle_dir}")
+        sys.exit(1)
+    summary = json.load(open(summary_path))
+
+    a = summary.get("run_a_metrics_v1", {})
+    b = summary.get("run_b_metrics_v1", {})
+    delta = summary.get("delta_v1", {})
+    units_a = summary.get("units_after_run_a_v1", {})
+    units_b = summary.get("units_after_run_b_v1", {})
+    decision_diff = summary.get("decision_diff_v1", {})
+    verdict = summary.get("verdict_v1", {})
+
+    print()
+    print(DIVIDER)
+    print("  FINQUANT — RUN A vs RUN B COMPARISON")
+    print(DIVIDER)
+    print(f"  Cycle dir : {cycle_dir}")
+    print(f"  Date      : {summary.get('created_at_v1', '?')}")
+    print(DIVIDER)
+    print()
+    print("  RUN METRICS")
+    print(THIN)
+    print(f"  {'metric':<35} {'Run A':>14} {'Run B':>14} {'delta':>14}")
+    rows = [
+        ("cases processed",          a.get("cases_v1"),                    b.get("cases_v1"),                    None),
+        ("learning observations",    a.get("learning_observations_v1"),    b.get("learning_observations_v1"),    None),
+        ("wins",                     a.get("wins_v1"),                     b.get("wins_v1"),                     delta.get("delta_wins_v1")),
+        ("losses",                   a.get("losses_v1"),                   b.get("losses_v1"),                   delta.get("delta_losses_v1")),
+        ("no-trade correct",         a.get("no_trade_correct_v1"),         b.get("no_trade_correct_v1"),         delta.get("delta_no_trade_correct_v1")),
+        ("no-trade missed",          a.get("no_trade_missed_v1"),          b.get("no_trade_missed_v1"),          delta.get("delta_no_trade_missed_v1")),
+        ("total pnl",                a.get("total_pnl_v1"),                b.get("total_pnl_v1"),                delta.get("delta_total_pnl_v1")),
+        ("win rate",                 a.get("win_rate_v1"),                 b.get("win_rate_v1"),                 delta.get("delta_win_rate_v1")),
+        ("expectancy (avg pnl)",     a.get("expectancy_v1"),               b.get("expectancy_v1"),               delta.get("delta_expectancy_v1")),
+        ("evaluation PASS count",    a.get("evaluation_pass_v1"),          b.get("evaluation_pass_v1"),          delta.get("delta_evaluation_pass_v1")),
+        ("evaluation FAIL count",    a.get("evaluation_fail_v1"),          b.get("evaluation_fail_v1"),          delta.get("delta_evaluation_fail_v1")),
+        ("decision quality (pass%)", a.get("decision_quality_pass_rate_v1"), b.get("decision_quality_pass_rate_v1"), delta.get("delta_decision_quality_pass_rate_v1")),
+    ]
+    for label, av, bv, dv in rows:
+        ds = "" if dv is None else f"{dv:+}"
+        print(f"  {label:<35} {str(av):>14} {str(bv):>14} {ds:>14}")
+
+    print()
+    print("  LEARNING UNITS")
+    print(THIN)
+    a_by = units_a.get("by_status_v1", {}) or {}
+    b_by = units_b.get("by_status_v1", {}) or {}
+    print(f"  {'status':<14} {'Run A end':>10} {'Run B end':>10}")
+    for status in ("active", "validated", "provisional", "candidate", "retired"):
+        ac = a_by.get(status, 0)
+        bc = b_by.get(status, 0)
+        print(f"  {status:<14} {ac:>10} {bc:>10}")
+    print(f"  {'TOTAL':<14} {units_a.get('total_units_v1', 0):>10} {units_b.get('total_units_v1', 0):>10}")
+
+    print()
+    print("  DECISION DIFF (overlapping cases)")
+    print(THIN)
+    print(f"  Overlap cases     : {decision_diff.get('overlap_cases_v1', 0)}")
+    print(f"  Decisions same    : {decision_diff.get('decisions_same_v1', 0)}")
+    print(f"  Decisions changed : {decision_diff.get('decisions_changed_v1', 0)}")
+    print(f"  Change rate       : {decision_diff.get('decision_change_rate_v1', 0)}")
+
+    print()
+    print("  VERDICT")
+    print(THIN)
+    print(f"  Overall : {verdict.get('overall_v1', '?')}")
+    print()
+    for s in verdict.get("successes_v1", []):
+        print(f"    + {s}")
+    for s in verdict.get("issues_v1", []):
+        print(f"    ! {s}")
+    print()
+    print(DIVIDER)
+
+
+def _find_latest_ab_cycle(output_dir: str) -> Path | None:
+    base = Path(output_dir)
+    cycles = sorted(base.glob("ab_*"), reverse=True)
+    for c in cycles:
+        if (c / "run_ab_comparison_v1.json").exists():
+            return c
+    return None
 
 
 # ─────────────────────────────────────────────────────────────

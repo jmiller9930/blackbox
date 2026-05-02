@@ -29,12 +29,32 @@ STATUS_WEIGHT = {
 }
 
 
+def compute_unit_score(unit: dict[str, Any], match_quality: float = 1.0) -> float:
+    """
+    Architect-spec score: confidence * expectancy_multiplier * match_quality * status_weight
+
+    expectancy_multiplier:
+      - >0  → 1.0 + min(expectancy, 5.0) / 5.0   (rewards positive expectancy)
+      - 0   → 0.5
+      - <0  → 0.0  (negative expectancy must not drive)
+    """
+    confidence = float(unit.get("confidence_score_v1", 0.0))
+    expectancy = float(unit.get("expectancy_v1", 0.0))
+    sw = STATUS_WEIGHT.get(str(unit.get("status_v1", "")), 0.0)
+
+    if expectancy > 0:
+        exp_mult = 1.0 + min(expectancy, 5.0) / 5.0
+    elif expectancy == 0:
+        exp_mult = 0.5
+    else:
+        exp_mult = 0.0
+
+    return confidence * exp_mult * match_quality * sw
+
+
 def rank_units(units: list[dict[str, Any]]) -> list[dict[str, Any]]:
-    """Sort units descending by score = confidence * status_weight."""
-    def score(u: dict[str, Any]) -> float:
-        sw = STATUS_WEIGHT.get(str(u.get("status_v1", "")), 0.0)
-        return float(u.get("confidence_score_v1", 0.0)) * sw
-    return sorted(units, key=score, reverse=True)
+    """Sort units descending by spec-compliant score."""
+    return sorted(units, key=compute_unit_score, reverse=True)
 
 
 def select_primary(units: list[dict[str, Any]]) -> dict[str, Any] | None:

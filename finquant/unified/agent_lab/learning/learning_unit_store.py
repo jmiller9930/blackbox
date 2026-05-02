@@ -110,6 +110,8 @@ class LearningUnitStore:
         verdict: str,
         evidence_record_id: str,
         note: str = "",
+        pnl: float = 0.0,
+        outcome_kind: str = "",
     ) -> dict[str, Any]:
         """Apply observation. Raises KeyError if the unit doesn't exist."""
         with self._lock:
@@ -121,6 +123,8 @@ class LearningUnitStore:
                 verdict=verdict,
                 evidence_record_id=evidence_record_id,
                 note=note,
+                pnl=pnl,
+                outcome_kind=outcome_kind,
             )
             self._append_event({
                 "event_type_v1": "observation",
@@ -128,6 +132,8 @@ class LearningUnitStore:
                 "verdict_v1": verdict,
                 "evidence_record_id_v1": evidence_record_id,
                 "note_v1": note,
+                "pnl_v1": pnl,
+                "outcome_kind_v1": outcome_kind,
                 "at_v1": utc_now_iso(),
             })
             self._materialize()
@@ -275,6 +281,8 @@ class LearningUnitStore:
                         verdict=event.get("verdict_v1", "inconclusive"),
                         evidence_record_id=event.get("evidence_record_id_v1", ""),
                         note=event.get("note_v1", ""),
+                        pnl=float(event.get("pnl_v1") or 0.0),
+                        outcome_kind=event.get("outcome_kind_v1", ""),
                     )
                 elif etype == "status_change" and pid in units:
                     update_status(

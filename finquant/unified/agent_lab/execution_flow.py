@@ -29,7 +29,7 @@ def execute_case(
     from evaluation import evaluate_lifecycle
     from memory_store import MemoryStore
     from retrieval import retrieve_eligible
-    from learning.falsification_engine import falsify
+    from learning.falsification_engine import falsify_with_simulation
     from learning.promotion_engine import apply_promotion_if_needed
 
     case = load_case(case_path)
@@ -57,7 +57,6 @@ def execute_case(
 
     learning_observations: list[dict[str, Any]] = []
     if learning_store is not None:
-        actions_taken = list(evaluation.get("actions_taken") or [])
         for decision in decisions:
             sig = decision.get("pattern_signature_v1") or {}
             pattern_id = sig.get("pattern_id_v1")
@@ -76,11 +75,10 @@ def execute_case(
                 scope_notes=f"case={case.get('case_id')} symbol={case.get('symbol')}",
             )
 
-            verdict_info = falsify(
+            verdict_info = falsify_with_simulation(
                 proposed_action=proposed_action,
                 case=case,
-                evaluation=evaluation,
-                actions_taken=actions_taken,
+                horizon_bars=int(config.get("horizon_bars_v1") or 5),
             )
 
             updated_unit = learning_store.record_outcome(
@@ -88,6 +86,8 @@ def execute_case(
                 verdict=verdict_info["verdict_v1"],
                 evidence_record_id=str(record.get("record_id") or ""),
                 note=verdict_info["verdict_reason_v1"],
+                pnl=float(verdict_info.get("pnl_v1") or 0.0),
+                outcome_kind=str(verdict_info.get("outcome_kind_v1") or ""),
             )
 
             promotion = apply_promotion_if_needed(
@@ -100,12 +100,20 @@ def execute_case(
                 "human_label_v1": sig.get("human_label_v1"),
                 "proposed_action_v1": proposed_action,
                 "verdict_v1": verdict_info["verdict_v1"],
+                "outcome_v1": verdict_info.get("outcome_v1"),
+                "outcome_kind_v1": verdict_info.get("outcome_kind_v1"),
+                "pnl_v1": verdict_info.get("pnl_v1", 0.0),
                 "verdict_reason_v1": verdict_info["verdict_reason_v1"],
                 "promotion_v1": promotion,
                 "post_status_v1": updated_unit.get("status_v1"),
-                "post_hits_v1": updated_unit.get("hit_count_v1"),
-                "post_misses_v1": updated_unit.get("miss_count_v1"),
-                "post_inconclusive_v1": updated_unit.get("inconclusive_count_v1"),
+                "post_total_v1": updated_unit.get("total_observations_v1"),
+                "post_wins_v1": updated_unit.get("wins_v1"),
+                "post_losses_v1": updated_unit.get("losses_v1"),
+                "post_no_trade_correct_v1": updated_unit.get("no_trade_correct_v1"),
+                "post_no_trade_missed_v1": updated_unit.get("no_trade_missed_v1"),
+                "post_win_rate_v1": updated_unit.get("win_rate_v1"),
+                "post_expectancy_v1": updated_unit.get("expectancy_v1"),
+                "post_cumulative_pnl_v1": updated_unit.get("cumulative_pnl_v1"),
                 "post_confidence_v1": updated_unit.get("confidence_score_v1"),
             })
 

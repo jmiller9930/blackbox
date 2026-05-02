@@ -57,11 +57,21 @@ def new_learning_unit(
         "invalidation_condition_v1": invalidation_condition,
         "scope_notes_v1": scope_notes,
 
-        # Evidence
+        # Evidence (verdict counts)
         "hit_count_v1": 0,
         "miss_count_v1": 0,
         "inconclusive_count_v1": 0,
         "evidence_record_ids_v1": [],
+
+        # Trade-style stats (per architect spec: wins, losses, no_trade_correct/missed)
+        "total_observations_v1": 0,
+        "wins_v1": 0,
+        "losses_v1": 0,
+        "no_trade_correct_v1": 0,
+        "no_trade_missed_v1": 0,
+        "cumulative_pnl_v1": 0.0,
+        "expectancy_v1": 0.0,
+        "win_rate_v1": 0.0,
 
         # Confidence
         "confidence_score_v1": 0.0,
@@ -87,11 +97,15 @@ def record_observation(
     verdict: str,
     evidence_record_id: str,
     note: str = "",
+    pnl: float = 0.0,
+    outcome_kind: str = "",
 ) -> dict[str, Any]:
     """
     Apply an observation outcome to the unit IN PLACE.
 
-    verdict must be one of: confirmed | rejected | inconclusive
+    verdict        : "confirmed" | "rejected" | "inconclusive"
+    pnl            : per-trade PnL in price units (0.0 for no_trade)
+    outcome_kind   : "win" | "loss" | "no_trade_correct" | "no_trade_missed" | ""
     """
     if verdict not in VALID_VERDICTS:
         raise ValueError(f"verdict must be one of {VALID_VERDICTS}, got {verdict!r}")
@@ -102,6 +116,30 @@ def record_observation(
         unit["miss_count_v1"] += 1
     else:
         unit["inconclusive_count_v1"] += 1
+
+    # Trade-style stats per architect spec
+    unit["total_observations_v1"] = unit.get("total_observations_v1", 0) + 1
+
+    if outcome_kind == "win":
+        unit["wins_v1"] = unit.get("wins_v1", 0) + 1
+    elif outcome_kind == "loss":
+        unit["losses_v1"] = unit.get("losses_v1", 0) + 1
+    elif outcome_kind == "no_trade_correct":
+        unit["no_trade_correct_v1"] = unit.get("no_trade_correct_v1", 0) + 1
+    elif outcome_kind == "no_trade_missed":
+        unit["no_trade_missed_v1"] = unit.get("no_trade_missed_v1", 0) + 1
+
+    unit["cumulative_pnl_v1"] = round(
+        float(unit.get("cumulative_pnl_v1", 0.0)) + float(pnl), 6
+    )
+
+    decided_trades = int(unit.get("wins_v1", 0)) + int(unit.get("losses_v1", 0))
+    if decided_trades > 0:
+        unit["win_rate_v1"] = round(unit["wins_v1"] / decided_trades, 4)
+        unit["expectancy_v1"] = round(unit["cumulative_pnl_v1"] / decided_trades, 6)
+    else:
+        unit["win_rate_v1"] = 0.0
+        unit["expectancy_v1"] = 0.0
 
     if evidence_record_id and evidence_record_id not in unit["evidence_record_ids_v1"]:
         unit["evidence_record_ids_v1"].append(evidence_record_id)
@@ -195,6 +233,13 @@ def summarize_unit(unit: dict[str, Any]) -> dict[str, Any]:
         "hit_count_v1": unit.get("hit_count_v1", 0),
         "miss_count_v1": unit.get("miss_count_v1", 0),
         "inconclusive_count_v1": unit.get("inconclusive_count_v1", 0),
+        "wins_v1": unit.get("wins_v1", 0),
+        "losses_v1": unit.get("losses_v1", 0),
+        "no_trade_correct_v1": unit.get("no_trade_correct_v1", 0),
+        "no_trade_missed_v1": unit.get("no_trade_missed_v1", 0),
+        "win_rate_v1": unit.get("win_rate_v1", 0.0),
+        "expectancy_v1": unit.get("expectancy_v1", 0.0),
+        "cumulative_pnl_v1": unit.get("cumulative_pnl_v1", 0.0),
         "confidence_score_v1": unit.get("confidence_score_v1", 0.0),
         "hypothesis_v1": unit.get("hypothesis_v1", ""),
     }

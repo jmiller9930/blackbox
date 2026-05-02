@@ -24,13 +24,19 @@ from .learning_unit import (
     update_status,
 )
 
+# Architect-spec thresholds (PPLE):
+#   candidate    → provisional   : total >= 5
+#   provisional  → validated     : total >= 30 AND win_rate >= 0.55 AND expectancy > 0
+#   validated    → active        : recent streak of confirmed observations
+#   any          → retired       : total >= 10 AND win_rate <= 0.35
 DEFAULT_THRESHOLDS = {
-    "candidate_to_provisional_min_observations_v1": 3,
-    "provisional_to_validated_min_decided_v1": 10,
-    "provisional_to_validated_min_hit_rate_v1": 0.6,
+    "candidate_to_provisional_min_observations_v1": 5,
+    "provisional_to_validated_min_total_v1": 30,
+    "provisional_to_validated_min_win_rate_v1": 0.55,
+    "provisional_to_validated_min_expectancy_v1": 0.0,
     "validated_to_active_recent_streak_v1": 3,
-    "retire_min_decided_v1": 5,
-    "retire_max_hit_rate_v1": 0.35,
+    "retire_min_total_v1": 10,
+    "retire_max_win_rate_v1": 0.35,
 }
 
 
@@ -53,43 +59,45 @@ def evaluate_promotion(
         th.update(thresholds)
 
     status = str(unit.get("status_v1", "candidate"))
-    decided = (
-        int(unit.get("hit_count_v1", 0))
-        + int(unit.get("miss_count_v1", 0))
-    )
-    rate = hit_rate(unit)
+    total = int(unit.get("total_observations_v1") or total_observations(unit))
+    win_rate = float(unit.get("win_rate_v1", 0.0))
+    expectancy = float(unit.get("expectancy_v1", 0.0))
 
-    # Retire from any non-retired status if hit rate collapses
+    # Retire from any non-retired status if win rate collapses on enough sample
     if status != "retired":
-        if decided >= int(th["retire_min_decided_v1"]) and rate <= float(th["retire_max_hit_rate_v1"]):
+        if total >= int(th["retire_min_total_v1"]) and win_rate <= float(th["retire_max_win_rate_v1"]):
             return {
                 "transition": True,
                 "to_status": "retired",
                 "reason": (
-                    f"hit_rate={rate:.2f} after {decided} decided observations "
-                    f"<= retire_threshold={th['retire_max_hit_rate_v1']}"
+                    f"win_rate={win_rate:.2f} after total={total} observations "
+                    f"<= retire_threshold={th['retire_max_win_rate_v1']}"
                 ),
             }
 
     if status == "candidate":
-        if total_observations(unit) >= int(th["candidate_to_provisional_min_observations_v1"]):
+        if total >= int(th["candidate_to_provisional_min_observations_v1"]):
             return {
                 "transition": True,
                 "to_status": "provisional",
                 "reason": (
-                    f"observations={total_observations(unit)} "
+                    f"observations={total} "
                     f">= {th['candidate_to_provisional_min_observations_v1']}"
                 ),
             }
         return {"transition": False, "to_status": status, "reason": "not enough observations"}
 
     if status == "provisional":
-        if decided >= int(th["provisional_to_validated_min_decided_v1"]) and rate >= float(th["provisional_to_validated_min_hit_rate_v1"]):
+        if (
+            total >= int(th["provisional_to_validated_min_total_v1"])
+            and win_rate >= float(th["provisional_to_validated_min_win_rate_v1"])
+            and expectancy > float(th["provisional_to_validated_min_expectancy_v1"])
+        ):
             return {
                 "transition": True,
                 "to_status": "validated",
                 "reason": (
-                    f"decided={decided} hit_rate={rate:.2f} "
+                    f"total={total} win_rate={win_rate:.2f} expectancy={expectancy:.4f} "
                     f"meets validated thresholds"
                 ),
             }
