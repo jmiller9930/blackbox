@@ -350,7 +350,7 @@ CURRENT BAR:
   Close: {close:.4f} ({'+' if price_move >= 0 else ''}{price_move_pct:.3f}% from prior bar)
   RSI(14): {f'{rsi:.1f}' if rsi is not None else 'N/A'} [{rsi_traj.get('current_zone', 'unknown')}]
   ATR(14): {f'{atr:.4f}' if atr is not None else 'N/A'} ({f'{atr_pct:.3f}%' if atr_pct is not None else 'N/A'} of price)
-  EMA(20): {ema:.4f if ema is not None else 'N/A'} [price {'above' if ema and close > float(ema) else 'below'} EMA]
+  EMA(20): {f'{ema:.4f}' if ema is not None else 'N/A'} [price {'above' if ema and close > float(ema) else 'below'} EMA]
 
 REGIME: {regime.upper()} | EMA BIAS: {ema_bias}
 {position['label']}
