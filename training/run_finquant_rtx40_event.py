@@ -204,6 +204,11 @@ def main() -> int:
     ap.add_argument("--model", type=str, default="deepseek-ai/DeepSeek-R1-Distill-Qwen-7B", help="Base HF model id")
     ap.add_argument("--skip-validate", action="store_true")
     ap.add_argument("--skip-exam", action="store_true")
+    ap.add_argument(
+        "--skip-post-run-digest",
+        action="store_true",
+        help="Skip finquant_post_run_digest.py (artifact paths + next steps) after a successful run",
+    )
     ap.add_argument("--exam-write-report", action="store_true", help="Pass --write-report to eval_finquant.py")
     ap.add_argument("--final-exam-json", type=Path, default=None, help="Override path announced before exam")
     ap.add_argument("--eval-max-new-tokens", type=int, default=768)
@@ -334,6 +339,14 @@ def main() -> int:
         r = subprocess.run(cmd, cwd=str(repo), env=env)
         if r.returncode != 0:
             return r.returncode
+
+    digest_py = repo / "training" / "finquant_post_run_digest.py"
+    if not args.skip_post_run_digest and digest_py.is_file():
+        subprocess.run(
+            [sys.executable, str(digest_py), "--base", str(base), "--adapter", args.adapter],
+            cwd=str(repo),
+            env=env,
+        )
 
     if args.train == "full":
         print("FINQUANT_RTX40_EVENT_COMPLETE_TRAIN_FULL_PRODUCTION", flush=True)
