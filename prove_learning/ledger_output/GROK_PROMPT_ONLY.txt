@@ -1,0 +1,121 @@
+FINQUANT INDEPENDENT AUDIT — FULL LEDGER ANALYSIS
+Upload the attached CSV file alongside this prompt. Analyze all 600 rows.
+
+═══════════════════════════════════════════════════════════════
+WHAT THIS SYSTEM IS
+═══════════════════════════════════════════════════════════════
+
+FinQuant is an automated trading decision agent watching 15-minute SOL/USD
+perpetual futures bars. For each bar it decides:
+  ENTER_LONG  — expects price to rise
+  ENTER_SHORT — expects price to fall
+  NO_TRADE    — insufficient edge, stand down
+  INSUFFICIENT_DATA — too ambiguous to decide
+
+Data source: Live Pyth oracle, real SOL-PERP prices, April–May 2026.
+Collateral: $100 simulated at 30× leverage.
+Stop: 1.6× ATR14. Target: 4.0× ATR14. R-multiple: 2.5.
+
+═══════════════════════════════════════════════════════════════
+CSV COLUMN DEFINITIONS
+═══════════════════════════════════════════════════════════════
+
+cycle         — Training cycle (1=no memory, 2+=memory active)
+action        — Decision made: ENTER_LONG / ENTER_SHORT / NO_TRADE / INSUFFICIENT_DATA
+close         — SOL price at decision time (USD)
+rsi_14        — RSI indicator (0–100). Below 50=bearish, above 50=bullish, above 70=overbought
+atr_pct       — ATR as % of price. Higher = more volatile
+regime        — Market state: trending_up / trending_down / ranging / volatile / unknown
+h1_confidence — Agent's confidence in primary thesis (0.0–1.0)
+h2_confidence — Agent's confidence in counter-thesis (0.0–1.0)
+confidence_spread — h1_confidence minus h2_confidence
+hypothesis_1  — Primary argument FOR the action taken
+hypothesis_2  — Counter-argument AGAINST the action
+thesis        — Final decision rationale
+outcome_kind  — What actually happened: win / loss / no_trade_correct / no_trade_missed
+pnl           — Net profit/loss on the trade (0 for no-trades)
+is_good_decision — True if win OR no_trade_correct
+
+═══════════════════════════════════════════════════════════════
+THE RULES THE AGENT MUST FOLLOW
+═══════════════════════════════════════════════════════════════
+
+P-1 Never fabricate confidence. INSUFFICIENT_DATA when uncertain.
+P-2 Cite specific numbers in thesis (RSI=X, ATR%=Y, regime=Z). Vague = violation.
+P-3 Default is NO_TRADE. Entries require clear multi-signal confluence.
+P-5 State regime before citing indicator values.
+P-6 Optimize dollars won minus dollars lost, not just win rate.
+
+R-002: If confidence_spread < 0.20 AND action is ENTER_LONG or ENTER_SHORT → VIOLATION.
+       The agent must output NO_TRADE or INSUFFICIENT_DATA instead.
+
+R-003: Every entry needs stop and target. R = 4.0/1.6 = 2.5.
+       Breakeven win rate = 1/(1+2.5) = 28.57%.
+
+═══════════════════════════════════════════════════════════════
+WHAT A GOOD DECISION IS
+═══════════════════════════════════════════════════════════════
+
+Good decision = win OR no_trade_correct
+Bad decision  = loss OR no_trade_missed
+
+Decision Quality Rate = (wins + no_trade_correct) / total_rows
+This is the correct metric — not just win rate on entries taken.
+
+═══════════════════════════════════════════════════════════════
+AUDIT TASKS — SHOW ALL MATH
+═══════════════════════════════════════════════════════════════
+
+1. AGGREGATE STATISTICS (compute from all 600 rows):
+   - Total rows, total entries (ENTER_LONG + ENTER_SHORT), total NO_TRADE, total INSUFFICIENT_DATA
+   - Wins, losses, no_trade_correct, no_trade_missed
+   - Win rate on entries = wins / (wins + losses)
+   - Decision quality rate = (wins + no_trade_correct) / total rows
+   - Average PnL per winning trade
+   - Average PnL per losing trade (absolute value)
+   - Expectancy per trade = (win_rate × avg_win) − (loss_rate × avg_loss)
+   - Is expectancy positive or negative?
+   - Breakeven win rate at R=2.5 is 28.57%. Does this strategy exceed it?
+
+2. BY CYCLE (compare cycle 1 vs cycles 2 and 3):
+   - Decision quality rate per cycle
+   - Win rate per cycle
+   - Entries taken per cycle
+   - Does memory (cycles 2–3) help or hurt compared to cycle 1?
+
+3. R-002 COMPLIANCE:
+   - For every ENTER row: was confidence_spread ≥ 0.20?
+   - Count R-002 violations (entries with spread < 0.20)
+   - What % of entries are compliant?
+
+4. REASONING QUALITY (sample 20 random LLM rows where source="llm"):
+   - Does the thesis cite regime? (yes/no per row)
+   - Does the thesis cite a specific RSI value? (yes/no per row)
+   - Does the thesis cite ATR% or volatility? (yes/no per row)
+   - Score: what % of theses are SPECIFIC (cite numbers) vs VAGUE?
+
+5. BY REGIME (group by regime column):
+   - Decision quality rate per regime
+   - Win rate per regime on entries taken
+   - Which regime has the best performance?
+   - Are there regimes where the agent should not trade?
+
+6. EXPECTANCY BY CONFIDENCE SPREAD (group by spread ranges):
+   - spread ≥ 0.30: win rate and avg PnL
+   - spread 0.20–0.29: win rate and avg PnL
+   - spread < 0.20: win rate and avg PnL (these should be NO_TRADE per R-002)
+   - Does higher spread correlate with better outcomes?
+
+7. TOP WEAKNESSES (based on your analysis):
+   List the top 3 specific, quantified weaknesses:
+   e.g. "23% of entries were in ranging regime with win rate 31% — below breakeven"
+
+8. FINAL VERDICT:
+   - Is the 70.5% decision quality figure (cycle 1) credible given what you see?
+   - Is the system making intelligent decisions or is it random?
+   - What is the single most important improvement to make?
+
+Show every calculation. Do not summarize without numbers.
+═══════════════════════════════════════════════════════════════
+END OF PROMPT — ATTACH THE CSV AND RUN
+═══════════════════════════════════════════════════════════════
