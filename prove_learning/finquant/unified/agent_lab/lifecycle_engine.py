@@ -142,10 +142,18 @@ class LifecycleEngine:
                 llm_used_v1=llm_used,
                 decision_source_v1=decision_source,
             )
-            # Attach raw model output outside the contract for audit (not authoritative)
+            # Attach raw model output + audit fields outside the contract
             if llm_used:
                 decision["raw_model_output_v1"] = raw_output
                 decision["llm_latency_ms_v1"] = llm_latency
+                # R-002 / R-003 audit fields from normalize_llm_decision
+                for audit_key in (
+                    "hypothesis_1_v1", "hypothesis_2_v1", "confidence_spread_v1",
+                    "planned_stop_v1", "planned_target_v1", "planned_r_multiple_v1",
+                    "llm_raw_action_v1",
+                ):
+                    if audit_key in llm_fields:
+                        decision[audit_key] = llm_fields[audit_key]
 
             # Attach pattern signature + decision explanation
             decision["pattern_signature_v1"] = signature
