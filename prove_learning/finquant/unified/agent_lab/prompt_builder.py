@@ -143,6 +143,11 @@ def build_prompt(
     lines.append("  INSUFFICIENT_DATA is for genuinely contradictory signals only — do NOT use as a default.")
     lines.append("  If entering, state planned_stop and planned_target. Aim for R >= 1.5.")
     lines.append("")
+    lines.append("KEY SIGNAL TO CHECK: RSI DIVERGENCE (see above)")
+    lines.append("  Bullish divergence (lower low + higher RSI in LONG bias) = strong entry evidence.")
+    lines.append("  Bearish divergence (higher high + lower RSI in SHORT bias) = strong entry evidence.")
+    lines.append("  No divergence = lower confidence; require more confirming signals before entering.")
+    lines.append("")
     lines.append("Produce your JSON decision now:")
 
     return "\n".join(lines)

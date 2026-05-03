@@ -52,6 +52,36 @@ def build_input_packet(
     ref = close if close > 0 else 1.0
     atr_pct = (atr / ref) if atr is not None else None
 
+    # RSI divergence (from Sean's signal logic — most valuable feature to add)
+    prev_rsi = _maybe_float(prev.get("rsi_14"))
+    prev_low  = float(prev.get("low",  prev_close) or prev_close)
+    prev_high = float(prev.get("high", prev_close) or prev_close)
+    cur_low   = float(current.get("low",  close) or close)
+    cur_high  = float(current.get("high", close) or close)
+    rsi_bullish_div = (
+        rsi is not None and prev_rsi is not None
+        and cur_low < prev_low          # price making a lower low
+        and rsi > prev_rsi              # RSI making a higher low (momentum improving)
+    )
+    rsi_bearish_div = (
+        rsi is not None and prev_rsi is not None
+        and cur_high > prev_high        # price making a higher high
+        and rsi < prev_rsi              # RSI making a lower high (momentum weakening)
+    )
+    prev_rsi_change = round(rsi - prev_rsi, 4) if (rsi is not None and prev_rsi is not None) else None
+
+    # EMA bias: EMA(9) vs EMA(21) crossover direction
+    # Use last 2 bars' EMA values if available; fall back to single EMA vs price
+    ema9_cur  = _maybe_float(current.get("ema_9"))
+    ema9_prev = _maybe_float(prev.get("ema_9"))
+    ema21_cur = ema  # ema_20 is our long EMA proxy
+    if ema9_cur is not None and ema21_cur is not None:
+        ema_bias = "long" if ema9_cur > ema21_cur else "short"
+    elif ema is not None:
+        ema_bias = "long" if close > ema else "short"
+    else:
+        ema_bias = "unknown"
+
     memory_summary = summarize_memory_context(prior_records)
     regime = detect_regime(
         bars=visible_bars,
@@ -94,11 +124,17 @@ def build_input_packet(
             "price_above_ema_v1": ema is not None and close > ema,
             "price_up_v1": close > prev_close,
             "volume_expand_v1": volume > prev_volume,
-            # ATR expansion is price-relative: >0.60% of close (case ATR% distribution).
             "atr_expanded_v1": atr_pct is not None and atr_pct > 0.0060,
             "atr_pct_v1": round(atr_pct, 6) if atr_pct is not None else None,
             "rsi_state_v1": _rsi_state(rsi),
             "volatility_state_v1": _volatility_state(atr_pct),
+            # RSI divergence — Sean's key signal: momentum shift vs price action
+            "rsi_bullish_divergence_v1": rsi_bullish_div,
+            "rsi_bearish_divergence_v1": rsi_bearish_div,
+            "rsi_prev_v1": round(prev_rsi, 4) if prev_rsi is not None else None,
+            "rsi_change_v1": prev_rsi_change,
+            # EMA bias: direction established by EMA crossover
+            "ema_bias_v1": ema_bias,
         },
         "memory_context_v1": memory_summary,
         "regime_v1": regime,

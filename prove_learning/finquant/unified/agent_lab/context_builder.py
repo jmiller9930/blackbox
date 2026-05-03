@@ -316,6 +316,30 @@ def build_rich_context(
     position = _position_in_move(bars, regime)
     memory_narrative = format_memory_context(prior_records, regime)
 
+    # RSI divergence from context
+    ctx = bars[-1] if bars else {}
+    prev_ctx = bars[-2] if len(bars) >= 2 else ctx
+    cur_rsi_val = ctx.get("rsi_14")
+    prev_rsi_val = prev_ctx.get("rsi_14")
+    cur_low_val  = ctx.get("low", ctx.get("close", 0))
+    prev_low_val = prev_ctx.get("low", prev_ctx.get("close", 0))
+    cur_high_val = ctx.get("high", ctx.get("close", 0))
+    prev_high_val = prev_ctx.get("high", prev_ctx.get("close", 0))
+    bull_div = (cur_rsi_val is not None and prev_rsi_val is not None
+                and cur_low_val < prev_low_val and cur_rsi_val > prev_rsi_val)
+    bear_div = (cur_rsi_val is not None and prev_rsi_val is not None
+                and cur_high_val > prev_high_val and cur_rsi_val < prev_rsi_val)
+
+    # EMA bias
+    ema9_v = ctx.get("ema_9")
+    ema21_v = ctx.get("ema_20")
+    if ema9_v and ema21_v:
+        ema_bias = "LONG" if float(ema9_v) > float(ema21_v) else "SHORT"
+    elif ema21_v and close > 0:
+        ema_bias = "LONG" if close > float(ema21_v) else "SHORT"
+    else:
+        ema_bias = "UNKNOWN"
+
     # Build narrative string for LLM
     price_move = close - prev_close
     price_move_pct = price_move / prev_close * 100 if prev_close > 0 else 0.0
@@ -328,8 +352,13 @@ CURRENT BAR:
   ATR(14): {atr:.4f if atr is not None else 'N/A'} ({atr_pct:.3f}% of price if atr_pct is not None else 'N/A')
   EMA(20): {ema:.4f if ema is not None else 'N/A'} [price {'above' if ema and close > float(ema) else 'below'} EMA]
 
-REGIME: {regime.upper()}
+REGIME: {regime.upper()} | EMA BIAS: {ema_bias}
 {position['label']}
+
+RSI DIVERGENCE (Sean signal — key entry trigger):
+  Bullish divergence (lower low + higher RSI): {'YES ← LONG SIGNAL' if bull_div else 'no'}
+  Bearish divergence (higher high + lower RSI): {'YES ← SHORT SIGNAL' if bear_div else 'no'}
+  RSI now: {f'{cur_rsi_val:.1f}' if cur_rsi_val else 'N/A'} | RSI prev bar: {f'{prev_rsi_val:.1f}' if prev_rsi_val else 'N/A'} | Change: {f'{cur_rsi_val-prev_rsi_val:+.1f}' if cur_rsi_val and prev_rsi_val else 'N/A'}
 
 TRAJECTORY (last {n_trajectory} bars):
   {rsi_traj.get('label', 'RSI: unknown')}
