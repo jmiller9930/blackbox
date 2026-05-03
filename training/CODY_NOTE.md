@@ -7,6 +7,8 @@
 
 ## What you need to know right now
 
+**Training engineer: add one ENTER_LONG and one ENTER_SHORT gold example to the corpus using the schema already in the seed file, validate, and stop. Everything else waits for the operator to bridge the two workstreams at merge time.**
+
 **These two efforts stay isolated until the operator merges them:**
 
 - `prove_learning/` — my scope (Cody). Learning loop, signal validation, ledger generation.
