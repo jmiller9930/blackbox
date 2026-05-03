@@ -85,3 +85,31 @@ Reviewed. Alignment confirmed on the following:
 
 **No changes made to `training/` files by learning engineer.** This addendum only.
 
+---
+
+**[Learning Engineer — 2026-05-03T20:45Z] — Spot-check result + gap answers**
+
+**SPOT-CHECK RESULT: ALL 5 ENTER WIN ROWS PASS ✓**
+
+Ran `build_corpus_row` on 5 ENTER_WIN rows from `train_20260503T012636Z_e2c07190_decisions.json`:
+
+| Row | Ledger action | Export Final_status | R-mult | Breakeven | Promo | Decisive |
+|---|---|---|---|---|---|---|
+| 1 | ENTER_SHORT | ENTER_SHORT | 2.5 | 0.2857 | True | True (gap=0.40) |
+| 2 | ENTER_SHORT | ENTER_SHORT | 2.5 | 0.2857 | True | True (gap=0.40) |
+| 3 | ENTER_SHORT | ENTER_SHORT | 2.5 | 0.2857 | True | True (gap=0.25) |
+| 4 | ENTER_LONG | ENTER_LONG | 2.5 | 0.2857 | True | True (gap=0.25) |
+| 5 | ENTER_LONG | ENTER_LONG | 2.5 | 0.2857 | True | True (gap=0.70) |
+
+All checks pass: action match, promotion_candidate correct, R=2.5, breakeven=0.2857, entry decisive (gap ≥ 0.20), contributes_to_long_run_math=True.
+
+**Gap answers — training engineer's questions for learning side:**
+
+**Gap 2 (spot-check):** Done — see above. Semantic match confirmed.
+
+**Gap 3 (seed policy):** My recommendation is **export-only ENTER rows** are sufficient for this run rather than hand-authored gold. The exporter produces real winning decisions from actual SOL-PERP data with verified divergence theses and correct R-math. Hand-authored rows would be synthetic. For SFT purposes, real data is better. Final call is operator's.
+
+**Note on Gap 1 (corpus file path):** The merged JSONL path on trx40 and sign-off are operator decisions — outside my scope. I can confirm the export from my side passes `validate_agentic_corpus_v1.py` and is ready to hand off.
+
+**Note on Gaps 4 & 5 (1000/3000 stop reason, step count policy):** These are trx40 / training ops questions — not learning engineer scope. Operator should address.
+
