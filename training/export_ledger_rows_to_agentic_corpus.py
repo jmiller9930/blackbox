@@ -418,7 +418,9 @@ def _map_category(final_status: str, regime: str, outcome_kind: str) -> str:
 
 def main() -> None:
     parser = argparse.ArgumentParser(description="Export prove_learning ledger rows to finquant_agentic_qa_v1 corpus")
-    parser.add_argument("--ledger", required=True, help="Path to decisions.json from operator_ledger.py")
+    parser.add_argument("--ledger", help="Path to decisions.json from operator_ledger.py")
+    parser.add_argument("--latest", action="store_true",
+                        help="Auto-find most recent decisions.json under prove_learning/ledger_output/")
     parser.add_argument("--output", required=True, help="Output JSONL path")
     parser.add_argument("--min-confidence-spread", type=float, default=0.20,
                         help="Minimum confidence spread to export (default 0.20)")
@@ -428,12 +430,36 @@ def main() -> None:
                         help="Maximum rows to export")
     args = parser.parse_args()
 
-    ledger_path = Path(args.ledger)
+    # Resolve ledger path
+    if args.latest:
+        ledger_dir = Path(__file__).parent.parent / "prove_learning" / "ledger_output"
+        candidates = sorted(ledger_dir.glob("*_decisions.json"), key=lambda p: p.stat().st_mtime, reverse=True)
+        if not candidates:
+            print(f"ERROR: no decisions.json files found under {ledger_dir}", file=sys.stderr)
+            sys.exit(1)
+        ledger_path = candidates[0]
+        print(f"[export] auto-selected latest ledger: {ledger_path.name}")
+    elif args.ledger:
+        ledger_path = Path(args.ledger)
+    else:
+        print("ERROR: provide --ledger PATH or --latest", file=sys.stderr)
+        sys.exit(1)
+
     if not ledger_path.exists():
         print(f"ERROR: ledger not found: {ledger_path}", file=sys.stderr)
         sys.exit(1)
 
+    # Contract check: validate expected columns exist before processing
+    REQUIRED_COLUMNS = {"action", "outcome_kind", "is_good_decision", "regime", "rsi_14"}
     rows = json.loads(ledger_path.read_text())
+    if rows:
+        sample_keys = set(rows[0].keys())
+        missing = REQUIRED_COLUMNS - sample_keys
+        if missing:
+            print(f"ERROR: ledger missing required columns: {missing}", file=sys.stderr)
+            print(f"       Found columns: {sorted(sample_keys)}", file=sys.stderr)
+            print(f"       Check operator_ledger.py for field name changes.", file=sys.stderr)
+            sys.exit(1)
     print(f"[export] loaded {len(rows)} ledger rows from {ledger_path.name}")
 
     exported = 0
