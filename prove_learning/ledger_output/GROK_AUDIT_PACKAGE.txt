@@ -1,0 +1,331 @@
+FINQUANT INDEPENDENT AUDIT PACKAGE
+For: Grok / GPT-5 / Claude or any frontier AI
+Purpose: Independent audit of automated SOL-PERP trading decisions
+Instructions: Read everything below, then produce the requested analysis.
+
+═══════════════════════════════════════════════════════════════
+SECTION 1 — WHAT THIS SYSTEM IS
+═══════════════════════════════════════════════════════════════
+
+FinQuant is an automated trading decision agent. It watches 15-minute
+SOL/USD perpetual futures price bars and decides for each bar:
+  - ENTER_LONG  (buy — expects price to rise)
+  - ENTER_SHORT (sell — expects price to fall)
+  - NO_TRADE    (stand down — insufficient edge)
+  - INSUFFICIENT_DATA (too ambiguous to decide)
+
+It does NOT execute trades. Every decision is logged with full reasoning.
+
+The decisions in this package are from a LIVE Pyth oracle data feed —
+real SOL-PERP prices, April–May 2026.
+
+═══════════════════════════════════════════════════════════════
+SECTION 2 — THE PRIME DIRECTIVE (rules the agent must follow)
+═══════════════════════════════════════════════════════════════
+
+P-1 NEVER LIE. If it does not know, it must output INSUFFICIENT_DATA.
+    Fabricated confidence is worse than no answer.
+
+P-2 REASON WITH TOOLS. Every thesis must cite specific numeric values:
+    RSI, ATR%, regime. "Price looks strong" without numbers = violation.
+
+P-3 RISK-AVERSE DEFAULT. Default is NO_TRADE. Entries require confluence
+    across multiple independent signals.
+
+P-4 PATTERN SIMILARITY. Decisions should be anchored in prior validated
+    patterns when memory is available.
+
+P-5 CONTEXT FIRST. Read the regime and RSI trajectory before looking at
+    the current bar value. RSI=58 in bar 3 of a fresh trend ≠ RSI=58 in
+    bar 18 of an exhausted trend.
+
+P-6 LONG-RUN MATH. Optimize dollars won minus dollars lost. A strategy
+    can have 35% win rate and be profitable if wins are large enough vs losses.
+
+═══════════════════════════════════════════════════════════════
+SECTION 3 — THE HARD RULES (R-002 and R-003)
+═══════════════════════════════════════════════════════════════
+
+R-002 — CONFIDENCE SPREAD GATE:
+  The agent must form two competing hypotheses (H1 and H2) with confidence
+  values between 0.0 and 1.0.
+  Confidence spread = H1_confidence - H2_confidence.
+  If spread < 0.20 AND action is ENTER_LONG or ENTER_SHORT → VIOLATION.
+  The agent must output NO_TRADE or INSUFFICIENT_DATA instead.
+
+R-003 — RISK/REWARD GATE:
+  Every entry must have a defined stop and target.
+  Stop = 1.6 × ATR14 from entry price.
+  Target = 4.0 × ATR14 from entry price.
+  R-multiple = 4.0 / 1.6 = 2.5
+  Breakeven win rate at R=2.5 = 1 / (1+2.5) = 28.57%
+  Entries with R < 1.5 should be rejected.
+
+═══════════════════════════════════════════════════════════════
+SECTION 4 — HOW TO INTERPRET OUTCOMES
+═══════════════════════════════════════════════════════════════
+
+"win"              = Entry trade made money. Good decision.
+"loss"             = Entry trade lost money. Bad decision.
+"no_trade_correct" = Agent stood down; market did not make a significant
+                     move. Good decision (correctly abstained).
+"no_trade_missed"  = Agent stood down; market moved significantly.
+                     Bad decision (missed opportunity).
+
+THE CORRECT SUCCESS METRIC is:
+  Decision Quality = (wins + no_trade_correct) / total_opportunities
+
+This measures good decisions across ALL opportunities, not just win rate
+on entries taken. At random, this should be ~50%.
+
+═══════════════════════════════════════════════════════════════
+SECTION 5 — RSI DIVERGENCE (the primary entry signal)
+═══════════════════════════════════════════════════════════════
+
+Bullish divergence (supports ENTER_LONG):
+  Price makes a LOWER LOW while RSI makes a HIGHER LOW.
+  Sellers are losing strength. Momentum shifting upward.
+
+Bearish divergence (supports ENTER_SHORT):
+  Price makes a HIGHER HIGH while RSI makes a LOWER HIGH.
+  Buyers are losing strength. Momentum shifting downward.
+
+No divergence = lower conviction. Agent should require more confluencing
+signals or output NO_TRADE.
+
+═══════════════════════════════════════════════════════════════
+SECTION 6 — THE DATA (15 real decisions)
+═══════════════════════════════════════════════════════════════
+
+Data source: Live Pyth SOL-PERP oracle, 15-minute bars.
+Collateral simulated: $100 at 30× leverage.
+Stop: 1.6× ATR14. Target: 4.0× ATR14. R=2.5.
+
+--- Decision 1 of 14 ---
+Action taken: ENTER_SHORT
+SOL price at decision: $80.5602
+RSI(14): 49.5271 | ATR% of price: 3.8996%
+Market regime: volatile
+H1 confidence: 0.75 | H2 confidence: 0.35 | Spread: 0.4
+H1 (primary argument): "ENTER_SHORT based on bearish divergence and expanding ATR, with RSI near neutral."
+H2 (counter-argument): "NO_TRADE due to mixed signals and lack of clear entry criteria."
+Agent's stated thesis: "The market is in a volatile regime with bearish divergence and expanded ATR, suggesting a potential short entry despite the RSI being near neutral."
+What actually happened: win | Net PnL: +0.0580
+Was this a good decision? True
+
+--- Decision 2 of 14 ---
+Action taken: ENTER_SHORT
+SOL price at decision: $80.2597
+RSI(14): 48.4757 | ATR% of price: 1.8258%
+Market regime: volatile
+H1 confidence: 0.75 | H2 confidence: 0.35 | Spread: 0.4
+H1 (primary argument): "ENTER_SHORT based on bearish divergence and expanding ATR, with RSI near neutral levels."
+H2 (counter-argument): "NO_TRADE due to mixed signals and lack of clear entry criteria."
+Agent's stated thesis: "Given the bearish divergence and expanded ATR, there is a strong signal to enter a short position despite some mixed signals."
+What actually happened: win | Net PnL: +0.4582
+Was this a good decision? True
+
+--- Decision 3 of 14 ---
+Action taken: ENTER_SHORT
+SOL price at decision: $79.7029
+RSI(14): 46.1462 | ATR% of price: 1.3086%
+Market regime: trending_down
+H1 confidence: 0.75 | H2 confidence: 0.5 | Spread: 0.25
+H1 (primary argument): "ENTER_SHORT based on bearish divergence and expanding ATR, with RSI indicating momentum weakening."
+H2 (counter-argument): "NO_TRADE due to mixed signals and lack of clear entry criteria."
+Agent's stated thesis: "Given the trending down regime and bearish divergence, there is a strong signal to enter a short position with expanding volatility indicating potential for further price decline."
+What actually happened: win | Net PnL: +0.0878
+Was this a good decision? True
+
+--- Decision 4 of 14 ---
+Action taken: ENTER_LONG
+SOL price at decision: $79.6350
+RSI(14): 45.9303 | ATR% of price: 0.8898%
+Market regime: ranging
+H1 confidence: 0.75 | H2 confidence: 0.5 | Spread: 0.25
+H1 (primary argument): "Bullish divergence with RSI rising through neutral levels and expanding ATR suggests a potential long entry."
+H2 (counter-argument): "Current RSI is near neutral levels and EMA gap is negative, suggesting caution before entering a long position."
+Agent's stated thesis: "Given the bullish divergence and expanding ATR, there is a strong signal to enter long despite some mixed signals."
+What actually happened: win | Net PnL: +0.1900
+Was this a good decision? True
+
+--- Decision 5 of 14 ---
+Action taken: ENTER_LONG
+SOL price at decision: $78.8546
+RSI(14): 36.4557 | ATR% of price: 0.436%
+Market regime: ranging
+H1 confidence: 0.85 | H2 confidence: 0.15 | Spread: 0.7
+H1 (primary argument): "Bullish divergence with RSI rising through oversold levels and price forming a lower low, indicating improving momentum and potential for an uptrend."
+H2 (counter-argument): "Current price action and volume suggest a continuation of the ranging pattern, with no strong directional bias."
+Agent's stated thesis: "The market is in a ranging regime, but the bullish divergence with RSI rising through oversold levels suggests potential for an uptrend, outweighing the current ranging pattern."
+What actually happened: win | Net PnL: +0.4177
+Was this a good decision? True
+
+--- Decision 6 of 14 ---
+Action taken: ENTER_LONG
+SOL price at decision: $79.6742
+RSI(14): 45.7643 | ATR% of price: 1.6792%
+Market regime: volatile
+H1 confidence: 0.75 | H2 confidence: 0.5 | Spread: 0.25
+H1 (primary argument): "Bullish divergence with RSI rising through neutral levels and expanding ATR indicates a potential long entry."
+H2 (counter-argument): "Current RSI is neutral and EMA gap suggests price is below EMA, which could be a weak signal for long entry."
+Agent's stated thesis: "Given the bullish divergence and expanding ATR, there is a strong indication of momentum improvement in the long direction."
+What actually happened: loss | Net PnL: -0.1206
+Was this a good decision? False
+
+--- Decision 7 of 14 ---
+Action taken: ENTER_LONG
+SOL price at decision: $79.8015
+RSI(14): 46.7632 | ATR% of price: 1.3882%
+Market regime: ranging
+H1 confidence: 0.75 | H2 confidence: 0.5 | Spread: 0.25
+H1 (primary argument): "Bullish divergence with RSI rising through neutral levels and expanding ATR suggests a potential long entry."
+H2 (counter-argument): "Current price action and EMA bias suggest a potential short-term consolidation, making it cautious to enter long."
+Agent's stated thesis: "Given the bullish divergence and expanded volatility, there is a strong signal to enter long despite some caution from current price action."
+What actually happened: loss | Net PnL: -0.1824
+Was this a good decision? False
+
+--- Decision 8 of 14 ---
+Action taken: ENTER_LONG
+SOL price at decision: $79.8599
+RSI(14): 48.7531 | ATR% of price: 0.5487%
+Market regime: ranging
+H1 confidence: 0.75 | H2 confidence: 0.5 | Spread: 0.25
+H1 (primary argument): "Bullish divergence with RSI rising through 52+ and ATR expanding, indicating momentum improvement and potential price increase."
+H2 (counter-argument): "Current RSI is neutral and price action does not confirm a clear trend, suggesting caution."
+Agent's stated thesis: "Given the bullish divergence and expanding ATR, there is a strong indication of potential price increase in a ranging market."
+What actually happened: loss | Net PnL: -0.3004
+Was this a good decision? False
+
+--- Decision 9 of 14 ---
+Action taken: NO_TRADE
+SOL price at decision: $80.4465
+RSI(14): 49.2086 | ATR% of price: 2.9331%
+Market regime: volatile
+H1 confidence: 0.45 | H2 confidence: 0.35 | Spread: 0.1
+H1 (primary argument): "No clear bullish or bearish divergence, but expanding ATR and price above EMA suggest potential continuation of the current trend. Given the RSI is ne"
+H2 (counter-argument): "Current RSI and price action suggest a potential pullback, but without clear divergence or other strong signals, this is"
+Agent's stated thesis: "Given the current regime and indicators, there is insufficient clear evidence to enter a position. The RSI is neutral, ATR has expanded but price is not above EMA, suggesting mixed"
+What actually happened: no_trade_correct | Net PnL: +0.0000
+Was this a good decision? True
+
+--- Decision 10 of 14 ---
+Action taken: NO_TRADE
+SOL price at decision: $79.5961
+RSI(14): 45.3502 | ATR% of price: 1.4786%
+Market regime: trending_down
+H1 confidence: 0.35 | H2 confidence: 0.65 | Spread: -0.3
+H1 (primary argument): "No clear bullish signal due to lack of RSI divergence and price above EMA not holding. However, ATR expansion suggests potential for volatility-driven"
+H2 (counter-argument): "Market trending down, and recent price change (-0.132%) suggests continuation of downtrend."
+Agent's stated thesis: "Given the current trending down regime and neutral RSI, combined with lack of clear bullish signals, it is prudent to stand down."
+What actually happened: no_trade_correct | Net PnL: +0.0000
+Was this a good decision? True
+
+--- Decision 11 of 14 ---
+Action taken: NO_TRADE
+SOL price at decision: $79.5536
+RSI(14): 45.1745 | ATR% of price: 1.2363%
+Market regime: trending_down
+H1 confidence: 0.45 | H2 confidence: 0.35 | Spread: 0.1
+H1 (primary argument): "No clear entry signal due to mixed indicators. The RSI is neutral, and there's no divergence, which reduces the confidence in a potential trend change"
+H2 (counter-argument): "Market is trending down, and the ATR has expanded, suggesting potential for a continuation of the downtrend."
+Agent's stated thesis: "Given the current regime of trending down and mixed indicators, it is prudent to stand down from entering a trade."
+What actually happened: no_trade_correct | Net PnL: +0.0000
+Was this a good decision? True
+
+--- Decision 12 of 14 ---
+Action taken: NO_TRADE
+SOL price at decision: $79.5930
+RSI(14): 45.5007 | ATR% of price: 1.156%
+Market regime: ranging
+H1 confidence: 0.45 | H2 confidence: 0.55 | Spread: -0.1
+H1 (primary argument): "No clear bullish or bearish divergence, but expanding ATR and slight RSI increase suggest potential continuation of the ranging pattern. Given the cur"
+H2 (counter-argument): "The current RSI and ATR levels indicate a lack of strong momentum, suggesting that the market is likely to continue rang"
+Agent's stated thesis: "Given the current ranging regime and neutral RSI, there is insufficient evidence to enter a long position. The market lacks clear momentum or divergence signals that would justify "
+What actually happened: no_trade_correct | Net PnL: +0.0000
+Was this a good decision? True
+
+--- Decision 13 of 14 ---
+Action taken: NO_TRADE
+SOL price at decision: $80.5398
+RSI(14): 49.4853 | ATR% of price: 4.5104%
+Market regime: volatile
+H1 confidence: 0.45 | H2 confidence: 0.35 | Spread: 0.1
+H1 (primary argument): "Enter long based on expanding ATR and volume, with RSI near neutral but rising slightly."
+H2 (counter-argument): "Do not trade due to lack of clear momentum and mixed signals."
+Agent's stated thesis: "The market shows mixed signals with expanding volatility and slightly rising RSI, but no clear momentum or strong confluence of signals to enter long."
+What actually happened: no_trade_missed | Net PnL: +0.0000
+Was this a good decision? False
+
+--- Decision 14 of 14 ---
+Action taken: NO_TRADE
+SOL price at decision: $80.5727
+RSI(14): 49.5553 | ATR% of price: 4.1948%
+Market regime: volatile
+H1 confidence: 0.35 | H2 confidence: 0.35 | Spread: 0.0
+H1 (primary argument): "No clear bullish signal due to lack of RSI divergence and EMA bias. However, ATR expansion suggests potential for volatility continuation."
+H2 (counter-argument): "No clear bearish signal due to RSI and price moving together without divergence."
+Agent's stated thesis: "The current regime is volatile, with ATR indicating expanding volatility but no clear bullish or bearish divergence signals. The RSI is neutral and moving in line with price, sugge"
+What actually happened: no_trade_missed | Net PnL: +0.0000
+Was this a good decision? False
+
+═══════════════════════════════════════════════════════════════
+SECTION 7 — WHAT WE CONCLUDED (verify independently)
+═══════════════════════════════════════════════════════════════
+
+From the full 200-case run (authoritative training loop log):
+  - Total opportunities: 200 real SOL-PERP 15m bars
+  - Entries taken: 46 out of 200 (23% — selective)
+  - Wins: 24 | Losses: 22 | Win rate on entries: 52.2%
+  - Correct stand-downs: 117 | Missed opportunities: 37
+  - Decision quality: (24+117)/200 = 141/200 = 70.5%
+  - Net PnL on $100 collateral at 30×: +$3.68
+  - Breakeven win rate at R=2.5: 28.57% — current 52.2% is well above
+
+═══════════════════════════════════════════════════════════════
+SECTION 8 — YOUR AUDIT TASKS
+═══════════════════════════════════════════════════════════════
+
+Analyze the 15 decisions in Section 6. Then answer:
+
+1. COMPLIANCE CHECK — R-002:
+   For each ENTRY decision (ENTER_LONG or ENTER_SHORT), check:
+   - Was the confidence spread ≥ 0.20?
+   - If spread < 0.20 on an entry, mark it as an R-002 violation.
+   - Count total R-002 violations.
+
+2. REASONING QUALITY — P-2:
+   For each decision, does the thesis cite specific numeric values
+   (RSI value, ATR%, regime)? Or is it vague?
+   Rate each: SPECIFIC (cites numbers) or VAGUE (no numbers).
+
+3. DECISION QUALITY RATE:
+   From the 15 samples, compute:
+   - Wins + no_trade_correct = good decisions
+   - Decision quality rate = good / 15
+   Does this align with the 70.5% we reported?
+
+4. EXPECTANCY CHECK:
+   From entries in the sample:
+   - Average win PnL on winning entries
+   - Average loss PnL on losing entries (use absolute value)
+   - Expectancy = (win_rate × avg_win) - (loss_rate × avg_loss)
+   - Is this positive or negative?
+   - At R=2.5, breakeven win rate = 28.57%. Does this strategy clear it?
+
+5. CONTEXT FIRST — P-5:
+   Do the theses mention regime before citing indicator values?
+   Or do they lead with indicators without context?
+
+6. OVERALL VERDICT:
+   Based on your independent analysis of the 15 decisions:
+   - Is the reasoning quality adequate for a trading system?
+   - Are the rules (R-002, P-2, P-5) being followed?
+   - What are the top 2 weaknesses you observe?
+   - Does the 70.5% decision quality figure appear credible
+     based on what you see in the sample?
+
+Show your math on all numeric calculations.
+═══════════════════════════════════════════════════════════════
+END OF AUDIT PACKAGE
+═══════════════════════════════════════════════════════════════
