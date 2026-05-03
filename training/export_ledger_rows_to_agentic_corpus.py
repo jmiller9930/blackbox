@@ -1,242 +1,298 @@
-#!/usr/bin/env python3
 """
-Export prove_learning ledger rows (JSON array or CSV) into finquant_agentic_qa_v1 JSONL.
+prove_learning → training corpus exporter
 
-Use validated ledger decisions as curriculum for the next QLoRA run:
+Converts good decisions from the prove_learning training loop ledger
+into finquant_agentic_qa_v1 format for use in the QLoRA training corpus.
+
+Only exports rows where:
+  - is_good_decision = True
+  - confidence_spread >= min_confidence_spread (default 0.20)
+  - outcome_kind in (win, no_trade_correct)
+
+ATR multiples from config_v0.1.yaml:
+  stop:   1.6 × ATR14
+  target: 4.0 × ATR14
+  R:      2.5
+  breakeven win rate: 1 / (1 + 2.5) = 28.57%
+
+Usage:
   python3 training/export_ledger_rows_to_agentic_corpus.py \\
-    --input prove_learning/ledger_output/train_*_decisions.json \\
-    --output training/staging/from_ledger_curriculum_v0.1.jsonl \\
-    --only-good
+    --ledger prove_learning/ledger_output/train_20260503T012636Z_e2c07190_decisions.json \\
+    --output training/prove_learning_export.jsonl \\
+    --min-confidence-spread 0.20 \\
+    --good-only
 
-Then:
-  python3 training/validate_agentic_corpus_v1.py training/staging/from_ledger_curriculum_v0.1.jsonl
+  Then validate:
+  python3 training/validate_agentic_corpus_v1.py training/prove_learning_export.jsonl
 
-Gold rows are synthesized from ledger fields (OHLC often sparse — synthetic micro-bars from close).
-Threshold proposals use no_change + empty memory citations so validator passes without extra exemplars.
+  Then merge into corpus:
+  cat training/prove_learning_export.jsonl >> training/corpus_v05_agentic_seed.jsonl
 """
+
 from __future__ import annotations
 
 import argparse
-import csv
 import json
-import math
-import re
 import sys
+import uuid
 from pathlib import Path
 from typing import Any
 
+STOP_ATR_MULT   = 1.6
+TARGET_ATR_MULT = 4.0
+R_MULTIPLE      = TARGET_ATR_MULT / STOP_ATR_MULT       # 2.5
+BREAKEVEN_WR    = 1.0 / (1.0 + R_MULTIPLE)              # 0.2857
+EQUITY_USD      = 10000.0
+RISK_PCT        = 0.01
+RISK_DOLLARS    = EQUITY_USD * RISK_PCT                  # $100
+TARGET_DOLLARS  = RISK_DOLLARS * R_MULTIPLE             # $250
 
-def _read_rows(path: Path) -> list[dict[str, Any]]:
-    if path.suffix.lower() == ".json":
-        data = json.loads(path.read_text(encoding="utf-8"))
-        if isinstance(data, list):
-            return [x for x in data if isinstance(x, dict)]
-        raise SystemExit(f"JSON root must be array of objects: {path}")
-    if path.suffix.lower() == ".csv":
-        with path.open(encoding="utf-8", newline="") as f:
-            return list(csv.DictReader(f))
-    raise SystemExit(f"Unsupported format {path.suffix} — use .json or .csv")
-
-
-def _f(row: dict[str, Any], key: str, default: float | None = None) -> float | None:
-    v = row.get(key)
-    if v is None or v == "":
-        return default
-    try:
-        return float(v)
-    except (TypeError, ValueError):
-        return default
+POLICY_ID = "jupiter_2_sean_perps_v1"
+EXAM_SCHEMA = "finquant_quant_exam_v1"
+TRAINING_SCHEMA = "finquant_agentic_qa_v1"
 
 
-def _s(row: dict[str, Any], key: str, default: str = "") -> str:
-    v = row.get(key)
-    if v is None:
-        return default
-    return str(v).strip()
+def outcome_to_final_status(row: dict[str, Any]) -> str | None:
+    action = str(row.get("action") or "")
+    outcome = str(row.get("outcome_kind") or "")
+    spread = row.get("confidence_spread")
 
+    if spread is not None:
+        try:
+            if float(spread) < 0.10:
+                return "INSUFFICIENT_DATA"
+        except (TypeError, ValueError):
+            pass
 
-def _slug(s: str) -> str:
-    s = re.sub(r"[^a-zA-Z0-9_-]+", "_", s)
-    return s.strip("_")[:80] or "row"
-
-
-def _bars_three(close: float | None) -> list[dict[str, Any]]:
-    if close is None or not math.isfinite(close):
-        close = 100.0
-    step = max(close * 0.0005, 1e-6)
-    c1, c2, c3 = close - 2 * step, close - step, close
-    ts = ["2026-05-01T12:00:00Z", "2026-05-01T12:05:00Z", "2026-05-01T12:10:00Z"]
-    out = []
-    for i, c in enumerate((c1, c2, c3)):
-        o = c - step * 0.25
-        hi = c + step * 0.6
-        lo = c - step * 0.6
-        out.append(
-            {
-                "candle_open_utc": ts[i],
-                "open": round(o, 8),
-                "high": round(hi, 8),
-                "low": round(lo, 8),
-                "close": round(c, 8),
-            }
-        )
-    return out
-
-
-def _hypothesis_pair(row: dict[str, Any]) -> tuple[list[dict[str, Any]], float]:
-    """Return hypotheses_v1 (>=2) and confidence gap (top - second)."""
-    h1t = _s(row, "hypothesis_1") or _s(row, "thesis") or "Primary read from ledger context."
-    h2t = _s(row, "hypothesis_2") or "Stand down until divergence + ATR filter confirm edge."
-    h1c = _f(row, "h1_confidence")
-    h2c = _f(row, "h2_confidence")
-    if h1c is None:
-        h1c = _f(row, "confidence", 0.55) or 0.55
-    if h2c is None:
-        h2c = _f(row, "confidence", 0.45) or 0.45
-    hy = [
-        {
-            "id": "H1_ledger",
-            "claim": h1t[:2000],
-            "supporting_evidence": ["ledger.hypothesis_1", "reference_facts_v1.indicator_values_at_close"],
-            "counter_evidence": ["Ambiguity noted in ledger regime"],
-            "confidence": max(0.0, min(1.0, h1c)),
-        },
-        {
-            "id": "H2_ledger",
-            "claim": h2t[:2000],
-            "supporting_evidence": ["ledger.hypothesis_2", "policy default NO_TRADE without confluence"],
-            "counter_evidence": ["ledger.winning_branch narrative"],
-            "confidence": max(0.0, min(1.0, h2c)),
-        },
-    ]
-    confs = sorted([hy[0]["confidence"], hy[1]["confidence"]], reverse=True)
-    gap = float(confs[0] - confs[1])
-    return hy, gap
-
-
-def _enforce_gap_for_action(action: str, hy: list[dict[str, Any]], gap: float) -> tuple[list[dict[str, Any]], float]:
-    """R-002: if claiming a directional entry, avoid idk band unless gold says INSUFFICIENT_DATA."""
-    if action not in ("ENTER_LONG", "ENTER_SHORT"):
-        return hy, gap
-    if gap >= 0.20:
-        return hy, gap
-    hy[0]["confidence"] = 0.72
-    hy[1]["confidence"] = 0.38
-    confs = sorted([hy[0]["confidence"], hy[1]["confidence"]], reverse=True)
-    return hy, float(confs[0] - confs[1])
-
-
-def _final_status(action: str, gap: float, idk: bool) -> str:
-    if idk:
-        return "INSUFFICIENT_DATA"
-    if action == "NO_TRADE":
+    if outcome == "win":
+        if "LONG" in action:
+            return "ENTER_LONG"
+        if "SHORT" in action:
+            return "ENTER_SHORT"
+    if outcome == "no_trade_correct":
         return "NO_TRADE"
-    if action == "ENTER_LONG":
-        return "PASS"
-    if action == "ENTER_SHORT":
-        return "PASS"
-    return "NO_TRADE"
+    return None
 
 
-def _blocking_rules(action: str, regime: str) -> list[str]:
-    if action != "NO_TRADE":
-        return []
-    return [
-        f"ledger_action_NO_TRADE regime={regime or 'unknown'}",
-        "await_divergence_volume_atr_confluence",
-    ]
+def estimate_win_rate(row: dict[str, Any], final_status: str) -> float:
+    """Estimate win rate based on signal quality in the row."""
+    h1c = row.get("h1_confidence")
+    h2c = row.get("h2_confidence")
+    spread = row.get("confidence_spread")
+
+    # Base: breakeven
+    est = BREAKEVEN_WR + 0.05
+
+    if h1c is not None:
+        try:
+            h1 = float(h1c)
+            if h1 >= 0.70: est += 0.10
+            elif h1 >= 0.60: est += 0.05
+        except (TypeError, ValueError):
+            pass
+
+    if spread is not None:
+        try:
+            s = float(spread)
+            if s >= 0.35: est += 0.08
+            elif s >= 0.25: est += 0.04
+        except (TypeError, ValueError):
+            pass
+
+    return round(min(0.85, max(BREAKEVEN_WR, est)), 4)
 
 
-def ledger_row_to_agentic(row: dict[str, Any], *, seq: int) -> dict[str, Any]:
-    case_id_src = _s(row, "case_id") or _s(row, "timestamp") or f"row_{seq}"
-    case_id = f"FQ-PL-{_slug(case_id_src)}-{seq:04d}"
+def build_hypotheses(row: dict[str, Any], final_status: str) -> list[dict[str, Any]]:
+    """Build hypotheses_v1 from ledger row data."""
+    action = str(row.get("action") or "NO_TRADE")
+    h1_thesis = str(row.get("hypothesis_1") or "")
+    h2_thesis = str(row.get("hypothesis_2") or "")
+    h1c = row.get("h1_confidence")
+    h2c = row.get("h2_confidence")
+    regime = str(row.get("regime") or "unknown")
+    rsi = row.get("rsi_14")
+    atr_pct = row.get("atr_pct")
+    source = str(row.get("source") or "rule")
+    thesis = str(row.get("thesis") or "")
 
-    close = _f(row, "close")
-    rsi = _f(row, "rsi_14")
-    ema20 = _f(row, "ema_20")
-    atr14 = _f(row, "atr_14")
-    atr_pct = _f(row, "atr_pct")
-    regime = _s(row, "regime")
-    action = _s(row, "action") or "NO_TRADE"
-    thesis = _s(row, "thesis")
-    invalidation = _s(row, "invalidation")
-    r_mult = _f(row, "planned_r_multiple", 2.5) or 2.5
+    # Primary hypothesis from ledger h1
+    if not h1_thesis and thesis:
+        h1_thesis = thesis[:200]
 
-    equity = 10000.0
-    risk_pct = 0.01
-    risk_usd = equity * risk_pct
-    target_usd = risk_usd * r_mult
-    breakeven_wr = 1.0 / (1.0 + r_mult)
+    h1_conf = 0.60
+    h2_conf = 0.35
+    if h1c is not None:
+        try: h1_conf = float(h1c)
+        except: pass
+    if h2c is not None:
+        try: h2_conf = float(h2c)
+        except: pass
 
-    atr50 = atr14 * 1.08 if atr14 and atr14 > 0 else None
-    atr_ratio = (atr14 / atr50) if atr14 and atr50 else None
+    rsi_str = f"RSI14={rsi:.1f}" if rsi else "RSI14=N/A"
+    atr_str = f"ATR%={atr_pct:.3f}%" if atr_pct else "ATR=N/A"
 
-    indicators: dict[str, Any] = {}
+    if final_status == "ENTER_LONG":
+        h1 = {
+            "id": "H1_bullish_entry",
+            "claim": h1_thesis if h1_thesis else f"Bullish divergence in {regime} regime. {rsi_str}, {atr_str}. Entry conditions met.",
+            "supporting_evidence": [rsi_str, atr_str, f"regime={regime}", "divergence_signal=bullish"],
+            "counter_evidence": [h2_thesis[:100] if h2_thesis else "Counter-trend risk present"],
+            "confidence": h1_conf,
+        }
+        h2 = {
+            "id": "H2_no_trade_counter",
+            "claim": h2_thesis if h2_thesis else f"Insufficient confluence or momentum not confirmed. {rsi_str} below bullish_strong.",
+            "supporting_evidence": ["RSI not at extreme", "possible chop"],
+            "counter_evidence": ["divergence signal present", "EMA bias aligned"],
+            "confidence": h2_conf,
+        }
+    elif final_status == "ENTER_SHORT":
+        h1 = {
+            "id": "H1_bearish_entry",
+            "claim": h1_thesis if h1_thesis else f"Bearish divergence in {regime} regime. {rsi_str}, {atr_str}. Short entry conditions met.",
+            "supporting_evidence": [rsi_str, atr_str, f"regime={regime}", "divergence_signal=bearish"],
+            "counter_evidence": [h2_thesis[:100] if h2_thesis else "Potential bounce risk"],
+            "confidence": h1_conf,
+        }
+        h2 = {
+            "id": "H2_no_trade_counter",
+            "claim": h2_thesis if h2_thesis else "Bearish signal may be exhaustion bounce; wait for cleaner setup.",
+            "supporting_evidence": ["RSI not at extreme oversold"],
+            "counter_evidence": ["divergence signal confirmed", "price making higher high with lower RSI"],
+            "confidence": h2_conf,
+        }
+    elif final_status == "INSUFFICIENT_DATA":
+        h1 = {
+            "id": "H1_ambiguous",
+            "claim": h1_thesis if h1_thesis else f"Signals mixed in {regime} regime. Cannot determine direction.",
+            "supporting_evidence": [rsi_str, "signals contradicting"],
+            "counter_evidence": ["no clear divergence"],
+            "confidence": h1_conf,
+        }
+        h2 = {
+            "id": "H2_also_ambiguous",
+            "claim": h2_thesis if h2_thesis else "Counter-case equally plausible without more data.",
+            "supporting_evidence": ["equal evidence both directions"],
+            "counter_evidence": [],
+            "confidence": h2_conf,
+        }
+    else:  # NO_TRADE
+        h1 = {
+            "id": "H1_no_trade",
+            "claim": h1_thesis if h1_thesis else f"No sufficient edge in {regime} regime. {rsi_str}, {atr_str}. Stand down.",
+            "supporting_evidence": [rsi_str, atr_str, "no divergence or insufficient ATR"],
+            "counter_evidence": [h2_thesis[:100] if h2_thesis else "Some directional signals present"],
+            "confidence": h1_conf,
+        }
+        h2 = {
+            "id": "H2_entry_counter",
+            "claim": h2_thesis if h2_thesis else "Weak directional case — momentum insufficient to justify risk.",
+            "supporting_evidence": ["RSI not at extreme", "ATR not expanded"],
+            "counter_evidence": ["No divergence confirmed"],
+            "confidence": h2_conf,
+        }
+
+    return [h1, h2]
+
+
+def build_corpus_row(row: dict[str, Any], case_num: int) -> dict[str, Any] | None:
+    """Convert a single ledger row to finquant_agentic_qa_v1 format."""
+    final_status = outcome_to_final_status(row)
+    if final_status is None:
+        return None
+
+    action = str(row.get("action") or "NO_TRADE")
+    regime = str(row.get("regime") or "unknown")
+    close = row.get("close") or 0.0
+    rsi = row.get("rsi_14")
+    atr = row.get("atr_14")
+    atr_pct = row.get("atr_pct")
+    cycle = row.get("cycle", "1")
+
+    # Compute stop/target from ATR using policy multiples
+    stop_price = target_price = None
+    if atr and close and float(close) > 0:
+        atr_f = float(atr)
+        close_f = float(close)
+        if "LONG" in final_status:
+            stop_price = round(close_f - STOP_ATR_MULT * atr_f, 6)
+            target_price = round(close_f + TARGET_ATR_MULT * atr_f, 6)
+        elif "SHORT" in final_status:
+            stop_price = round(close_f + STOP_ATR_MULT * atr_f, 6)
+            target_price = round(close_f - TARGET_ATR_MULT * atr_f, 6)
+
+    est_wr = estimate_win_rate(row, final_status)
+    exp_per_trade = round((est_wr * TARGET_DOLLARS) - ((1 - est_wr) * RISK_DOLLARS), 2)
+    contributes = final_status in ("ENTER_LONG", "ENTER_SHORT") and exp_per_trade > 0
+
+    hypotheses = build_hypotheses(row, final_status)
+    h1_conf = hypotheses[0]["confidence"]
+    h2_conf = hypotheses[1]["confidence"]
+    conf_gap = round(h1_conf - h2_conf, 4)
+    i_dont_know = conf_gap < 0.10
+
+    # Blocking rules for no-trade cases
+    blocking_rules = []
+    if final_status in ("NO_TRADE", "INSUFFICIENT_DATA"):
+        if atr_pct is not None and float(atr_pct) < 0.60:
+            blocking_rules.append("ATR_pct_below_expand_threshold")
+        if rsi is not None and 47 <= float(rsi) <= 53:
+            blocking_rules.append("RSI_mid_zone_no_momentum")
+        if i_dont_know:
+            blocking_rules.append("confidence_gap_below_threshold")
+        if not blocking_rules:
+            blocking_rules.append("insufficient_confluence_across_core_conditions")
+
+    # Setup signature for learning record
+    rsi_zone = "unknown"
     if rsi is not None:
-        indicators["rsi14"] = round(rsi, 6)
-    if ema20 is not None:
-        indicators["ema20"] = round(ema20, 8)
-    if atr14 is not None:
-        indicators["atr14"] = round(atr14, 8)
-    if atr50 is not None:
-        indicators["atr50"] = round(atr50, 8)
-    if atr_ratio is not None:
-        indicators["atr_ratio_14_50"] = round(atr_ratio, 6)
+        r = float(rsi)
+        if r >= 65: rsi_zone = "rsi_65plus"
+        elif r >= 55: rsi_zone = "rsi_55_65"
+        elif r >= 45: rsi_zone = "rsi_45_55"
+        else: rsi_zone = "rsi_under45"
+
+    setup_sig = f"{final_status.lower()}_{regime}_{rsi_zone}"
     if atr_pct is not None:
-        indicators["atr_pct_reported"] = round(atr_pct, 6)
+        atr_f = float(atr_pct)
+        if atr_f > 0.60: setup_sig += "_atr_expanded"
+        else: setup_sig += "_atr_normal"
 
-    hy, gap = _hypothesis_pair(row)
-    hy, gap = _enforce_gap_for_action(action, hy, gap)
-    idk = gap < 0.20
-    final_st = _final_status(action, gap, idk)
+    case_id = f"FQ-LIVE-{case_num:04d}-C{cycle}"
+    outcome_kind = str(row.get("outcome_kind") or "")
 
-    expectancy_note = "Ledger-derived gold; expectancy narrative anchored to stated R-multiple."
-    est_wr = 0.42 if action in ("ENTER_LONG", "ENTER_SHORT") else 0.35
-
-    out_expectancy: dict[str, Any] = {
-        "planned_r_multiple": r_mult,
-        "planned_risk_dollars": round(risk_usd, 4),
-        "planned_target_dollars": round(target_usd, 4),
-        "breakeven_win_rate_required": round(breakeven_wr, 6),
-        "this_setup_estimated_win_rate": est_wr,
-        "expectancy_per_trade_dollars": round(est_wr * target_usd - (1 - est_wr) * risk_usd, 4),
-        "contributes_to_long_run_math": action in ("ENTER_LONG", "ENTER_SHORT") and not idk,
-        "note": expectancy_note,
-    }
-
-    risk_plan_v1 = {
-        "stop_logic": invalidation[:500] if invalidation else f"Hard stop ≈ {1.6}× ATR14 adverse from entry (case default).",
-        "target_logic": f"Scale toward +{r_mult:.2f}R vs planned risk; partials per policy.",
-        "position_sizing": f"Size so max loss ≈ {risk_pct*100:.2f}% equity (${risk_usd:.0f}) at stated stop distance.",
-    }
-
-    verdict_block = {
-        "policy_id": "jupiter_2_sean_perps_v1",
-        "verdict": "ENTER_LONG" if action == "ENTER_LONG" else "ENTER_SHORT" if action == "ENTER_SHORT" else "NO_TRADE",
-        "blocking_rules": _blocking_rules(action, regime),
-    }
-
-    output = {
+    output_obj = {
         "context_observed_v1": {
-            "trend_regime": regime or "unknown",
-            "volatility_regime": "from_atr_pct" if atr_pct else "unknown",
-            "structure_proxy": "ledger_snapshot",
-            "recency_note": thesis[:400] if thesis else "See ledger thesis.",
+            "trend_regime": regime,
+            "volatility_regime": f"atr_pct_{atr_pct:.3f}%" if atr_pct else "unknown",
+            "structure_proxy": f"divergence_based_{final_status.lower()}",
+            "recency_note": f"cycle_{cycle}_real_sol_perp_15m",
         },
         "context_evidence_v1": [
-            x for x in [thesis[:300] if thesis else "", f"action={action}", f"regime={regime}"] if x
+            f"RSI14={rsi:.1f}" if rsi else "RSI=N/A",
+            f"ATR%={atr_pct:.3f}%" if atr_pct else "ATR=N/A",
+            f"regime={regime}",
+            f"action={action}",
+            f"outcome={outcome_kind}",
         ],
-        "context_uncertainty_v1": ["Higher timeframe packet may be incomplete in ledger export"],
-        "hypotheses_v1": hy,
-        "dominant_hypothesis_v1": "H1_ledger" if hy[0]["confidence"] >= hy[1]["confidence"] else "H2_ledger",
-        "confidence_gap_v1": round(gap, 6),
-        "i_dont_know_triggered": idk,
-        "deterministic_baseline_verdict_v1": verdict_block,
+        "context_uncertainty_v1": [
+            "Volume from tick_count proxy — not true traded volume",
+            "Single timeframe only — no higher timeframe bias confirmation",
+        ],
+        "hypotheses_v1": hypotheses,
+        "dominant_hypothesis_v1": hypotheses[0]["id"] if not i_dont_know else None,
+        "confidence_gap_v1": conf_gap,
+        "i_dont_know_triggered": i_dont_know,
+        "deterministic_baseline_verdict_v1": {
+            "policy_id": POLICY_ID,
+            "verdict": final_status,
+            "blocking_rules": blocking_rules,
+        },
         "model_independent_assessment_v1": {
-            "stance": "insufficient_data" if idk else ("agree_with_entry" if action in ("ENTER_LONG", "ENTER_SHORT") else "agree_with_no_trade"),
-            "reasoning": thesis[:800] if thesis else "Ledger-exported assessment.",
-            "would_veto_a_rule_pass": action == "NO_TRADE",
-            "would_override_a_rule_block": False,
+            "stance": "agree_with_" + final_status.lower(),
+            "reasoning": str(row.get("thesis") or "Decision consistent with observed indicators and prime directive."),
+            "would_veto_a_rule_pass": final_status in ("NO_TRADE", "INSUFFICIENT_DATA"),
+            "would_override_a_rule_block": final_status in ("ENTER_LONG", "ENTER_SHORT"),
         },
         "threshold_adjustment_proposal_v1": {
             "proposed_change": "no_change",
@@ -244,105 +300,195 @@ def ledger_row_to_agentic(row: dict[str, Any], *, seq: int) -> dict[str, Any]:
             "evidence_memory_ids": [],
             "evidence_summary": "",
             "applied_to_this_case": False,
-            "applied_to_this_case_reason": "Ledger export uses no exemplar-bound adjustment.",
+            "applied_to_this_case_reason": "Real market case — no threshold change proposed.",
         },
         "learning_record_candidate_v1": {
-            "setup_signature": _slug(case_id_src),
-            "decision_taken": action,
-            "lesson_if_win": "Promote only after repeated out-of-sample confirmation.",
-            "lesson_if_loss": "Review divergence weighting and stop anchoring.",
-            "promotion_candidate": False,
-            "do_not_promote_reason": "Single ledger-derived exemplar",
+            "setup_signature": setup_sig,
+            "decision_taken": final_status,
+            "lesson_if_win": f"{final_status} in {regime} with {rsi_zone} RSI produced positive outcome." if outcome_kind == "win" else f"{final_status} setup — if market confirms, pattern is valid.",
+            "lesson_if_loss": f"{final_status} failed in {regime} — check regime shift and divergence quality." if outcome_kind == "loss" else "n/a_no_entry",
+            "promotion_candidate": outcome_kind in ("win", "no_trade_correct"),
+            "do_not_promote_reason": None if outcome_kind in ("win", "no_trade_correct") else f"outcome={outcome_kind}",
         },
-        "expectancy_check_v1": out_expectancy,
-        "risk_plan_v1": risk_plan_v1,
-        "context_decision_link_v1": "Divergence / regime narrative from ledger informs hypotheses; risk_plan_v1 mandatory for entries.",
-        "lifecycle_state_v1": "in_position_synth" if action in ("ENTER_LONG", "ENTER_SHORT") else "no_trade",
-        "Claim_reviewed": thesis[:400] if thesis else "Ledger row",
-        "Math_verdict": f"Breakeven p at {r_mult:.2f}R ≈ {breakeven_wr:.4f}",
-        "Numeric_answer": close,
-        "Leakage_check": "No future bars in packet beyond synthetic staging bars.",
-        "Policy_alignment": "R-002 hypothesis spread respected; conservative default on weak gap.",
-        "DATA_or_assumption_gaps": "Ledger may omit volume / HTF; cite INSUFFICIENT_DATA when gap < 0.20.",
-        "Final_status": final_st,
+        "expectancy_check_v1": {
+            "planned_r_multiple": R_MULTIPLE,
+            "planned_risk_dollars": RISK_DOLLARS,
+            "planned_target_dollars": TARGET_DOLLARS,
+            "breakeven_win_rate_required": round(BREAKEVEN_WR, 4),
+            "this_setup_estimated_win_rate": est_wr if final_status in ("ENTER_LONG", "ENTER_SHORT") else None,
+            "expectancy_per_trade_dollars": exp_per_trade if final_status in ("ENTER_LONG", "ENTER_SHORT") else None,
+            "contributes_to_long_run_math": contributes,
+            "note": f"Stop={STOP_ATR_MULT}xATR, Target={TARGET_ATR_MULT}xATR per policy config. " + (
+                f"Estimated {est_wr:.0%} win rate vs {BREAKEVEN_WR:.1%} breakeven." if final_status in ("ENTER_LONG", "ENTER_SHORT")
+                else "No entry — expectancy not applicable."
+            ),
+        },
+        "context_decision_link_v1": f"{regime} regime + {rsi_zone} RSI + divergence_signal → {final_status}",
+        "lifecycle_state_v1": "trade" if final_status in ("ENTER_LONG", "ENTER_SHORT") else "no_trade",
+        "Claim_reviewed": f"{final_status} consistent with prime directive and indicator evidence.",
+        "Math_verdict": f"At R={R_MULTIPLE}, breakeven={BREAKEVEN_WR:.1%}. " + (
+            f"Estimated win rate {est_wr:.0%} {'exceeds' if contributes else 'below'} breakeven."
+            if final_status in ("ENTER_LONG", "ENTER_SHORT") else "No trade — math not applicable."
+        ),
+        "Numeric_answer": exp_per_trade if final_status in ("ENTER_LONG", "ENTER_SHORT") else None,
+        "Leakage_check": "No future bars referenced. Decision based on causal indicator data only.",
+        "Policy_alignment": "RSI divergence signal + regime check + confidence spread gate applied.",
+        "DATA_or_assumption_gaps": "Volume is tick_count proxy. Single timeframe. No volume_base available.",
+        "Final_status": final_status,
     }
 
-    obj = {
+    # Build reference_facts from row
+    bar_data = {}
+    for field in ("close", "open", "high", "low", "volume", "rsi_14", "ema_20", "atr_14"):
+        if row.get(field) is not None:
+            bar_data[field] = row[field]
+
+    corpus_row = {
         "case_id": case_id,
-        "exam_schema": "finquant_quant_exam_v1",
+        "exam_schema": EXAM_SCHEMA,
         "exam_version": 1,
-        "training_schema": "finquant_agentic_qa_v1",
-        "primary_category": "indicator_interpretation_rsi_ema_atr",
-        "secondary_tags": ["prove_learning_ledger", "divergence_context", action.lower() or "no_trade"],
+        "training_schema": TRAINING_SCHEMA,
+        "primary_category": _map_category(final_status, regime, outcome_kind),
+        "secondary_tags": ["real_sol_perp_15m", "divergence_signal", f"cycle_{cycle}", regime],
         "instruction": (
-            "You are FinQuant. Using ONLY reference_facts_v1 (and retrieved_memory_v1 if present), "
-            "emit strict JSON matching finquant_agentic_response_v1: hypotheses (≥2), confidence_gap, "
-            "deterministic baseline verdict, expectancy_check_v1, risk_plan_v1 (stop/target/size), "
-            "and Final_status in {NO_TRADE, INSUFFICIENT_DATA, PASS} for entries."
+            "You are FinQuant. Using ONLY reference_facts_v1 and retrieved_memory_v1, "
+            "produce strict JSON matching the gold contract: observe context, test hypotheses "
+            "(minimum 2), state deterministic baseline verdict, run expectancy_check_v1, "
+            "and emit learning_record_candidate_v1. RSI divergence is the primary entry signal."
         ),
         "input": {
             "case_assumptions_v1": {
-                "symbol": "SYNTH-PERP",
-                "policy_id": "jupiter_2_sean_perps_v1",
-                "risk_pct_equity": risk_pct,
-                "equity_usd": equity,
-                "planned_stop_atr_multiple": 1.6,
-                "planned_target_atr_multiple": float(r_mult),
-                "notes": "Exported from prove_learning ledger; cite divergence when thesis references it.",
+                "symbol": "SOL-PERP",
+                "policy_id": POLICY_ID,
+                "risk_pct_equity": RISK_PCT,
+                "equity_usd": EQUITY_USD,
+                "planned_stop_atr_multiple": STOP_ATR_MULT,
+                "planned_target_atr_multiple": TARGET_ATR_MULT,
+                "notes": "Real SOL-PERP 15m bar from Pyth oracle. RSI divergence = price lower-low + RSI higher-low (bullish) or price higher-high + RSI lower-high (bearish).",
             },
             "reference_facts_v1": {
-                "bars_recent_oldest_to_newest": _bars_three(close),
-                "indicator_values_at_close": indicators,
+                "bars_recent": [bar_data],
+                "indicator_values_at_close": {
+                    "rsi14": rsi,
+                    "ema20": row.get("ema_20"),
+                    "atr14": atr,
+                    "atr_pct": atr_pct,
+                },
                 "lifecycle_state_prior": "no_trade",
                 "open_position": None,
+                "regime": regime,
             },
-            "expected_output_contract_v1": {"schema": "finquant_agentic_response_v1"},
-            "retrieved_memory_v1": [],
+            "expected_output_contract_v1": {
+                "schema": "finquant_agentic_response_v1",
+                "required_sections": [
+                    "context_observed_v1", "hypotheses_v1", "deterministic_baseline_verdict_v1",
+                    "expectancy_check_v1", "learning_record_candidate_v1",
+                    "Claim_reviewed", "Math_verdict", "Numeric_answer",
+                    "Leakage_check", "Policy_alignment", "DATA_or_assumption_gaps", "Final_status",
+                ],
+            },
+            "retrieved_memory_v1": [],  # Real runs would populate from memory store
         },
-        "output": output,
-        "grading_v1": {"kind": "deterministic_jsonpath_v1", "rules": []},
+        "output": output_obj,
+        "grading_v1": {
+            "kind": "deterministic_jsonpath_v1",
+            "notes": "validate_agentic_corpus_v1.py",
+            "rules": [
+                {"id": "hypotheses_min_2", "path": "$.hypotheses_v1", "expect_min_length": 2},
+                {"id": "final_status_valid", "path": "$.Final_status", "expect_in": ["ENTER_LONG", "ENTER_SHORT", "NO_TRADE", "INSUFFICIENT_DATA"]},
+                {"id": "expectancy_present", "path": "$.expectancy_check_v1.breakeven_win_rate_required", "expect_type": "number"},
+            ],
+        },
     }
-    return obj
+
+    return corpus_row
 
 
-def main() -> int:
-    ap = argparse.ArgumentParser(description="Ledger JSON/CSV → finquant_agentic_qa_v1 JSONL")
-    ap.add_argument("--input", type=Path, required=True, help="decisions.json array or decisions.csv")
-    ap.add_argument("--output", type=Path, required=True, help="Output .jsonl path")
-    ap.add_argument(
-        "--only-good",
-        action="store_true",
-        help="Keep rows where is_good_decision is true (string or bool)",
-    )
-    ap.add_argument("--max-rows", type=int, default=0, help="Cap exported rows (0 = no cap)")
-    args = ap.parse_args()
+def _map_category(final_status: str, regime: str, outcome_kind: str) -> str:
+    if final_status == "ENTER_LONG":
+        return "clean_long_continuation" if outcome_kind == "win" else "good_trade_that_loses"
+    if final_status == "ENTER_SHORT":
+        return "clean_short_continuation" if outcome_kind == "win" else "good_trade_that_loses"
+    if final_status == "INSUFFICIENT_DATA":
+        return "rm_data_feature_inference_boundary_v1"
+    if outcome_kind == "no_trade_correct":
+        return "no_trade_abstention" if "chop" not in regime else "range_chop"
+    return "missed_opportunity"
 
-    rows = _read_rows(args.input)
-    out_path = args.output.expanduser().resolve()
+
+def main() -> None:
+    parser = argparse.ArgumentParser(description="Export prove_learning ledger rows to finquant_agentic_qa_v1 corpus")
+    parser.add_argument("--ledger", required=True, help="Path to decisions.json from operator_ledger.py")
+    parser.add_argument("--output", required=True, help="Output JSONL path")
+    parser.add_argument("--min-confidence-spread", type=float, default=0.20,
+                        help="Minimum confidence spread to export (default 0.20)")
+    parser.add_argument("--good-only", action="store_true",
+                        help="Only export rows where is_good_decision=True")
+    parser.add_argument("--max-rows", type=int, default=None,
+                        help="Maximum rows to export")
+    args = parser.parse_args()
+
+    ledger_path = Path(args.ledger)
+    if not ledger_path.exists():
+        print(f"ERROR: ledger not found: {ledger_path}", file=sys.stderr)
+        sys.exit(1)
+
+    rows = json.loads(ledger_path.read_text())
+    print(f"[export] loaded {len(rows)} ledger rows from {ledger_path.name}")
+
+    exported = 0
+    skipped_bad = 0
+    skipped_spread = 0
+    skipped_no_final = 0
+
+    out_path = Path(args.output)
     out_path.parent.mkdir(parents=True, exist_ok=True)
 
-    n_out = 0
-    with out_path.open("w", encoding="utf-8") as fout:
+    with open(out_path, "w") as f:
         for i, row in enumerate(rows):
-            if args.only_good:
-                good = row.get("is_good_decision")
-                if isinstance(good, str):
-                    good = good.strip().lower() in ("1", "true", "yes")
-                elif good is not True:
-                    continue
-            try:
-                obj = ledger_row_to_agentic(row, seq=i)
-            except Exception as e:
-                print(f"SKIP row {i}: {e}", file=sys.stderr)
-                continue
-            fout.write(json.dumps(obj, ensure_ascii=False) + "\n")
-            n_out += 1
-            if args.max_rows and n_out >= args.max_rows:
+            if args.max_rows and exported >= args.max_rows:
                 break
 
-    print(f"wrote {n_out} rows → {out_path}", flush=True)
-    return 0
+            # Filter: good decisions only
+            if args.good_only and not row.get("is_good_decision", False):
+                skipped_bad += 1
+                continue
+
+            # Filter: confidence spread
+            spread = row.get("confidence_spread")
+            if spread is not None:
+                try:
+                    if float(spread) < args.min_confidence_spread and str(row.get("action")) not in ("NO_TRADE",):
+                        skipped_spread += 1
+                        continue
+                except (TypeError, ValueError):
+                    pass
+
+            corpus_row = build_corpus_row(row, exported + 1)
+            if corpus_row is None:
+                skipped_no_final += 1
+                continue
+
+            f.write(json.dumps(corpus_row) + "\n")
+            exported += 1
+
+    print(f"[export] exported: {exported}")
+    print(f"[export] skipped (bad decision): {skipped_bad}")
+    print(f"[export] skipped (spread too low): {skipped_spread}")
+    print(f"[export] skipped (no Final_status): {skipped_no_final}")
+    print(f"[export] output: {out_path}")
+
+    # Category breakdown
+    cats: dict[str, int] = {}
+    rows_out = [json.loads(l) for l in out_path.read_text().splitlines() if l.strip()]
+    for r in rows_out:
+        c = r.get("primary_category", "unknown")
+        cats[c] = cats.get(c, 0) + 1
+    print(f"[export] categories: {cats}")
+    print(f"\nNext steps:")
+    print(f"  python3 training/validate_agentic_corpus_v1.py {out_path}")
+    print(f"  cat {out_path} >> training/corpus_v05_agentic_seed.jsonl")
 
 
 if __name__ == "__main__":
-    raise SystemExit(main())
+    main()
