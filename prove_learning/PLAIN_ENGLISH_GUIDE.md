@@ -97,7 +97,7 @@ When FinQuant sees a new bar that looks similar to a past winning setup, it can 
 
 ---
 
-## Current performance (as of last test run)
+## Current performance (as of last validated run)
 
 | Metric | Result |
 |---|---|
@@ -107,16 +107,20 @@ When FinQuant sees a new bar that looks similar to a past winning setup, it can 
 | Net PnL on simulated $100 collateral at 30x | **+$3.68** |
 | Patterns promoted to active memory | 2 |
 | Patterns retired (suppressed — don't work) | 10 |
+| Stop/target computed per trade | Yes (1.6× ATR stop, 4.0× ATR target, R=2.5) |
+| Session filter | Active — agent is more conservative during Asian session (00:00–13:00 UTC) |
+
+A new 4-cycle test is running now with all improvements active. Results will update this table when complete.
 
 ---
 
 ## What this is NOT yet
 
-- Not a fully trained dedicated AI model (that is still being built)
+- Not a fully trained dedicated AI model (that is being built separately on dedicated GPU hardware)
 - Not connected to live trade execution
 - Not paper trading yet — this is the proof of learning phase
 
-The goal is to prove the reasoning is sound before connecting it to execution.
+The goal is to prove the reasoning is sound before connecting it to execution. The dedicated FinQuant model, when ready, will replace the general Qwen 7B currently being used.
 
 ---
 
