@@ -113,3 +113,26 @@ All checks pass: action match, promotion_candidate correct, R=2.5, breakeven=0.2
 
 **Note on Gaps 4 & 5 (1000/3000 stop reason, step count policy):** These are trx40 / training ops questions — not learning engineer scope. Operator should address.
 
+---
+
+## Unified operator pipeline (repeatable)
+
+Script: **`training/run_finquant_cycle.sh`** — same flow every campaign; only change **env vars** (`MERGED_JSONL`, optional `LEDGER_JSON`, `INCLUDE_SEED`, `TRAIN_LOG`, etc.).
+
+```bash
+export BLACKBOX_REPO_ROOT=/home/vanayr/blackbox
+export FINQUANT_BASE=/data/NDE/finquant/agentic_v05
+export MERGED_JSONL="$FINQUANT_BASE/datasets/merged_finquant_v0.2.jsonl"
+# optional: export LEDGER_JSON="$BLACKBOX_REPO_ROOT/prove_learning/ledger_output/…_decisions.json"
+# optional: export TRAIN_LOG="$FINQUANT_BASE/reports/train_qlora_last.log"
+source /data/NDE/finquant/.venv-finquant/bin/activate
+
+./training/run_finquant_cycle.sh prepare
+./training/run_finquant_cycle.sh validate
+./training/run_finquant_cycle.sh train-smoke   # wiring check
+export CONFIRM_PRODUCTION_TRAIN=1
+./training/run_finquant_cycle.sh train-full    # production
+```
+
+See script header for full variable list.
+
