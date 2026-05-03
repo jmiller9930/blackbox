@@ -68,7 +68,6 @@ def call_ollama(
         "options": {
             "num_predict": max_tokens,
             "temperature": temperature,
-            "stop": ["```", "</json>"],
         },
     }).encode("utf-8")
 
