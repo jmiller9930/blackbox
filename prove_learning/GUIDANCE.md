@@ -251,6 +251,18 @@ Until that is true, keep iterating.
 
 ---
 
+## Grok audit findings (2026-05-03) — logged for use
+
+**Cherry-picking risk flagged by Grok:**
+Sean's bot 100% win rate on 10 trades (Apr 22–May 2) was entirely ENTER_SHORT during a pure downtrend. When SOL trends up or ranges, the same signal will have a materially different win rate. This is not general strategy performance — it is regime-specific performance.
+Implication for FinQuant: regime detection is essential before the signal is trusted across market conditions. FinQuant must prove performance across MULTIPLE regimes, not just one trending period.
+
+**Grok's alignment conclusion:**
+- FinQuant = signal generation + learning layer (adaptive brain)
+- Sean's bot = execution layer (reliable but static)
+- Signal contract defined: action, planned_stop, planned_target, conviction_spread, regime, thesis, pattern_ids_used
+- Connection gate: FinQuant decision quality must hold >65% across ALL cycles (not just cycle 1) before integration
+
 ## Known issues for next session
 
 1. **R-002 gate too strict**: latest run with full prime directive in prompts caused 0 entries (Qwen stands down on everything). Need to calibrate — allow entries on clear confluence setups while keeping the gate for ambiguous ones.
