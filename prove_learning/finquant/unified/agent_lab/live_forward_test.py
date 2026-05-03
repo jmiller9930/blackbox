@@ -57,6 +57,12 @@ OUTCOME_BARS    = 7    # bars after decision to falsify outcome
 STOP_ATR_MULT   = 1.6
 TARGET_ATR_MULT = 4.0
 
+# Circuit breaker — halts signal generation when consecutive losses or
+# drawdown exceeds threshold. Resumes after cooldown period.
+CB_MAX_CONSECUTIVE_LOSSES = 3      # halt after 3 losses in a row
+CB_COOLDOWN_BARS          = 8      # wait 8 bars (2 hours) before resuming
+CB_MAX_SESSION_DRAWDOWN   = -0.05  # halt if simulated session PnL < -5%
+
 
 # ---------------------------------------------------------------------------
 # Data loading
@@ -333,9 +339,23 @@ def run_live(
     pending: list[dict] = []   # decisions awaiting falsification
     all_decisions: list[dict] = []
 
+    # Circuit breaker state
+    consecutive_losses = 0
+    cb_cooldown_remaining = 0
+    session_pnl = 0.0
+
     while True:
         now = datetime.datetime.now(timezone.utc)
         print(f"\n[live] {now.strftime('%Y-%m-%dT%H:%M:%SZ')} — making decision...")
+
+        # ── Circuit breaker check ────────────────────────────────────────
+        if cb_cooldown_remaining > 0:
+            cb_cooldown_remaining -= 1
+            print(f"[live] CIRCUIT BREAKER ACTIVE — cooldown {cb_cooldown_remaining} bars remaining. No signal.")
+            if not run_once:
+                sleep_seconds = interval_minutes * 60
+                time.sleep(sleep_seconds)
+            continue
 
         try:
             bars_raw = load_latest_bars(db_path, symbol, n_bars=CONTEXT_BARS + OUTCOME_BARS + 2, interval_minutes=interval_minutes)
@@ -373,7 +393,6 @@ def run_live(
             still_pending = []
             for d in pending:
                 bar_ts = d.get("bar_timestamp", "")
-                # Find the index of the decision bar in latest bars
                 decision_idx = None
                 for i, b in enumerate(bars_for_falsify):
                     if b.get("timestamp", "") >= bar_ts:
@@ -382,7 +401,33 @@ def run_live(
                 if decision_idx is not None and len(bars_for_falsify) - decision_idx >= OUTCOME_BARS:
                     future = bars_for_falsify[decision_idx + 1: decision_idx + 1 + OUTCOME_BARS]
                     d = falsify_decision(d, future)
-                    print(f"[live] Falsified: {d['action']} → {d['outcome_kind']} | pnl={d.get('pnl',0):+.4f}")
+                    outcome = d.get("outcome_kind", "")
+                    pnl = float(d.get("pnl") or 0)
+                    session_pnl += pnl
+                    print(f"[live] Falsified: {d['action']} → {outcome} | pnl={pnl:+.4f} | session_pnl={session_pnl:+.4f}")
+
+                    # ── Circuit breaker: update on entry outcomes only ──
+                    if outcome == "loss":
+                        consecutive_losses += 1
+                        print(f"[live] Consecutive losses: {consecutive_losses}/{CB_MAX_CONSECUTIVE_LOSSES}")
+                    elif outcome == "win":
+                        consecutive_losses = 0  # reset on win
+
+                    # Trigger circuit breaker
+                    triggered = False
+                    reason = ""
+                    if consecutive_losses >= CB_MAX_CONSECUTIVE_LOSSES:
+                        triggered = True
+                        reason = f"{CB_MAX_CONSECUTIVE_LOSSES} consecutive losses"
+                    elif session_pnl < CB_MAX_SESSION_DRAWDOWN:
+                        triggered = True
+                        reason = f"session drawdown {session_pnl:.4f} < {CB_MAX_SESSION_DRAWDOWN}"
+
+                    if triggered:
+                        cb_cooldown_remaining = CB_COOLDOWN_BARS
+                        consecutive_losses = 0
+                        print(f"[live] *** CIRCUIT BREAKER TRIGGERED: {reason} ***")
+                        print(f"[live] Halting signals for {CB_COOLDOWN_BARS} bars ({CB_COOLDOWN_BARS * interval_minutes} minutes)")
                 else:
                     still_pending.append(d)
             pending = still_pending
