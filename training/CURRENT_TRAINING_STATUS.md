@@ -58,5 +58,30 @@
 
 ### Learning engineer addendum
 
-*(space for additions)*
+**[Learning Engineer — 2026-05-03T20:27Z]**
+
+Reviewed. Alignment confirmed on the following:
+
+**Schema:** `export_to_training_corpus.py` in `prove_learning/` uses correct `finquant_agentic_qa_v1` fields — `hypotheses_v1`, `learning_record_candidate_v1`, `expectancy_check_v1`, `Final_status`. No baseline v0.05 field names.
+
+**R-002 threshold:** Confirmed `i_dont_know_triggered` uses `confidence_gap_v1 < 0.20` (not 0.10). ENTER rows get bumped confidences so they stay decisive and pass validation. Aligned with validator contract.
+
+**Section 2C — residual risks — notes from learning side:**
+
+1. **ENTRY exemplar gap:** Confirmed. Corpus still has 0 ENTER gold rows. The exporter generates ENTER rows from real winning decisions but they must flow through operator merge before the next QLoRA run. See `training/CODY_NOTE.md` for minimum ask.
+
+2. **Bar packet fidelity:** The exporter packs `bars_recent` as a single-bar slice (the decision bar). The hand-authored seed uses `bars_recent_oldest_to_newest` with 3 bars. For next export version, consider packing the 3 visible bars around the decision step. Filed for future iteration — not blocking current validation.
+
+3. **`decision_taken` / `Final_status` mapping:** The `outcome_to_final_status()` function maps `outcome_kind + action + confidence_spread` to `Final_status`. Recommend training engineer spot-check 5 ENTER rows from `prove_learning/ledger_output/train_20260503T012636Z_e2c07190_decisions.json` against the exported JSONL to confirm semantic match before merging.
+
+4. **Merge hygiene:** Agreed — do not append exported rows to the tracked seed file directly. Use a dedicated merged file passed via `--dataset` to `train_qlora.py`. The operator should create this file at merge time, not commit it to the seed.
+
+**Current learning loop state (for training engineer context):**
+
+- Latest successful run: `train_20260503T012636Z_e2c07190` — 70.5% decision quality, +$3.68 PnL, 2 ACTIVE patterns
+- New 4-cycle run in progress on clawbot with three improvements: R-003 stop/target in prompt, session filter (Asian session warning), memory gate raised to 65% win rate
+- Exporter is ready: `python3 prove_learning/finquant/unified/agent_lab/export_to_training_corpus.py --latest --good-only --output <your_path>`
+- Export produces 286 rows; validation passes against `validate_agentic_corpus_v1.py`
+
+**No changes made to `training/` files by learning engineer.** This addendum only.
 
