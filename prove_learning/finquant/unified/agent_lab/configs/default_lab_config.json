@@ -13,6 +13,7 @@
   "auto_promote_learning_v1": true,
   "_quality_gate": "RMv2 production quality gate — one win is not a lesson",
   "retrieval_min_obs_v1": 5,
-  "retrieval_min_win_rate_v1": 0.55,
-  "retrieval_max_records_v1": 5
+  "retrieval_min_win_rate_v1": 0.65,
+  "retrieval_max_records_v1": 3,
+  "_note": "win_rate raised 0.55→0.65 and max_records 5→3 to reduce memory noise in cycles 2-3"
 }

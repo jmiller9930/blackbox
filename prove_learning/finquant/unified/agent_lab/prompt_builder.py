@@ -75,7 +75,14 @@ def build_prompt(
     symbol = input_packet.get("symbol", "?")
     tf = input_packet.get("timeframe_minutes", "?")
     regime = input_packet.get("regime_v1") or "unknown"
+    session = input_packet.get("session_quality_v1") or "unknown"
+    utc_hour = input_packet.get("session_utc_hour_v1")
+
     lines.append(f"MARKET: {symbol} | {tf}m candles | Regime: {regime.upper()}")
+    utc_str = f"{utc_hour:02d}:00" if utc_hour is not None else "unknown"
+    lines.append(f"SESSION: UTC {utc_str} | {session}")
+    if session and "low_liquidity" in session:
+        lines.append(f"  WARNING: Low liquidity session. Widen confidence requirement. Prefer NO_TRADE unless divergence is very clear.")
     lines.append(f"Candles of context visible: {input_packet.get('candles_visible_v1', 0)}")
     lines.append("")
 
@@ -168,6 +175,28 @@ def build_prompt(
     lines.append("  Bullish divergence (lower low + higher RSI in LONG bias) = strong entry evidence.")
     lines.append("  Bearish divergence (higher high + lower RSI in SHORT bias) = strong entry evidence.")
     lines.append("  No divergence = lower confidence; require more confirming signals before entering.")
+    lines.append("")
+
+    # --- R-003: pre-computed stop/target so Qwen has no excuse to output None ---
+    if atr is not None and close is not None and float(close) > 0:
+        atr_f = float(atr)
+        close_f = float(close)
+        stop_mult = 1.6
+        target_mult = 4.0
+        long_stop   = round(close_f - stop_mult * atr_f, 6)
+        long_target = round(close_f + target_mult * atr_f, 6)
+        short_stop   = round(close_f + stop_mult * atr_f, 6)
+        short_target = round(close_f - target_mult * atr_f, 6)
+        r_mult = round(target_mult / stop_mult, 2)
+        breakeven = round(1 / (1 + r_mult), 4)
+        lines.append("=== R-003: PRE-COMPUTED STOP / TARGET (use these exact values) ===")
+        lines.append(f"  Policy: stop = {stop_mult}× ATR14, target = {target_mult}× ATR14, R = {r_mult}")
+        lines.append(f"  ATR14 = {atr_f:.6f}")
+        lines.append(f"  If ENTER_LONG:  planned_stop = {long_stop}  planned_target = {long_target}")
+        lines.append(f"  If ENTER_SHORT: planned_stop = {short_stop}  planned_target = {short_target}")
+        lines.append(f"  Breakeven win rate at R={r_mult}: {breakeven:.1%}")
+        lines.append(f"  YOU MUST output these exact numbers in planned_stop and planned_target.")
+        lines.append(f"  If you cannot justify this R, output NO_TRADE.")
     lines.append("")
     lines.append("Produce your JSON decision now:")
 

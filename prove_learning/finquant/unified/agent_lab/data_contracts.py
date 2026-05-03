@@ -12,6 +12,8 @@ step. The packet is deterministic and contains:
 
 from __future__ import annotations
 
+import datetime
+from datetime import timezone
 from typing import Any
 
 
@@ -140,6 +142,9 @@ def build_input_packet(
         "regime_v1": regime,
         "strategy_hypotheses_v1": hypotheses,
         "baseline_strategy_families_v1": list(_STRATEGY_FAMILIES),
+        # Session time — used by prompt to flag low-liquidity windows
+        "session_utc_hour_v1": datetime.datetime.now(timezone.utc).hour,
+        "session_quality_v1": _session_quality(datetime.datetime.now(timezone.utc).hour, datetime.datetime.now(timezone.utc).weekday()),
     }
 
 
@@ -303,6 +308,27 @@ def detect_regime(
         return "trending_down"
 
     return "ranging"
+
+
+def _session_quality(utc_hour: int, utc_weekday: int) -> str:
+    """
+    Classify trading session quality by UTC hour and weekday.
+    Based on Sean's filter: Asian session (00:00-13:00 UTC) = low liquidity.
+    Weekend (Friday 20:00+ UTC through Sunday) = low liquidity.
+    """
+    # Weekend check: Friday=4, Saturday=5, Sunday=6
+    if utc_weekday == 5 or utc_weekday == 6:
+        return "weekend_low_liquidity"
+    if utc_weekday == 4 and utc_hour >= 20:
+        return "friday_late_low_liquidity"
+    # Asian session: 00:00-13:00 UTC
+    if 0 <= utc_hour < 13:
+        return "asian_session_low_liquidity"
+    # US/EU overlap: 13:00-20:00 UTC = best liquidity
+    if 13 <= utc_hour < 20:
+        return "us_eu_overlap_good_liquidity"
+    # US late: 20:00-24:00 UTC = acceptable
+    return "us_late_acceptable_liquidity"
 
 
 def _rsi_state(rsi: float | None) -> str:
