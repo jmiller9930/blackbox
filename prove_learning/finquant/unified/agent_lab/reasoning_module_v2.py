@@ -80,6 +80,16 @@ _RSI_LONG_MIN    = 50.0
 _RSI_LONG_MAX    = 70.0
 _MIN_CONFIDENCE  = 0.30
 
+# R-003 CORE OVERRIDE — non-negotiable risk geometry
+# Stop = STOP_ATR_MULT × ATR14 from entry
+# Target = TARGET_ATR_MULT × ATR14 from entry
+# R-multiple = TARGET / STOP = 2.5
+# Breakeven win rate = 1 / (1 + 2.5) = 28.57%
+# Any entry with R < MIN_R_MULTIPLE is blocked — no exceptions.
+STOP_ATR_MULT   = 1.6
+TARGET_ATR_MULT = 4.0
+_MIN_R_MULTIPLE = 1.5   # hard floor — block if R < 1.5
+
 
 # ---------------------------------------------------------------------------
 # LangGraph state schema
@@ -681,6 +691,21 @@ def node_guard_rails(state: RMState) -> dict[str, Any]:
         if not guard_reason and confidence < _MIN_CONFIDENCE:
             guard_reason = f"guard:low_confidence {confidence:.2f} < {_MIN_CONFIDENCE}"
 
+        # R-003 CORE OVERRIDE: block entries without valid R-multiple >= MIN_R
+        # This is non-negotiable — if risk geometry cannot be computed, no entry.
+        if not guard_reason:
+            tot_winner = state.get("tot_winner") or {}
+            r_mult = tot_winner.get("planned_r_multiple")
+            # Also check from final fields if tot_winner not set
+            if r_mult is None:
+                r_mult = state.get("planned_r_multiple_v1")
+            if r_mult is not None:
+                try:
+                    if float(r_mult) < _MIN_R_MULTIPLE:
+                        guard_reason = f"guard:r_too_low R={float(r_mult):.2f} < {_MIN_R_MULTIPLE} (stop={STOP_ATR_MULT}xATR, target={TARGET_ATR_MULT}xATR required)"
+                except (TypeError, ValueError):
+                    pass
+
     if guard_reason:
         return {
             "final_action": "NO_TRADE",
@@ -856,6 +881,22 @@ def apply_guard_rails(
             return "NO_TRADE", f"guard:low_confidence {confidence:.2f} < {_MIN_CONFIDENCE}"
 
     return proposed, ""
+
+
+def compute_r_multiple(close: float, atr: float | None, action: str) -> float | None:
+    """R-003 CORE: compute R-multiple. Returns 2.5 at policy multiples, None if ATR missing."""
+    if atr is None or float(atr) <= 0 or float(close) <= 0:
+        return None
+    return round(TARGET_ATR_MULT / STOP_ATR_MULT, 4)
+
+
+def compute_stop_target(close: float, atr: float, action: str) -> tuple[float, float]:
+    """Compute (stop_price, target_price) for R-003 compliance."""
+    atr_f = float(atr)
+    close_f = float(close)
+    if action == "ENTER_LONG":
+        return round(close_f - STOP_ATR_MULT * atr_f, 6), round(close_f + TARGET_ATR_MULT * atr_f, 6)
+    return round(close_f + STOP_ATR_MULT * atr_f, 6), round(close_f - TARGET_ATR_MULT * atr_f, 6)
 
 
 # ---------------------------------------------------------------------------
