@@ -126,17 +126,13 @@ Must pass clean. Specifically check that ENTER rows exist and that `expectancy_c
 
 ### Step 5 — What prove_learning is sending
 
-Cody is building an exporter that converts real SOL-PERP decisions from the training loop into `finquant_agentic_qa_v1` format. Run it with:
+The exporter lives in prove_learning scope — the operator bridges the two workstreams at merge time. The training engineer does not run this directly.
 
+When the operator hands you a validated JSONL file, append it:
 ```bash
-python3 training/export_ledger_rows_to_agentic_corpus.py \
-  --ledger prove_learning/ledger_output/train_20260503T012636Z_e2c07190_decisions.json \
-  --output training/prove_learning_export.jsonl \
-  --min-confidence-spread 0.20 \
-  --good-only
+cat operator_provided_export.jsonl >> training/corpus_v05_agentic_seed.jsonl
+python3 training/validate_agentic_corpus_v1.py training/corpus_v05_agentic_seed.jsonl
 ```
-
-The `--output` path is your choice — validate and merge into `corpus_v05_agentic_seed.jsonl` before the next run.
 
 ---
 
