@@ -339,7 +339,8 @@ def run_backtest(
             if short_sig and cur_rsi < 32:
                 blocked["rsi_guard"] += 1
                 continue
-        else:
+        # Compute conf for unfiltered path
+        if not apply_filters:
             conf = confidence_score(
                 long_sig, cur_rsi, prev_rsi,
                 lows[i], lows[i - 1],
