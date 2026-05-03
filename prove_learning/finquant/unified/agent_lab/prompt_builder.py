@@ -90,6 +90,13 @@ def build_prompt(
     if atr is not None and close and float(close) > 0:
         atr_pct = float(atr) / float(close) * 100
 
+    # Divergence and bias from market_context_v1 (added in data_contracts.py)
+    bull_div  = ctx.get("rsi_bullish_divergence_v1", False)
+    bear_div  = ctx.get("rsi_bearish_divergence_v1", False)
+    rsi_prev  = ctx.get("rsi_prev_v1")
+    rsi_chg   = ctx.get("rsi_change_v1")
+    ema_bias  = ctx.get("ema_bias_v1", "unknown")
+
     lines.append("=== CURRENT BAR (P-5: read context before indicators) ===")
     lines.append(f"  Close: {close}  Prev close: {prev_close}  Change: {_fmt_pct(math.get('pct_change_v1'))}")
     lines.append(f"  RSI(14): {rsi}  [{ctx.get('rsi_state_v1', 'unknown')}]")
@@ -97,6 +104,20 @@ def build_prompt(
     lines.append(f"  EMA(20) gap: {math.get('ema_gap_v1')}  Price above EMA: {ctx.get('price_above_ema_v1')}")
     lines.append(f"  Volume: {_fmt_vol(math.get('volume_delta_v1'))} vs prior bar  Expanding: {ctx.get('volume_expand_v1')}")
     lines.append(f"  ATR expanded (>0.60% of price): {ctx.get('atr_expanded_v1')}")
+    lines.append(f"  EMA Bias: {ema_bias.upper()}  RSI prev: {f'{rsi_prev:.1f}' if rsi_prev else 'N/A'}  RSI change: {f'{rsi_chg:+.2f}' if rsi_chg else 'N/A'}")
+    lines.append("")
+
+    # --- RSI Divergence (prominent — this is Sean's key signal) ---
+    lines.append("=== RSI DIVERGENCE — KEY ENTRY SIGNAL ===")
+    if bull_div:
+        lines.append("  *** BULLISH DIVERGENCE: price lower low + RSI higher low = momentum improving ***")
+        lines.append("  This is a strong LONG entry signal when bias is LONG. Confidence should be 0.65+.")
+    elif bear_div:
+        lines.append("  *** BEARISH DIVERGENCE: price higher high + RSI lower high = momentum weakening ***")
+        lines.append("  This is a strong SHORT entry signal when bias is SHORT. Confidence should be 0.65+.")
+    else:
+        lines.append("  No divergence. Price and RSI moving together = no momentum shift signal.")
+        lines.append("  Without divergence, entry confidence should be lower (max 0.55 unless strong multi-signal confluence).")
     lines.append("")
 
     # --- Memory context (P-4) ---
