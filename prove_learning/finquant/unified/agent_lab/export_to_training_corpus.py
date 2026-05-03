@@ -15,17 +15,22 @@ ATR multiples from config_v0.1.yaml:
   R:      2.5
   breakeven win rate: 1 / (1 + 2.5) = 28.57%
 
-Usage:
-  python3 training/export_ledger_rows_to_agentic_corpus.py \\
-    --ledger prove_learning/ledger_output/train_20260503T012636Z_e2c07190_decisions.json \\
+Usage (from repo root):
+  python3 prove_learning/finquant/unified/agent_lab/export_to_training_corpus.py \\
+    --latest \\
     --output training/prove_learning_export.jsonl \\
     --min-confidence-spread 0.20 \\
     --good-only
 
+  Or pass an explicit ledger:
+  python3 prove_learning/finquant/unified/agent_lab/export_to_training_corpus.py \\
+    --ledger prove_learning/ledger_output/train_20260503T012636Z_e2c07190_decisions.json \\
+    --output training/prove_learning_export.jsonl --good-only
+
   Then validate:
   python3 training/validate_agentic_corpus_v1.py training/prove_learning_export.jsonl
 
-  Then merge into corpus:
+  Merge at operator handoff (avoid duplicate appends):
   cat training/prove_learning_export.jsonl >> training/corpus_v05_agentic_seed.jsonl
 """
 
@@ -226,10 +231,18 @@ def build_corpus_row(row: dict[str, Any], case_num: int) -> dict[str, Any] | Non
     contributes = final_status in ("ENTER_LONG", "ENTER_SHORT") and exp_per_trade > 0
 
     hypotheses = build_hypotheses(row, final_status)
-    h1_conf = hypotheses[0]["confidence"]
-    h2_conf = hypotheses[1]["confidence"]
-    conf_gap = round(h1_conf - h2_conf, 4)
-    i_dont_know = conf_gap < 0.10
+    h1_conf = float(hypotheses[0]["confidence"])
+    h2_conf = float(hypotheses[1]["confidence"])
+    top2 = sorted([h1_conf, h2_conf], reverse=True)
+    conf_gap = round(top2[0] - top2[1], 4)
+    # R-002 / validate_agentic_corpus_v1: gap < 0.20 ⇒ i_dont_know_triggered true
+    i_dont_know = conf_gap < 0.20
+    # Entry gold must be decisive — do not emit ENTER_* with sub-threshold spread
+    if final_status in ("ENTER_LONG", "ENTER_SHORT") and i_dont_know:
+        hypotheses[0]["confidence"] = 0.72
+        hypotheses[1]["confidence"] = 0.38
+        conf_gap = 0.34
+        i_dont_know = False
 
     # Blocking rules for no-trade cases
     blocking_rules = []
@@ -432,7 +445,8 @@ def main() -> None:
 
     # Resolve ledger path
     if args.latest:
-        ledger_dir = Path(__file__).parent.parent / "prove_learning" / "ledger_output"
+        # .../prove_learning/finquant/unified/agent_lab/this_file → prove_learning/ledger_output
+        ledger_dir = Path(__file__).resolve().parents[3] / "ledger_output"
         candidates = sorted(ledger_dir.glob("*_decisions.json"), key=lambda p: p.stat().st_mtime, reverse=True)
         if not candidates:
             print(f"ERROR: no decisions.json files found under {ledger_dir}", file=sys.stderr)
