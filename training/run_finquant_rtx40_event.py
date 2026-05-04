@@ -200,6 +200,14 @@ def main() -> int:
             "adapters/finquant-1-qwen7b-v0.1-smoke; full train uses adapters/finquant-1-qwen7b-v0.1"
         ),
     )
+    ap.add_argument(
+        "--resume-training",
+        action="store_true",
+        help=(
+            "Pass --resume to train_qlora (continue from latest checkpoint-* under the run output_dir). "
+            "Use after SSH drop or interrupt if checkpoints exist."
+        ),
+    )
     ap.add_argument("--config", type=Path, default=None, help="train_qlora YAML (default: training/config_v0.1.yaml)")
     ap.add_argument("--model", type=str, default="deepseek-ai/DeepSeek-R1-Distill-Qwen-7B", help="Base HF model id")
     ap.add_argument("--skip-validate", action="store_true")
@@ -311,6 +319,8 @@ def main() -> int:
             "--base",
             str(base),
         ]
+        if args.resume_training:
+            cmd.append("--resume")
         r = subprocess.run(cmd, cwd=str(repo), env=env)
         if r.returncode != 0:
             return r.returncode

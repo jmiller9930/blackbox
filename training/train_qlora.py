@@ -16,6 +16,13 @@ Phase 3 smoke:
 Phase 6 full (after approval only):
   python3 training/train_qlora.py full --config training/config_v0.1.yaml
 
+Resume after interrupt (latest checkpoint under output_dir):
+  python3 training/train_qlora.py full --config training/config_v0.1.yaml \\
+    --dataset /path/to/merged.jsonl --base \"$FINQUANT_BASE\" --resume
+
+Or an explicit step:
+  python3 training/train_qlora.py full ... --resume-from-checkpoint \"$FINQUANT_BASE/adapters/.../checkpoint-1000\"
+
 Writes smoke training report:
   {FINQUANT_BASE}/reports/smoke_training_report.md   (smoke mode only)
 """
@@ -192,6 +199,24 @@ def main() -> None:
         default=None,
         help="Override adapter output directory (absolute or relative to FINQUANT_BASE)",
     )
+    ap.add_argument(
+        "--resume",
+        action="store_true",
+        help=(
+            "Resume HuggingFace Trainer from the latest checkpoint-* under output_dir "
+            "(optimizer + global_step). Use after an interrupted run."
+        ),
+    )
+    ap.add_argument(
+        "--resume-from-checkpoint",
+        type=str,
+        default=None,
+        metavar="PATH",
+        help=(
+            "Resume from this checkpoint directory (e.g. …/checkpoint-1000). "
+            "Takes precedence over --resume."
+        ),
+    )
     args = ap.parse_args()
 
     base = (args.base or finquant_base()).resolve()
@@ -313,7 +338,18 @@ def main() -> None:
 
     trainer = SFTTrainer(**trainer_kw)
 
-    trainer.train()
+    resume_arg: str | bool | None = None
+    if args.resume_from_checkpoint:
+        rp = Path(args.resume_from_checkpoint).expanduser()
+        ckpt_dir = rp if rp.is_absolute() else (base / rp)
+        ckpt_dir = ckpt_dir.resolve()
+        if not ckpt_dir.is_dir():
+            raise SystemExit(f"--resume-from-checkpoint not found or not a directory: {ckpt_dir}")
+        resume_arg = str(ckpt_dir)
+    elif args.resume:
+        resume_arg = True
+
+    trainer.train(resume_from_checkpoint=resume_arg)
 
     log_history = getattr(trainer.state, "log_history", []) or []
     trainer.save_model(str(out_dir))

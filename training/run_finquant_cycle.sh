@@ -25,6 +25,7 @@
 #   EXPORT_GOOD_ONLY — if 1, pass --good-only to exporter (default: 1)
 #   EXPORT_MIN_SPREAD — default 0.20
 #   TRAIN_LOG       — if set, tee train output to this file
+#   RESUME_TRAIN    — if 1, pass --resume-training (continue from latest checkpoint-* under output_dir)
 #
 set -euo pipefail
 
@@ -133,6 +134,11 @@ train_full() {
     exit 2
   fi
   maybe_venv
+  RESUME_ARGS=()
+  if [[ "${RESUME_TRAIN:-}" == "1" ]]; then
+    RESUME_ARGS+=(--resume-training)
+    echo "=== RESUME_TRAIN=1 — continuing from latest checkpoint under adapters/finquant-1-qwen7b-v0.1"
+  fi
   echo "=== TRAIN full + exam (production)"
   if [[ -n "${TRAIN_LOG:-}" ]]; then
     mkdir -p "$(dirname "$TRAIN_LOG")"
@@ -141,14 +147,14 @@ train_full() {
       python3 training/test.py --train full --confirm-production-train \
         --adapter adapters/finquant-1-qwen7b-v0.1 \
         --exam-write-report \
-        --dataset "$MERGED_JSONL" 2>&1 | tee -a "$TRAIN_LOG")
+        --dataset "$MERGED_JSONL" "${RESUME_ARGS[@]}" 2>&1 | tee -a "$TRAIN_LOG")
   else
     (cd "$REPO_ROOT" && \
       export BLACKBOX_REPO_ROOT="$REPO_ROOT" FINQUANT_BASE="$FINQUANT_BASE" && \
       python3 training/test.py --train full --confirm-production-train \
         --adapter adapters/finquant-1-qwen7b-v0.1 \
         --exam-write-report \
-        --dataset "$MERGED_JSONL")
+        --dataset "$MERGED_JSONL" "${RESUME_ARGS[@]}")
   fi
 }
 
