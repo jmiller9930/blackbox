@@ -18,6 +18,7 @@ Only validated patterns influence future decisions.
 
 from __future__ import annotations
 import json
+import sqlite3
 from pathlib import Path
 from typing import Any
 
@@ -172,3 +173,30 @@ def _trace_entry(
     if detail:
         entry["detail"] = detail
     return entry
+
+
+def retrieve_eligible_auto(
+    shared_store_path: str | Path | None,
+    case: dict[str, Any],
+    config: dict[str, Any],
+    max_records: int | None = None,
+) -> tuple[list[dict[str, Any]], list[dict[str, Any]]]:
+    """
+    Prefer RMv2 SQLite memory index (``memory_sqlite_path_v1``) when populated;
+    otherwise scan JSONL via ``retrieve_eligible``.
+    """
+    db_key = (config.get("memory_sqlite_path_v1") or "").strip()
+    if db_key:
+        p = Path(db_key)
+        if p.is_file():
+            conn = sqlite3.connect(str(p))
+            try:
+                n = conn.execute("SELECT COUNT(*) FROM learning_memory").fetchone()[0]
+            finally:
+                conn.close()
+            if int(n) > 0:
+                from rmv2.memory_index import retrieve_eligible_sqlite
+
+                return retrieve_eligible_sqlite(p, case, config, max_records)
+
+    return retrieve_eligible(shared_store_path, case, config, max_records)

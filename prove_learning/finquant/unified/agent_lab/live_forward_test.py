@@ -149,10 +149,10 @@ def make_decision(
 ) -> dict[str, Any]:
     """Run RMv2 on the current bars and return the decision."""
     from reasoning_module_v2 import ReasoningModule, RMConfig
-    from retrieval import retrieve_eligible
 
     rm_config = RMConfig.from_file(str(_LAB_ROOT / "configs" / "default_lab_config.json"))
     rm_config.memory_store_path = str(output_dir / "live_memory.jsonl")
+    rm_config.memory_sqlite_path = str(output_dir / "live_memory.db")
     rm_config.retrieval_enabled = True
 
     rm = ReasoningModule(config=rm_config)
@@ -342,10 +342,22 @@ def run_live(
     units_dir      = out / "learning_units"
     learning_store = LearningUnitStore(units_dir)
 
+    from rmv2.memory_index import ensure_db, ingest_jsonl
+
+    live_sqlite = out / "live_memory.db"
+    ensure_db(live_sqlite)
+
     config = load_config(config_path)
     config["memory_store_path"] = str(out / "live_memory.jsonl")
+    config["memory_sqlite_path_v1"] = str(live_sqlite)
     config["retrieval_enabled_default_v1"] = True
     config["auto_promote_learning_v1"] = True
+
+    live_jsonl = out / "live_memory.jsonl"
+    if live_jsonl.is_file():
+        n_backfill = ingest_jsonl(live_jsonl, live_sqlite)
+        if n_backfill:
+            print(f"[live] RMv2 memory DB: indexed {n_backfill} rows from {live_jsonl.name}")
 
     print(f"[live] symbol={symbol} | interval={interval_minutes}m | db={db_path}")
     print(f"[live] output={out}")

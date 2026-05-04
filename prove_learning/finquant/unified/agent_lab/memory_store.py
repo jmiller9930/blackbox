@@ -150,6 +150,14 @@ class MemoryStore:
                 for rec in self._learning_records:
                     f.write(json.dumps(rec) + "\n")
 
+        # RMv2 SQLite memory index (optional dual-write)
+        db_key = (self._config.get("memory_sqlite_path_v1") or "").strip()
+        if db_key and self._learning_records:
+            from rmv2.memory_index import upsert_learning_record
+
+            for rec in self._learning_records:
+                upsert_learning_record(db_key, rec)
+
         return self._run_id
 
     def get_run_dir(self) -> Path:

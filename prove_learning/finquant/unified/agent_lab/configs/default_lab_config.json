@@ -8,6 +8,8 @@
   "llm_timeout_seconds_v1": 45,
   "llm_max_tokens_v1": 700,
   "memory_store_path": "finquant/unified/agent_lab/outputs/shared_learning_records.jsonl",
+  "_memory_sqlite_note": "Optional RMv2 index — set memory_sqlite_path_v1 to a .db path for indexed retrieval",
+  "memory_sqlite_path_v1": "",
   "retrieval_enabled_default_v1": false,
   "write_outputs_v1": true,
   "auto_promote_learning_v1": true,

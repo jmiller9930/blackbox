@@ -28,14 +28,14 @@ def execute_case(
     from lifecycle_engine import LifecycleEngine
     from evaluation import evaluate_lifecycle
     from memory_store import MemoryStore
-    from retrieval import retrieve_eligible
+    from retrieval import retrieve_eligible_auto
     from learning.falsification_engine import falsify_with_simulation
     from learning.promotion_engine import apply_promotion_if_needed
 
     case = load_case(case_path)
     store = MemoryStore(config=config, base_output_dir=output_dir)
 
-    prior_records, retrieval_trace = retrieve_eligible(
+    prior_records, retrieval_trace = retrieve_eligible_auto(
         shared_store_path=config.get("memory_store_path"),
         case=case,
         config=config,
