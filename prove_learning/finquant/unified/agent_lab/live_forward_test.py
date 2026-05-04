@@ -348,6 +348,22 @@ def run_live(
         now = datetime.datetime.now(timezone.utc)
         print(f"\n[live] {now.strftime('%Y-%m-%dT%H:%M:%SZ')} — making decision...")
 
+        # ── Weekend skip — no decisions Fri 20:00 UTC through Sunday ────
+        now_utc = datetime.datetime.now(timezone.utc)
+        weekday = now_utc.weekday()   # Monday=0, Sunday=6
+        hour = now_utc.hour
+        is_weekend = (
+            (weekday == 4 and hour >= 20) or  # Friday after 20:00 UTC
+            weekday == 5 or                    # Saturday
+            weekday == 6                       # Sunday
+        )
+        if is_weekend:
+            day_name = ["Mon","Tue","Wed","Thu","Fri","Sat","Sun"][weekday]
+            print(f"[live] WEEKEND — skipping ({day_name} UTC {hour:02d}:00). No decision.")
+            if not run_once:
+                time.sleep(interval_minutes * 60)
+            continue
+
         # ── Circuit breaker check ────────────────────────────────────────
         if cb_cooldown_remaining > 0:
             cb_cooldown_remaining -= 1
