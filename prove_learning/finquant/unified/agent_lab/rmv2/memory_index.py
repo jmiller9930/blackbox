@@ -11,7 +11,8 @@ Public API:
   - retrieve_eligible_sqlite(db_path, case, config, max_records)
   - insert_context_snapshot(...)  — optional decision-time context audit
 
-Retrieval routing is solely ``retrieval.retrieve_eligible`` (JSONL + companion ``.db``).
+Companion DB also holds ``pattern_memory_v1`` (STM/LTM embeddings) — merged inside
+``retrieval.retrieve_eligible`` when ``memory_vector_enabled_v1`` is true.
 """
 
 from __future__ import annotations
@@ -58,6 +59,27 @@ CREATE TABLE IF NOT EXISTS context_snapshots (
 );
 
 CREATE INDEX IF NOT EXISTS idx_cs_symbol_ts ON context_snapshots(symbol, bar_timestamp);
+
+-- Tiered probabilistic pattern memory (STM = recent contexts; LTM = survived / outcome-linked)
+CREATE TABLE IF NOT EXISTS pattern_memory_v1 (
+    memory_id           TEXT PRIMARY KEY,
+    tier                TEXT NOT NULL CHECK(tier IN ('stm','ltm')),
+    symbol              TEXT NOT NULL,
+    regime_v1           TEXT,
+    bar_timestamp       TEXT,
+    narrative_text      TEXT NOT NULL,
+    embedding_dim       INTEGER NOT NULL,
+    embedding_blob      BLOB NOT NULL,
+    outcome_hint        TEXT,
+    similarity_probe_v1 REAL,
+    linked_record_id    TEXT,
+    metadata_json       TEXT,
+    created_at          TEXT DEFAULT (datetime('now')),
+    expires_stm_at      TEXT
+);
+
+CREATE INDEX IF NOT EXISTS idx_pm_symbol_tier ON pattern_memory_v1(symbol, tier);
+CREATE INDEX IF NOT EXISTS idx_pm_stm_expiry ON pattern_memory_v1(expires_stm_at);
 """
 
 

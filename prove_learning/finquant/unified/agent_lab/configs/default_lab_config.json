@@ -15,5 +15,14 @@
   "retrieval_min_obs_v1": 5,
   "retrieval_min_win_rate_v1": 0.65,
   "retrieval_max_records_v1": 3,
-  "_note": "win_rate raised 0.55→0.65 and max_records 5→3 to reduce memory noise in cycles 2-3"
+  "_note": "win_rate raised 0.55→0.65 and max_records 5→3 to reduce memory noise in cycles 2-3",
+  "memory_vector_enabled_v1": true,
+  "memory_embedding_backend_v1": "deterministic",
+  "memory_embedding_dim_v1": 256,
+  "memory_vector_k_stm_v1": 2,
+  "memory_vector_k_ltm_v1": 2,
+  "memory_vector_min_sim_v1": 0.2,
+  "memory_vector_max_extra_v1": 4,
+  "stm_ttl_hours_v1": 72,
+  "ollama_embeddings_model_v1": "nomic-embed-text"
 }

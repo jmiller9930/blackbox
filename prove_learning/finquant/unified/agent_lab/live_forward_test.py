@@ -146,11 +146,16 @@ def make_decision(
     config: dict,
     learning_store,
     output_dir: Path,
+    *,
+    lab_config_path: str | None = None,
 ) -> dict[str, Any]:
     """Run RMv2 on the current bars and return the decision."""
+    from retrieval import companion_memory_sqlite_path
     from rmv2 import ReasoningModule, RMConfig
+    from rmv2.memory_tiers import insert_stm
 
-    rm_config = RMConfig.from_file(str(_LAB_ROOT / "configs" / "default_lab_config.json"))
+    cfg_path = lab_config_path or str(_LAB_ROOT / "configs" / "default_lab_config.json")
+    rm_config = RMConfig.from_file(cfg_path)
     rm_config.memory_store_path = str(output_dir / "live_memory.jsonl")
     rm_config.retrieval_enabled = True
 
@@ -196,6 +201,8 @@ def make_decision(
         "realized_r": None,       # (exit_price - entry) / stop_distance
         "falsified_at": None,
         "is_good_decision": None,
+        "context_narrative_v1": (decision.context_narrative_v1 or "")[:8000],
+        "vector_memory_id_v1": None,
     }
 
     # Compute stop/target
@@ -210,6 +217,24 @@ def make_decision(
         elif decision.action == "ENTER_SHORT":
             record["planned_stop"]   = round(close_f + STOP_ATR_MULT * atr_f, 6)
             record["planned_target"] = round(close_f - TARGET_ATR_MULT * atr_f, 6)
+
+    exec_cfg = rm_config.to_execution_config()
+    vdb = companion_memory_sqlite_path(rm_config.memory_store_path)
+    if (
+        vdb is not None
+        and rm_config.memory_vector_enabled
+        and (decision.context_narrative_v1 or "").strip()
+    ):
+        mid = insert_stm(
+            vdb,
+            symbol=symbol,
+            regime_v1=decision.regime,
+            bar_timestamp=str(current_bar.get("timestamp") or ""),
+            narrative_text=decision.context_narrative_v1,
+            config=exec_cfg,
+            decision_action=decision.action,
+        )
+        record["vector_memory_id_v1"] = mid
 
     return record
 
@@ -343,6 +368,7 @@ def run_live(
 
     from retrieval import companion_memory_sqlite_path
     from rmv2.memory_index import ensure_db, ingest_jsonl
+    from rmv2.memory_tiers import prune_expired_stm
 
     live_jsonl = out / "live_memory.jsonl"
     live_db = companion_memory_sqlite_path(live_jsonl)
@@ -401,6 +427,10 @@ def run_live(
             continue
 
         try:
+            mem_db = companion_memory_sqlite_path(Path(config["memory_store_path"]))
+            if mem_db is not None:
+                prune_expired_stm(mem_db)
+
             bars_raw = load_latest_bars(db_path, symbol, n_bars=CONTEXT_BARS + OUTCOME_BARS + 2, interval_minutes=interval_minutes)
             bars_with_ind = compute_indicators(bars_raw)
             decision_bars = bars_with_ind[:CONTEXT_BARS + 1]
@@ -411,6 +441,7 @@ def run_live(
                 config=config,
                 learning_store=learning_store,
                 output_dir=out,
+                lab_config_path=config_path,
             )
 
             print(f"[live] Decision: {record['action']} | regime={record['regime']} | conf={record['confidence']:.2f} | source={record['source']}")
@@ -448,6 +479,15 @@ def run_live(
                     pnl = float(d.get("pnl") or 0)
                     session_pnl += pnl
                     print(f"[live] Falsified: {d['action']} → {outcome} | pnl={pnl:+.4f} | session_pnl={session_pnl:+.4f}")
+
+                    vid = d.get("vector_memory_id_v1")
+                    if vid:
+                        from retrieval import companion_memory_sqlite_path
+                        from rmv2.memory_tiers import promote_stm_to_ltm
+
+                        vdb = companion_memory_sqlite_path(Path(config["memory_store_path"]))
+                        if vdb is not None:
+                            promote_stm_to_ltm(vdb, str(vid), outcome_hint=str(outcome))
 
                     # ── Circuit breaker: update on entry outcomes only ──
                     if outcome == "loss":

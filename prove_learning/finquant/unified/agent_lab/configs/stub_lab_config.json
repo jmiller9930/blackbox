@@ -10,5 +10,6 @@
   "retrieval_min_obs_v1": 1,
   "retrieval_min_win_rate_v1": 0.0,
   "retrieval_allow_candidate_v1": true,
-  "auto_promote_learning_v1": true
+  "auto_promote_learning_v1": true,
+  "memory_vector_enabled_v1": false
 }

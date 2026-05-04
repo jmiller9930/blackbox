@@ -40,7 +40,7 @@ def test_retrieval_disabled_config_returns_empty():
         config=CONFIG_RETRIEVAL_OFF,
     )
     assert eligible == []
-    assert any(e["reason"] == "retrieval_disabled_by_config" for e in trace)
+    assert any(e["reason"] == "no_memory_store_path" for e in trace)
 
 
 def test_blocked_records_never_returned():

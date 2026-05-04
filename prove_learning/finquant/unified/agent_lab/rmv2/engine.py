@@ -122,6 +122,9 @@ class RMState(TypedDict):
     final_source: str
     guard_reason: str
 
+    # Narrative query for vector pattern memory (STM/LTM similarity)
+    context_narrative_v1: str
+
     # Metadata
     latency_ms: int
     error: str
@@ -147,6 +150,7 @@ class RMDecision:
     # Risk context — context IS risk management
     risk_pct: float = 0.0          # final recommended risk % of wallet
     risk_context: dict[str, Any] = field(default_factory=dict)  # factor breakdown
+    context_narrative_v1: str = ""  # fed into tiered pattern-memory retrieval
 
     def to_dict(self) -> dict[str, Any]:
         return {
@@ -164,6 +168,7 @@ class RMDecision:
             "latency_ms": self.latency_ms,
             "risk_pct": self.risk_pct,
             "risk_context": self.risk_context,
+            "context_narrative_v1": self.context_narrative_v1,
         }
 
 
@@ -185,6 +190,16 @@ class RMConfig:
     retrieval_min_win_rate: float = DEFAULT_MIN_WIN_RATE
     retrieval_allow_candidate: bool = False
     horizon_bars: int = 5
+    # Tiered vector pattern memory (STM/LTM in companion SQLite)
+    memory_vector_enabled: bool = False
+    memory_vector_k_stm: int = 2
+    memory_vector_k_ltm: int = 2
+    memory_vector_min_sim: float = 0.22
+    memory_vector_max_extra: int = 4
+    memory_embedding_backend: str = "deterministic"
+    memory_embedding_dim: int = 256
+    ollama_embeddings_model: str = "nomic-embed-text"
+    stm_ttl_hours: int = 72
 
     @classmethod
     def from_file(cls, config_path: str) -> "RMConfig":
@@ -203,6 +218,15 @@ class RMConfig:
             retrieval_min_win_rate=float(raw.get("retrieval_min_win_rate_v1") or DEFAULT_MIN_WIN_RATE),
             retrieval_allow_candidate=bool(raw.get("retrieval_allow_candidate_v1", False)),
             horizon_bars=int(raw.get("horizon_bars_v1") or 5),
+            memory_vector_enabled=bool(raw.get("memory_vector_enabled_v1", False)),
+            memory_vector_k_stm=int(raw.get("memory_vector_k_stm_v1") or 2),
+            memory_vector_k_ltm=int(raw.get("memory_vector_k_ltm_v1") or 2),
+            memory_vector_min_sim=float(raw.get("memory_vector_min_sim_v1") or 0.22),
+            memory_vector_max_extra=int(raw.get("memory_vector_max_extra_v1") or 4),
+            memory_embedding_backend=str(raw.get("memory_embedding_backend_v1") or "deterministic"),
+            memory_embedding_dim=int(raw.get("memory_embedding_dim_v1") or 256),
+            ollama_embeddings_model=str(raw.get("ollama_embeddings_model_v1") or "nomic-embed-text"),
+            stm_ttl_hours=int(raw.get("stm_ttl_hours_v1") or 72),
         )
 
     def to_execution_config(self) -> dict[str, Any]:
@@ -221,6 +245,15 @@ class RMConfig:
             "retrieval_min_obs_v1": self.retrieval_min_obs,
             "retrieval_min_win_rate_v1": self.retrieval_min_win_rate,
             "retrieval_allow_candidate_v1": self.retrieval_allow_candidate,
+            "memory_vector_enabled_v1": self.memory_vector_enabled,
+            "memory_vector_k_stm_v1": self.memory_vector_k_stm,
+            "memory_vector_k_ltm_v1": self.memory_vector_k_ltm,
+            "memory_vector_min_sim_v1": self.memory_vector_min_sim,
+            "memory_vector_max_extra_v1": self.memory_vector_max_extra,
+            "memory_embedding_backend_v1": self.memory_embedding_backend,
+            "memory_embedding_dim_v1": self.memory_embedding_dim,
+            "ollama_embeddings_model_v1": self.ollama_embeddings_model,
+            "stm_ttl_hours_v1": self.stm_ttl_hours,
             "write_outputs_v1": False,
             "auto_promote_learning_v1": True,
         }
@@ -288,15 +321,27 @@ def node_feature_extraction(state: RMState) -> dict[str, Any]:
 # ---------------------------------------------------------------------------
 
 def node_quality_retrieval(state: RMState) -> dict[str, Any]:
-    """Layer 1b: Quality-gated memory retrieval."""
+    """Layer 1b: Quality-gated memory + optional STM/LTM vector similarity."""
+    from context_builder import build_rich_context
     from retrieval import retrieve_eligible
 
     cfg = state["config"]
-    store_path = cfg.get("memory_store_path") if cfg.get("retrieval_enabled_default_v1") else None
+    store_path = cfg.get("memory_store_path")
+
+    ctx_pkg = build_rich_context(
+        bars=state["bars"],
+        symbol=state["symbol"],
+        timeframe_minutes=state["timeframe_minutes"],
+        regime=state.get("regime") or "unknown",
+        prior_records=[],
+        n_trajectory=5,
+    )
+    narrative = str(ctx_pkg.get("narrative") or "")
 
     case = {
         "symbol": state["symbol"],
         "regime_v1": state.get("regime", "unknown"),
+        "context_narrative_v1": narrative,
     }
 
     records, trace = retrieve_eligible(
@@ -308,6 +353,7 @@ def node_quality_retrieval(state: RMState) -> dict[str, Any]:
     return {
         "prior_records": records,
         "retrieval_trace": trace,
+        "context_narrative_v1": narrative,
     }
 
 
@@ -790,6 +836,7 @@ class ReasoningModule:
                 action="NO_TRADE", confidence=0.0,
                 thesis="No bars provided.", invalidation="N/A",
                 source="rule", regime="unknown", latency_ms=0,
+                context_narrative_v1="",
             )
 
         initial_state: RMState = {
@@ -814,6 +861,7 @@ class ReasoningModule:
             "guard_reason": "",
             "latency_ms": 0,
             "error": "",
+            "context_narrative_v1": "",
         }
 
         try:
@@ -823,6 +871,7 @@ class ReasoningModule:
                 action="NO_TRADE", confidence=0.0,
                 thesis=f"Graph error: {exc}", invalidation="N/A",
                 source="rule", regime="unknown", latency_ms=0,
+                context_narrative_v1="",
             )
 
         latency_ms = int((time.monotonic() - t0) * 1000)
@@ -871,6 +920,7 @@ class ReasoningModule:
             latency_ms=latency_ms,
             risk_pct=risk_ctx["final_risk_pct"],
             risk_context=risk_ctx,
+            context_narrative_v1=str(final_state.get("context_narrative_v1") or ""),
         )
 
 

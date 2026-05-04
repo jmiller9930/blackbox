@@ -200,9 +200,11 @@ This means:
 
 The primary deliverable of this lab. A self-contained, pluggable reasoning module that can be called by any application to get a governed trade decision.
 
-**Package:** `prove_learning/finquant/unified/agent_lab/rmv2/` (`engine.py`, `memory_index.py`)  
+**Package:** `prove_learning/finquant/unified/agent_lab/rmv2/` (`engine.py`, `memory_index.py`, `memory_tiers.py`, `embeddings.py`)  
 **Import:** `from rmv2 import ReasoningModule, RMConfig`  
 **Version:** RMv2 (learning-loop version)
+
+**Tiered pattern memory:** STM (TTL) plus LTM (promoted after falsification), cosine similarity on embeddings in companion SQLite (`pattern_memory_v1`). Governed rows stay gated; vector neighbors add probabilistic similar-context for the LLM. Set `memory_embedding_backend_v1` to `deterministic` (offline plumbing) or `ollama` (semantic).
 
 ### How to build it
 

@@ -1,15 +1,13 @@
 """
 FinQuant Unified Agent Lab — Retrieval (RMv2 quality-gated).
 
-Single retrieval path:
-  If ``memory_store_path`` ends with ``.jsonl``, the companion SQLite index is
-  ``same_name.db``. When that DB exists and has rows, retrieval uses indexed SQL;
-  otherwise records are scanned from JSONL.
+Single entry: ``retrieve_eligible``.
 
-MANDATORY RULES:
-  1. records with retrieval_enabled_v1=false must NEVER be returned.
-  2. records whose pattern has not met quality thresholds must NOT be returned.
-  3. Regime must match (when case has regime tag).
+1. **Governed memory** (optional): JSONL scan or ``learning_memory`` SQLite when enabled.
+2. **Pattern memory** (optional): STM/LTM vector similarity in ``pattern_memory_v1`` — probabilistic
+   neighborhood context layered on top of exact gates.
+
+Companion DB: ``*.jsonl`` → ``*.db`` (see ``companion_memory_sqlite_path``).
 """
 
 from __future__ import annotations
@@ -50,6 +48,46 @@ def _sqlite_learning_rowcount(db_path: Path) -> int:
         conn.close()
 
 
+def _merge_pattern_memory_vectors(
+    eligible: list[dict[str, Any]],
+    db_path: Path | None,
+    case: dict[str, Any],
+    config: dict[str, Any],
+) -> tuple[list[dict[str, Any]], list[dict[str, Any]]]:
+    """Append STM/LTM similarity hits as synthetic records (bounded)."""
+    trace_out: list[dict[str, Any]] = []
+    narrative = (case.get("context_narrative_v1") or "").strip()
+    if not narrative or not config.get("memory_vector_enabled_v1"):
+        return eligible, trace_out
+    if db_path is None or not db_path.is_file():
+        trace_out.append(_trace_entry(reason="pattern_memory_db_absent"))
+        return eligible, trace_out
+
+    from rmv2.embeddings import embed_for_memory
+    from rmv2.memory_tiers import pattern_hits_to_synthetic_records, prune_expired_stm, search_similar_patterns
+
+    prune_expired_stm(db_path)
+    qvec, _backend = embed_for_memory(narrative[:12000], config)
+    k_stm = int(config.get("memory_vector_k_stm_v1") or 2)
+    k_ltm = int(config.get("memory_vector_k_ltm_v1") or 2)
+    min_sim = float(config.get("memory_vector_min_sim_v1") or 0.22)
+    hits, ht = search_similar_patterns(
+        db_path,
+        qvec,
+        symbol=case.get("symbol", ""),
+        case_regime=case.get("regime_v1"),
+        k_stm=k_stm,
+        k_ltm=k_ltm,
+        min_similarity=min_sim,
+    )
+    trace_out.extend(ht)
+    synth = pattern_hits_to_synthetic_records(hits)
+    max_extra = int(config.get("memory_vector_max_extra_v1") or 4)
+    synth = synth[:max_extra]
+    trace_out.append(_trace_entry(reason="pattern_memory_merged", detail=f"synth_rows={len(synth)}"))
+    return list(eligible) + synth, trace_out
+
+
 def retrieve_eligible(
     shared_store_path: str | Path | None,
     case: dict[str, Any],
@@ -59,18 +97,34 @@ def retrieve_eligible(
     """
     Return (eligible_records, retrieval_trace_entries).
 
-    Prefer companion SQLite when populated; otherwise scan JSONL.
+    Governed retrieval runs when enabled; vector pattern memory merges when enabled
+    (independent — can supply synthetic neighbors even if governed retrieval is off).
     """
-    if not shared_store_path or not config.get("retrieval_enabled_default_v1", False):
-        return [], [_trace_entry(reason="retrieval_disabled_by_config")]
+    trace: list[dict[str, Any]] = []
+
+    if not shared_store_path:
+        trace.append(_trace_entry(reason="no_memory_store_path"))
+        merged, vtr = _merge_pattern_memory_vectors([], None, case, config)
+        trace.extend(vtr)
+        return merged, trace
+
+    eligible: list[dict[str, Any]] = []
+
+    if config.get("retrieval_enabled_default_v1", False):
+        db_path = companion_memory_sqlite_path(shared_store_path)
+        if db_path is not None and _sqlite_learning_rowcount(db_path) > 0:
+            from rmv2.memory_index import retrieve_eligible_sqlite
+
+            eligible, trace = retrieve_eligible_sqlite(db_path, case, config, max_records)
+        else:
+            eligible, trace = _retrieve_eligible_jsonl(shared_store_path, case, config, max_records)
+    else:
+        trace.append(_trace_entry(reason="governed_retrieval_disabled"))
 
     db_path = companion_memory_sqlite_path(shared_store_path)
-    if db_path is not None and _sqlite_learning_rowcount(db_path) > 0:
-        from rmv2.memory_index import retrieve_eligible_sqlite
-
-        return retrieve_eligible_sqlite(db_path, case, config, max_records)
-
-    return _retrieve_eligible_jsonl(shared_store_path, case, config, max_records)
+    extra_eligible, vtrace = _merge_pattern_memory_vectors(eligible, db_path, case, config)
+    trace.extend(vtrace)
+    return extra_eligible, trace
 
 
 def _retrieve_eligible_jsonl(
@@ -187,10 +241,13 @@ def _trace_entry(
     record_id: str | None = None,
     path: str | None = None,
     detail: str | None = None,
+    memory_id: str | None = None,
 ) -> dict[str, Any]:
     entry: dict[str, Any] = {"reason": reason}
     if record_id:
         entry["record_id"] = record_id
+    if memory_id:
+        entry["memory_id"] = memory_id
     if path:
         entry["path"] = path
     if detail:
