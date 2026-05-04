@@ -181,15 +181,20 @@ def make_decision(
         "thesis": decision.thesis,
         "invalidation": decision.invalidation,
         "guard_reason": decision.guard_reason,
-        "h1_confidence": decision.memory_quality.get("avg_win_rate"),  # proxy
+        "h1_confidence": decision.memory_quality.get("avg_win_rate"),
         "memory_records_used": len(decision.memory_used),
         "memory_record_ids": decision.memory_used,
+        # Risk context — context IS risk management
+        "risk_pct": decision.risk_pct,
+        "risk_context": decision.risk_context,
         # Compute stop/target
         "planned_stop": None,
         "planned_target": None,
         # To be filled at falsification time
         "outcome_kind": None,
         "pnl": None,
+        "exit_price": None,       # actual price at exit/horizon
+        "realized_r": None,       # (exit_price - entry) / stop_distance
         "falsified_at": None,
         "is_good_decision": None,
     }
@@ -269,6 +274,16 @@ def falsify_decision(record: dict, future_bars: list[dict]) -> dict:
 
     record["outcome_kind"] = outcome
     record["pnl"] = round(pnl, 6)
+    record["exit_price"] = round(exit_price, 6)
+    # Realized R = actual gain / stop distance (positive = win, negative = loss)
+    stop = record.get("planned_stop")
+    if stop is not None and float(stop) != 0 and entry_close > 0:
+        stop_distance = abs(entry_close - float(stop))
+        if stop_distance > 0:
+            if action == "ENTER_LONG":
+                record["realized_r"] = round((exit_price - entry_close) / stop_distance, 4)
+            else:
+                record["realized_r"] = round((entry_close - exit_price) / stop_distance, 4)
     record["is_good_decision"] = outcome == "win"
     record["falsified_at"] = datetime.datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
     return record

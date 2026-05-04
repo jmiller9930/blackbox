@@ -147,6 +147,9 @@ class RMDecision:
     tot_branches: list[dict[str, Any]] = field(default_factory=list)
     guard_reason: str = ""
     latency_ms: int = 0
+    # Risk context — context IS risk management
+    risk_pct: float = 0.0          # final recommended risk % of wallet
+    risk_context: dict[str, Any] = field(default_factory=dict)  # factor breakdown
 
     def to_dict(self) -> dict[str, Any]:
         return {
@@ -162,6 +165,8 @@ class RMDecision:
             "tot_branches": self.tot_branches,
             "guard_reason": self.guard_reason,
             "latency_ms": self.latency_ms,
+            "risk_pct": self.risk_pct,
+            "risk_context": self.risk_context,
         }
 
 
@@ -835,18 +840,40 @@ class ReasoningModule:
             ) if prior else 0.0,
         }
 
+        action = str(final_state.get("final_action") or "NO_TRADE")
+        regime = str(final_state.get("regime") or "unknown")
+        current_bar = final_state.get("current_bar") or {}
+
+        # ── Compute risk context from the same context already built ─────
+        from risk_context import compute_risk_context, risk_context_summary
+        import datetime as _dt
+        ctx_mctx = (final_state.get("features") or {}).get("market_context_v1") or {}
+        risk_ctx = compute_risk_context(
+            atr_pct=ctx_mctx.get("atr_pct_v1"),
+            regime=regime,
+            swing_structure=None,  # will be added when swing detector is built
+            confidence_spread=float(final_state.get("final_confidence") or 0.0) * 2,  # proxy
+            utc_hour=_dt.datetime.now(_dt.timezone.utc).hour,
+            pattern_win_rate=mem_quality["avg_win_rate"] if mem_quality["avg_win_rate"] > 0 else None,
+            recent_losses=0,   # updated by live loop after falsification
+            recent_wins=0,
+            action=action,
+        )
+
         return RMDecision(
-            action=str(final_state.get("final_action") or "NO_TRADE"),
+            action=action,
             confidence=float(final_state.get("final_confidence") or 0.0),
             thesis=str(final_state.get("final_thesis") or ""),
             invalidation=str(final_state.get("final_invalidation") or ""),
             source=str(final_state.get("final_source") or "rule"),
-            regime=str(final_state.get("regime") or "unknown"),
+            regime=regime,
             memory_used=[str(r.get("record_id") or "") for r in prior],
             memory_quality=mem_quality,
             tot_branches=final_state.get("tot_branches") or [],
             guard_reason=str(final_state.get("guard_reason") or ""),
             latency_ms=latency_ms,
+            risk_pct=risk_ctx["final_risk_pct"],
+            risk_context=risk_ctx,
         )
 
 
