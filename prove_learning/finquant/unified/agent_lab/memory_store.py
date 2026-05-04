@@ -150,13 +150,15 @@ class MemoryStore:
                 for rec in self._learning_records:
                     f.write(json.dumps(rec) + "\n")
 
-        # RMv2 SQLite memory index (optional dual-write)
-        db_key = (self._config.get("memory_sqlite_path_v1") or "").strip()
-        if db_key and self._learning_records:
+        # RMv2 SQLite index — same stem as JSONL (foo.jsonl → foo.db)
+        if self._shared_store and self._learning_records:
+            from retrieval import companion_memory_sqlite_path
             from rmv2.memory_index import upsert_learning_record
 
-            for rec in self._learning_records:
-                upsert_learning_record(db_key, rec)
+            db_path = companion_memory_sqlite_path(self._shared_store)
+            if db_path is not None:
+                for rec in self._learning_records:
+                    upsert_learning_record(db_path, rec)
 
         return self._run_id
 

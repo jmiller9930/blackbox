@@ -41,7 +41,6 @@ Package layout (RMv2 container): ``agent_lab/rmv2/`` — ``engine.py`` (this fil
 
 Usage:
   from rmv2 import ReasoningModule, RMConfig
-  # or: from reasoning_module_v2 import ReasoningModule, RMConfig  # shim
 
   rm = ReasoningModule(config_path="configs/default_lab_config.json")
   decision = rm.decide(bars=last_20_bars, symbol="SOL-PERP", timeframe_minutes=15)
@@ -179,8 +178,7 @@ class RMConfig:
     ollama_base_url: str = "http://172.20.2.230:11434"
     llm_timeout_seconds: int = 30
     llm_max_tokens: int = 500
-    memory_store_path: str = ""  # JSONL spine for governed records
-    memory_sqlite_path: str = ""  # rmv2.memory_index SQLite (optional)
+    memory_store_path: str = ""  # JSONL spine; companion DB is same stem + .db
     retrieval_enabled: bool = False
     retrieval_max_records: int = 5
     retrieval_min_obs: int = DEFAULT_MIN_OBS
@@ -199,7 +197,6 @@ class RMConfig:
             llm_timeout_seconds=int(raw.get("llm_timeout_seconds_v1") or 30),
             llm_max_tokens=int(raw.get("llm_max_tokens_v1") or 500),
             memory_store_path=str(raw.get("memory_store_path") or ""),
-            memory_sqlite_path=str(raw.get("memory_sqlite_path_v1") or ""),
             retrieval_enabled=bool(raw.get("retrieval_enabled_default_v1", False)),
             retrieval_max_records=int(raw.get("retrieval_max_records_v1") or 5),
             retrieval_min_obs=int(raw.get("retrieval_min_obs_v1") or DEFAULT_MIN_OBS),
@@ -219,7 +216,6 @@ class RMConfig:
             "llm_timeout_seconds_v1": self.llm_timeout_seconds,
             "llm_max_tokens_v1": self.llm_max_tokens,
             "memory_store_path": self.memory_store_path,
-            "memory_sqlite_path_v1": self.memory_sqlite_path,
             "retrieval_enabled_default_v1": self.retrieval_enabled,
             "retrieval_max_records_v1": self.retrieval_max_records,
             "retrieval_min_obs_v1": self.retrieval_min_obs,
@@ -293,7 +289,7 @@ def node_feature_extraction(state: RMState) -> dict[str, Any]:
 
 def node_quality_retrieval(state: RMState) -> dict[str, Any]:
     """Layer 1b: Quality-gated memory retrieval."""
-    from retrieval import retrieve_eligible_auto
+    from retrieval import retrieve_eligible
 
     cfg = state["config"]
     store_path = cfg.get("memory_store_path") if cfg.get("retrieval_enabled_default_v1") else None
@@ -303,7 +299,7 @@ def node_quality_retrieval(state: RMState) -> dict[str, Any]:
         "regime_v1": state.get("regime", "unknown"),
     }
 
-    records, trace = retrieve_eligible_auto(
+    records, trace = retrieve_eligible(
         shared_store_path=store_path,
         case=case,
         config=cfg,

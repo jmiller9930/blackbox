@@ -200,8 +200,9 @@ This means:
 
 The primary deliverable of this lab. A self-contained, pluggable reasoning module that can be called by any application to get a governed trade decision.
 
-**File:** `prove_learning/finquant/unified/agent_lab/reasoning_module_v2.py`  
-**Version:** RMv2 (v1 exists elsewhere in the system — this is the learning-loop version)
+**Package:** `prove_learning/finquant/unified/agent_lab/rmv2/` (`engine.py`, `memory_index.py`)  
+**Import:** `from rmv2 import ReasoningModule, RMConfig`  
+**Version:** RMv2 (learning-loop version)
 
 ### How to build it
 
@@ -224,7 +225,7 @@ python3 -m pytest tests/ -q
 # Must show: all prior tests pass + new tests for RMv2
 
 # Integration test — run after every significant change
-python3 reasoning_module_v2.py --self-test
+python3 rmv2/engine.py --self-test
 # Must show: decision produced, source logged, memory used logged
 
 # Training loop test — run after wiring RMv2 into the loop

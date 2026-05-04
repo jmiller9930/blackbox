@@ -148,11 +148,10 @@ def make_decision(
     output_dir: Path,
 ) -> dict[str, Any]:
     """Run RMv2 on the current bars and return the decision."""
-    from reasoning_module_v2 import ReasoningModule, RMConfig
+    from rmv2 import ReasoningModule, RMConfig
 
     rm_config = RMConfig.from_file(str(_LAB_ROOT / "configs" / "default_lab_config.json"))
     rm_config.memory_store_path = str(output_dir / "live_memory.jsonl")
-    rm_config.memory_sqlite_path = str(output_dir / "live_memory.db")
     rm_config.retrieval_enabled = True
 
     rm = ReasoningModule(config=rm_config)
@@ -342,20 +341,21 @@ def run_live(
     units_dir      = out / "learning_units"
     learning_store = LearningUnitStore(units_dir)
 
+    from retrieval import companion_memory_sqlite_path
     from rmv2.memory_index import ensure_db, ingest_jsonl
 
-    live_sqlite = out / "live_memory.db"
-    ensure_db(live_sqlite)
+    live_jsonl = out / "live_memory.jsonl"
+    live_db = companion_memory_sqlite_path(live_jsonl)
+    if live_db is not None:
+        ensure_db(live_db)
 
     config = load_config(config_path)
-    config["memory_store_path"] = str(out / "live_memory.jsonl")
-    config["memory_sqlite_path_v1"] = str(live_sqlite)
+    config["memory_store_path"] = str(live_jsonl)
     config["retrieval_enabled_default_v1"] = True
     config["auto_promote_learning_v1"] = True
 
-    live_jsonl = out / "live_memory.jsonl"
-    if live_jsonl.is_file():
-        n_backfill = ingest_jsonl(live_jsonl, live_sqlite)
+    if live_jsonl.is_file() and live_db is not None:
+        n_backfill = ingest_jsonl(live_jsonl, live_db)
         if n_backfill:
             print(f"[live] RMv2 memory DB: indexed {n_backfill} rows from {live_jsonl.name}")
 

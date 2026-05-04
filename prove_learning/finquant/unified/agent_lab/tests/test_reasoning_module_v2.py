@@ -1,4 +1,4 @@
-"""Tests for RMv2 — reasoning_module_v2.py
+"""Tests for RMv2 — rmv2/engine.py
 
 Validates:
   - Clean decision output contract
@@ -16,7 +16,7 @@ import tempfile
 
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
 
-from reasoning_module_v2 import (
+from rmv2 import (
     RMConfig,
     RMDecision,
     ReasoningModule,
@@ -335,5 +335,5 @@ def test_chop_bars_produce_no_trade():
 
 def test_self_test_passes():
     """RMv2 --self-test must complete without error."""
-    from reasoning_module_v2 import run_self_test
+    from rmv2 import run_self_test
     run_self_test()  # raises on any assertion failure

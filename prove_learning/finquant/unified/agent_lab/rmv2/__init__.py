@@ -7,8 +7,6 @@ RMv2 (Reasoning Module v2) — self-contained package under ``agent_lab/rmv2``.
 Import::
 
     from rmv2 import ReasoningModule, RMConfig
-
-For backward compatibility, ``reasoning_module_v2`` at the lab root re-exports the same symbols.
 """
 
 from rmv2.engine import (

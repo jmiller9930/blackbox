@@ -1,19 +1,15 @@
 """
 FinQuant Unified Agent Lab — Retrieval (RMv2 quality-gated).
 
-Reads shared learning records JSONL and filters retrieval eligibility.
+Single retrieval path:
+  If ``memory_store_path`` ends with ``.jsonl``, the companion SQLite index is
+  ``same_name.db``. When that DB exists and has rows, retrieval uses indexed SQL;
+  otherwise records are scanned from JSONL.
 
 MANDATORY RULES:
   1. records with retrieval_enabled_v1=false must NEVER be returned.
   2. records whose pattern has not met quality thresholds must NOT be returned.
-     Quality gate (industry best practice — one win is not a lesson):
-       - pattern_total_obs_v1 >= MIN_QUALITY_OBS  (default 5)
-       - pattern_win_rate_v1  >= MIN_QUALITY_WIN_RATE (default 0.55)
-       - pattern_status_v1 not in ("candidate", "retired")
   3. Regime must match (when case has regime tag).
-
-These gates ensure memory quality before quantity.
-Only validated patterns influence future decisions.
 """
 
 from __future__ import annotations
@@ -24,10 +20,34 @@ from typing import Any
 
 _ENTRY_PRIO = {"ENTER_LONG": 0, "ENTER_SHORT": 1, "NO_TRADE": 2}
 
-# Quality gate defaults — overridable via config
 DEFAULT_MIN_OBS = 5
 DEFAULT_MIN_WIN_RATE = 0.55
 _DISQUALIFIED_STATUSES = {"candidate", "retired"}
+
+
+def companion_memory_sqlite_path(shared_store_path: str | Path | None) -> Path | None:
+    """
+    Canonical pairing: ``records.jsonl`` → ``records.db``.
+    Non-.jsonl paths have no companion DB (JSONL-only).
+    """
+    if not shared_store_path:
+        return None
+    p = Path(shared_store_path)
+    if p.suffix.lower() != ".jsonl":
+        return None
+    return p.with_suffix(".db")
+
+
+def _sqlite_learning_rowcount(db_path: Path) -> int:
+    if not db_path.is_file():
+        return 0
+    conn = sqlite3.connect(str(db_path))
+    try:
+        return int(conn.execute("SELECT COUNT(*) FROM learning_memory").fetchone()[0])
+    except sqlite3.OperationalError:
+        return 0
+    finally:
+        conn.close()
 
 
 def retrieve_eligible(
@@ -39,15 +59,26 @@ def retrieve_eligible(
     """
     Return (eligible_records, retrieval_trace_entries).
 
-    Quality gate: only records whose pattern has >= MIN_OBS observations,
-    win_rate >= MIN_WIN_RATE, and status not in (candidate, retired) are returned.
-    Symbol and regime must match.
-    Directional lessons (ENTER_LONG / ENTER_SHORT) ranked above NO_TRADE.
-    Higher win_rate breaks ties within same action priority.
+    Prefer companion SQLite when populated; otherwise scan JSONL.
     """
     if not shared_store_path or not config.get("retrieval_enabled_default_v1", False):
         return [], [_trace_entry(reason="retrieval_disabled_by_config")]
 
+    db_path = companion_memory_sqlite_path(shared_store_path)
+    if db_path is not None and _sqlite_learning_rowcount(db_path) > 0:
+        from rmv2.memory_index import retrieve_eligible_sqlite
+
+        return retrieve_eligible_sqlite(db_path, case, config, max_records)
+
+    return _retrieve_eligible_jsonl(shared_store_path, case, config, max_records)
+
+
+def _retrieve_eligible_jsonl(
+    shared_store_path: str | Path | None,
+    case: dict[str, Any],
+    config: dict[str, Any],
+    max_records: int | None = None,
+) -> tuple[list[dict[str, Any]], list[dict[str, Any]]]:
     cap = int(max_records if max_records is not None else config.get("retrieval_max_records_v1") or 5)
     if cap < 1:
         cap = 1
@@ -61,7 +92,7 @@ def retrieve_eligible(
 
     trace: list[dict] = []
     symbol = case.get("symbol", "")
-    case_regime = case.get("regime_v1")  # optional — match if present on both
+    case_regime = case.get("regime_v1")
 
     lines: list[str] = []
     with open(store_path, "r") as f:
@@ -78,12 +109,10 @@ def retrieve_eligible(
             trace.append(_trace_entry(reason="parse_error"))
             continue
 
-        # Gate 1: explicit retrieval flag
         if not rec.get("retrieval_enabled_v1", False):
             trace.append(_trace_entry(reason="retrieval_disabled", record_id=rec.get("record_id")))
             continue
 
-        # Gate 2: symbol match
         if rec.get("symbol") != symbol:
             trace.append(_trace_entry(
                 reason="symbol_mismatch",
@@ -92,7 +121,6 @@ def retrieve_eligible(
             ))
             continue
 
-        # Gate 3: quality — minimum observations
         total_obs = int(rec.get("pattern_total_obs_v1") or 0)
         if total_obs < min_obs:
             trace.append(_trace_entry(
@@ -102,7 +130,6 @@ def retrieve_eligible(
             ))
             continue
 
-        # Gate 4: quality — minimum win rate
         win_rate = float(rec.get("pattern_win_rate_v1") or 0.0)
         if win_rate < min_win_rate:
             trace.append(_trace_entry(
@@ -112,8 +139,6 @@ def retrieve_eligible(
             ))
             continue
 
-        # Gate 5: quality — pattern status must be provisional+ (not candidate or retired).
-        # Configurable: retrieval_allow_candidate_v1=true skips this gate (stub/test mode only).
         status = str(rec.get("pattern_status_v1") or "candidate")
         allow_candidate = bool(config.get("retrieval_allow_candidate_v1", False))
         effective_disqualified = {"retired"} if allow_candidate else _DISQUALIFIED_STATUSES
@@ -125,7 +150,6 @@ def retrieve_eligible(
             ))
             continue
 
-        # Gate 6: regime match (soft — skip only if both case and record have regime AND they differ)
         rec_regime = rec.get("regime_v1")
         if case_regime and rec_regime and case_regime != rec_regime:
             trace.append(_trace_entry(
@@ -137,16 +161,15 @@ def retrieve_eligible(
 
         candidates.append((i, win_rate, rec))
 
-    # Rank: directional action first, then higher win_rate, then more recent
     candidates.sort(
         key=lambda t: (
             _ENTRY_PRIO.get(str(t[2].get("entry_action_v1") or ""), 9),
-            -t[1],   # higher win_rate first
-            -t[0],   # more recent first
+            -t[1],
+            -t[0],
         )
     )
     picked = candidates[:cap]
-    picked.sort(key=lambda t: t[0])  # restore chronological order for context
+    picked.sort(key=lambda t: t[0])
 
     eligible = [t[2] for t in picked]
     for _, wr, rec in picked:
@@ -173,30 +196,3 @@ def _trace_entry(
     if detail:
         entry["detail"] = detail
     return entry
-
-
-def retrieve_eligible_auto(
-    shared_store_path: str | Path | None,
-    case: dict[str, Any],
-    config: dict[str, Any],
-    max_records: int | None = None,
-) -> tuple[list[dict[str, Any]], list[dict[str, Any]]]:
-    """
-    Prefer RMv2 SQLite memory index (``memory_sqlite_path_v1``) when populated;
-    otherwise scan JSONL via ``retrieve_eligible``.
-    """
-    db_key = (config.get("memory_sqlite_path_v1") or "").strip()
-    if db_key:
-        p = Path(db_key)
-        if p.is_file():
-            conn = sqlite3.connect(str(p))
-            try:
-                n = conn.execute("SELECT COUNT(*) FROM learning_memory").fetchone()[0]
-            finally:
-                conn.close()
-            if int(n) > 0:
-                from rmv2.memory_index import retrieve_eligible_sqlite
-
-                return retrieve_eligible_sqlite(p, case, config, max_records)
-
-    return retrieve_eligible(shared_store_path, case, config, max_records)

@@ -11,7 +11,7 @@ Public API:
   - retrieve_eligible_sqlite(db_path, case, config, max_records)
   - insert_context_snapshot(...)  — optional decision-time context audit
 
-Routing JSONL vs SQLite: use ``retrieval.retrieve_eligible_auto`` (lab-wide entry).
+Retrieval routing is solely ``retrieval.retrieve_eligible`` (JSONL + companion ``.db``).
 """
 
 from __future__ import annotations
