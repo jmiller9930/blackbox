@@ -1,10 +1,13 @@
 """
 RMv2 — embedding backends for tiered pattern memory.
 
-- ``deterministic``: fixed-dim hash projection (no network; weak semantics; tests / fallback).
-- ``ollama``: ``POST /api/embeddings`` on the same host as chat LLM when available.
+- ``deterministic``: fixed-dim hash projection (fallback / offline tests).
+- ``ollama``: prefers ``POST /api/embed`` (``input`` + ``embeddings``); falls back to
+  legacy ``POST /api/embeddings`` (``prompt`` + ``embedding``) for older servers.
 
-Learning: swap deterministic → ollama in production for meaningful similarity geometry.
+Strongest setup: ``memory_embedding_backend_v1`` = ``ollama`` with a dedicated embed model
+on the same host as chat (e.g. ``nomic-embed-text``). Install on server::
+  ollama pull nomic-embed-text
 """
 
 from __future__ import annotations
@@ -37,33 +40,72 @@ def embed_deterministic(text: str, dim: int = 256) -> list[float]:
     return [x / norm for x in vec]
 
 
-def embed_ollama(
-    text: str,
-    *,
-    base_url: str,
-    model: str,
-    timeout_seconds: int = 30,
-) -> list[float] | None:
-    """Return embedding vector or None on failure."""
-    url = base_url.rstrip("/") + "/api/embeddings"
-    payload = json.dumps({"model": model, "prompt": text}).encode("utf-8")
+def _normalize(vec: list[float]) -> list[float]:
+    norm = math.sqrt(sum(x * x for x in vec)) or 1.0
+    return [x / norm for x in vec]
+
+
+def _post_json(url: str, payload: dict[str, Any], timeout_seconds: int) -> dict[str, Any] | None:
+    body = json.dumps(payload).encode("utf-8")
     req = urllib.request.Request(
         url,
-        data=payload,
+        data=body,
         headers={"Content-Type": "application/json"},
         method="POST",
     )
     try:
         with urllib.request.urlopen(req, timeout=timeout_seconds) as resp:
-            raw = json.loads(resp.read().decode("utf-8"))
+            return json.loads(resp.read().decode("utf-8"))
     except (urllib.error.URLError, urllib.error.HTTPError, json.JSONDecodeError, TimeoutError):
         return None
-    emb = raw.get("embedding")
-    if not isinstance(emb, list) or not emb:
-        return None
-    out = [float(x) for x in emb]
-    norm = math.sqrt(sum(x * x for x in out)) or 1.0
-    return [x / norm for x in out]
+
+
+def embed_ollama(
+    text: str,
+    *,
+    base_url: str,
+    model: str,
+    timeout_seconds: int = 45,
+) -> list[float] | None:
+    """
+    Return L2-normalized embedding or None.
+
+    Tries modern ``/api/embed`` first, then legacy ``/api/embeddings``.
+    """
+    base = base_url.rstrip("/")
+    snippet = text[:12000]
+
+    # --- Ollama >= modern: /api/embed, response.embeddings[] ---
+    raw = _post_json(
+        f"{base}/api/embed",
+        {"model": model, "input": snippet, "truncate": True},
+        timeout_seconds,
+    )
+    if raw:
+        embs = raw.get("embeddings")
+        if isinstance(embs, list) and embs:
+            first = embs[0]
+            if isinstance(first, list) and first:
+                try:
+                    return _normalize([float(x) for x in first])
+                except (TypeError, ValueError):
+                    pass
+
+    # --- Legacy: /api/embeddings, response.embedding ---
+    raw2 = _post_json(
+        f"{base}/api/embeddings",
+        {"model": model, "prompt": snippet},
+        timeout_seconds,
+    )
+    if raw2:
+        emb = raw2.get("embedding")
+        if isinstance(emb, list) and emb:
+            try:
+                return _normalize([float(x) for x in emb])
+            except (TypeError, ValueError):
+                pass
+
+    return None
 
 
 def embed_for_memory(
@@ -71,19 +113,25 @@ def embed_for_memory(
     config: dict[str, Any],
 ) -> tuple[list[float], str]:
     """
-    Choose backend from config.
+    Returns (vector, backend_label).
 
-    Returns (vector, backend_name).
+    ``backend_label``: ``ollama`` | ``deterministic`` | ``deterministic_fallback``
+    (fallback when Ollama requested but unreachable / wrong response).
     """
     backend = str(config.get("memory_embedding_backend_v1") or "deterministic").lower()
     dim = int(config.get("memory_embedding_dim_v1") or 256)
+    allow_fallback = bool(config.get("memory_embedding_fallback_v1", True))
 
     if backend == "ollama":
         base = str(config.get("ollama_base_url_v1") or "http://127.0.0.1:11434")
         model = str(config.get("ollama_embeddings_model_v1") or "nomic-embed-text")
-        vec = embed_ollama(text, base_url=base, model=model, timeout_seconds=int(config.get("llm_timeout_seconds_v1") or 45))
+        timeout = int(config.get("llm_timeout_seconds_v1") or 45)
+        vec = embed_ollama(text, base_url=base, model=model, timeout_seconds=timeout)
         if vec is not None:
             return vec, "ollama"
+        if allow_fallback:
+            return embed_deterministic(text, dim=dim), "deterministic_fallback"
+
     return embed_deterministic(text, dim=dim), "deterministic"
 
 

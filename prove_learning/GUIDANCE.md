@@ -204,7 +204,7 @@ The primary deliverable of this lab. A self-contained, pluggable reasoning modul
 **Import:** `from rmv2 import ReasoningModule, RMConfig`  
 **Version:** RMv2 (learning-loop version)
 
-**Tiered pattern memory:** STM (TTL) plus LTM (promoted after falsification), cosine similarity on embeddings in companion SQLite (`pattern_memory_v1`). Governed rows stay gated; vector neighbors add probabilistic similar-context for the LLM. Set `memory_embedding_backend_v1` to `deterministic` (offline plumbing) or `ollama` (semantic).
+**Tiered pattern memory:** STM (TTL) plus LTM (promoted after falsification), cosine similarity on embeddings in companion SQLite (`pattern_memory_v1`). Production default: `memory_embedding_backend_v1` = `ollama` (`/api/embed`, legacy `/api/embeddings` fallback). On the embed host run `ollama pull nomic-embed-text` (or set `ollama_embeddings_model_v1`). If Ollama fails, `memory_embedding_fallback_v1` uses deterministic hashing so the loop never dies.
 
 ### How to build it
 

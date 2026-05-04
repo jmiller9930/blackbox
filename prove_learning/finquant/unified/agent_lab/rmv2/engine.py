@@ -197,6 +197,7 @@ class RMConfig:
     memory_vector_min_sim: float = 0.22
     memory_vector_max_extra: int = 4
     memory_embedding_backend: str = "deterministic"
+    memory_embedding_fallback: bool = True
     memory_embedding_dim: int = 256
     ollama_embeddings_model: str = "nomic-embed-text"
     stm_ttl_hours: int = 72
@@ -224,6 +225,7 @@ class RMConfig:
             memory_vector_min_sim=float(raw.get("memory_vector_min_sim_v1") or 0.22),
             memory_vector_max_extra=int(raw.get("memory_vector_max_extra_v1") or 4),
             memory_embedding_backend=str(raw.get("memory_embedding_backend_v1") or "deterministic"),
+            memory_embedding_fallback=bool(raw.get("memory_embedding_fallback_v1", True)),
             memory_embedding_dim=int(raw.get("memory_embedding_dim_v1") or 256),
             ollama_embeddings_model=str(raw.get("ollama_embeddings_model_v1") or "nomic-embed-text"),
             stm_ttl_hours=int(raw.get("stm_ttl_hours_v1") or 72),
@@ -251,6 +253,7 @@ class RMConfig:
             "memory_vector_min_sim_v1": self.memory_vector_min_sim,
             "memory_vector_max_extra_v1": self.memory_vector_max_extra,
             "memory_embedding_backend_v1": self.memory_embedding_backend,
+            "memory_embedding_fallback_v1": self.memory_embedding_fallback,
             "memory_embedding_dim_v1": self.memory_embedding_dim,
             "ollama_embeddings_model_v1": self.ollama_embeddings_model,
             "stm_ttl_hours_v1": self.stm_ttl_hours,
