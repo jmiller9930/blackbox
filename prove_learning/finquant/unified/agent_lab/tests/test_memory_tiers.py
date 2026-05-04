@@ -10,6 +10,7 @@ from rmv2.embeddings import embed_deterministic
 from rmv2.memory_index import ensure_db
 from rmv2.memory_tiers import (
     cosine_similarity,
+    count_pattern_memory_for_symbol,
     insert_stm,
     pattern_hits_to_synthetic_records,
     promote_stm_to_ltm,
@@ -20,6 +21,28 @@ from rmv2.memory_tiers import (
 def test_cosine_identity():
     v = embed_deterministic("hello", dim=64)
     assert abs(cosine_similarity(v, v) - 1.0) < 1e-5
+
+
+def test_count_pattern_memory_for_symbol():
+    with tempfile.TemporaryDirectory() as tmpdir:
+        db = os.path.join(tmpdir, "m.jsonl")
+        db_path = db.replace(".jsonl", ".db")
+        ensure_db(db_path)
+        cfg = {
+            "memory_embedding_backend_v1": "deterministic",
+            "memory_embedding_dim_v1": 128,
+            "stm_ttl_hours_v1": 72,
+        }
+        insert_stm(
+            db_path,
+            symbol="SOL-PERP",
+            regime_v1="trending_up",
+            bar_timestamp="2026-01-01T00:00:00Z",
+            narrative_text="row one",
+            config=cfg,
+        )
+        assert count_pattern_memory_for_symbol(db_path, "SOL-PERP") == 1
+        assert count_pattern_memory_for_symbol(db_path, "BTC-PERP") == 0
 
 
 def test_stm_insert_and_similar_search():

@@ -196,6 +196,9 @@ class RMConfig:
     memory_vector_k_ltm: int = 2
     memory_vector_min_sim: float = 0.22
     memory_vector_max_extra: int = 4
+    memory_vector_min_pattern_rows: int = 8
+    memory_vector_soft_history_rows: int = 24
+    memory_vector_thin_history_sim_boost: float = 0.06
     memory_embedding_backend: str = "deterministic"
     memory_embedding_fallback: bool = True
     memory_embedding_dim: int = 256
@@ -224,6 +227,15 @@ class RMConfig:
             memory_vector_k_ltm=int(raw.get("memory_vector_k_ltm_v1") or 2),
             memory_vector_min_sim=float(raw.get("memory_vector_min_sim_v1") or 0.22),
             memory_vector_max_extra=int(raw.get("memory_vector_max_extra_v1") or 4),
+            memory_vector_min_pattern_rows=(
+                int(raw["memory_vector_min_pattern_rows_v1"])
+                if raw.get("memory_vector_min_pattern_rows_v1") is not None
+                else 8
+            ),
+            memory_vector_soft_history_rows=int(raw.get("memory_vector_soft_history_rows_v1") or 24),
+            memory_vector_thin_history_sim_boost=float(
+                raw.get("memory_vector_thin_history_sim_boost_v1") or 0.06
+            ),
             memory_embedding_backend=str(raw.get("memory_embedding_backend_v1") or "deterministic"),
             memory_embedding_fallback=bool(raw.get("memory_embedding_fallback_v1", True)),
             memory_embedding_dim=int(raw.get("memory_embedding_dim_v1") or 256),
@@ -252,6 +264,9 @@ class RMConfig:
             "memory_vector_k_ltm_v1": self.memory_vector_k_ltm,
             "memory_vector_min_sim_v1": self.memory_vector_min_sim,
             "memory_vector_max_extra_v1": self.memory_vector_max_extra,
+            "memory_vector_min_pattern_rows_v1": self.memory_vector_min_pattern_rows,
+            "memory_vector_soft_history_rows_v1": self.memory_vector_soft_history_rows,
+            "memory_vector_thin_history_sim_boost_v1": self.memory_vector_thin_history_sim_boost,
             "memory_embedding_backend_v1": self.memory_embedding_backend,
             "memory_embedding_fallback_v1": self.memory_embedding_fallback,
             "memory_embedding_dim_v1": self.memory_embedding_dim,
@@ -378,6 +393,7 @@ RISK RULES:
 R-001: Bounded risk — entries require a defined stop level. If you cannot define a stop, output NO_TRADE.
 R-002: Two hypotheses required. State hypothesis_1 (your primary thesis) and hypothesis_2 (the counter-thesis) with numeric confidence [0,1]. If confidence_spread = confidence_1 - confidence_2 < 0.20, output INSUFFICIENT_DATA.
 R-003: Every trade decision must include planned_r_multiple (target distance / stop distance). If R < 1.5, prefer NO_TRADE.
+R-004: Vector / similarity memory is secondary to live indicators and quality-gated governed records. Do not let fuzzy neighbors override P-1 through P-6 or R-001 through R-003.
 
 OUTPUT FORMAT (JSON only, no other text):
 {
@@ -402,7 +418,7 @@ _TOT_BRANCH_PROMPTS = {
 
 {context}
 
-Instructions (follow P-1 through R-003):
+Instructions (follow P-1 through R-004):
 1. Read the TRAJECTORY section first (P-5 — context first).
 2. Identify all signals that support a long entry with confluence (P-3).
 3. Define a stop level (R-001). If you cannot, action must be NO_TRADE.
@@ -417,7 +433,7 @@ Respond in JSON only, no other text.""",
 
 {context}
 
-Instructions (follow P-1 through R-003):
+Instructions (follow P-1 through R-004):
 1. Read the TRAJECTORY section first (P-5 — context first).
 2. Identify all signals that argue for standing down (P-3 — default is NO_TRADE).
 3. What confluence is missing that would be required for an entry?
@@ -431,7 +447,7 @@ Respond in JSON only, no other text.""",
 
 {context}
 
-Instructions (follow P-1 through R-003, especially P-4):
+Instructions (follow P-1 through R-004, especially P-4 and R-004):
 1. Read the MEMORY section. Note regime match vs mismatch for each pattern.
 2. Compare current TRAJECTORY with the trajectory described in retrieved patterns.
 3. A memory match requires: same regime + similar RSI zone + similar ATR direction.

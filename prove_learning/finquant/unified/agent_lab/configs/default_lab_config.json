@@ -24,6 +24,9 @@
   "memory_vector_k_stm_v1": 3,
   "memory_vector_k_ltm_v1": 3,
   "memory_vector_min_sim_v1": 0.18,
+  "memory_vector_min_pattern_rows_v1": 8,
+  "memory_vector_soft_history_rows_v1": 24,
+  "memory_vector_thin_history_sim_boost_v1": 0.06,
   "memory_vector_max_extra_v1": 6,
   "stm_ttl_hours_v1": 168,
   "ollama_embeddings_model_v1": "nomic-embed-text"

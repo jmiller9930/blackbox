@@ -22,6 +22,21 @@ DEFAULT_MIN_OBS = 5
 DEFAULT_MIN_WIN_RATE = 0.55
 _DISQUALIFIED_STATUSES = {"candidate", "retired"}
 
+_VECTOR_MIN_SIM_CAP = 0.52
+
+
+def effective_vector_min_similarity(config: dict[str, Any], pattern_row_count: int) -> float:
+    """
+    Base ``memory_vector_min_sim_v1``, optionally raised when pattern history is below
+    ``memory_vector_soft_history_rows_v1`` (bounded by ``_VECTOR_MIN_SIM_CAP``).
+    """
+    base = float(config.get("memory_vector_min_sim_v1") or 0.22)
+    soft = int(config.get("memory_vector_soft_history_rows_v1") or 24)
+    boost = float(config.get("memory_vector_thin_history_sim_boost_v1") or 0.06)
+    if pattern_row_count < soft:
+        return min(_VECTOR_MIN_SIM_CAP, base + boost)
+    return base
+
 
 def companion_memory_sqlite_path(shared_store_path: str | Path | None) -> Path | None:
     """
@@ -64,13 +79,42 @@ def _merge_pattern_memory_vectors(
         return eligible, trace_out
 
     from rmv2.embeddings import embed_for_memory
-    from rmv2.memory_tiers import pattern_hits_to_synthetic_records, prune_expired_stm, search_similar_patterns
+    from rmv2.memory_tiers import (
+        count_pattern_memory_for_symbol,
+        pattern_hits_to_synthetic_records,
+        prune_expired_stm,
+        search_similar_patterns,
+    )
+
+    sym = str(case.get("symbol") or "")
+    _mr = config.get("memory_vector_min_pattern_rows_v1")
+    min_rows = int(_mr) if _mr is not None else 8
+    n_patterns = count_pattern_memory_for_symbol(db_path, sym)
+    if min_rows > 0 and n_patterns < min_rows:
+        trace_out.append(
+            _trace_entry(
+                reason="pattern_memory_thin_history_skip",
+                detail=f"symbol_rows={n_patterns} need>={min_rows}",
+            )
+        )
+        return eligible, trace_out
 
     prune_expired_stm(db_path)
-    qvec, _backend = embed_for_memory(narrative[:12000], config)
+    qvec, emb_backend = embed_for_memory(narrative[:12000], config)
+    if emb_backend == "deterministic_fallback":
+        trace_out.append(_trace_entry(reason="embedding_semantic_unavailable"))
+
     k_stm = int(config.get("memory_vector_k_stm_v1") or 2)
     k_ltm = int(config.get("memory_vector_k_ltm_v1") or 2)
-    min_sim = float(config.get("memory_vector_min_sim_v1") or 0.22)
+    base_sim = float(config.get("memory_vector_min_sim_v1") or 0.22)
+    min_sim = effective_vector_min_similarity(config, n_patterns)
+    if min_sim > base_sim:
+        trace_out.append(
+            _trace_entry(
+                reason="pattern_memory_tightened_similarity",
+                detail=f"effective_min_sim={min_sim:.3f} base={base_sim:.3f} symbol_rows={n_patterns}",
+            )
+        )
     hits, ht = search_similar_patterns(
         db_path,
         qvec,

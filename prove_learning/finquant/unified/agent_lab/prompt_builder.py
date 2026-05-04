@@ -28,6 +28,8 @@ P-4 PATTERN SIMILARITY. If memory records match the current regime, weight them 
 P-5 CONTEXT FIRST. State the regime and RSI trajectory before giving the action.
 P-6 LONG-RUN MATH. Aim for R >= 1.5 (target >= 1.5x stop distance) when entering.
 
+R-004 VECTOR / SIMILARITY MEMORY. Some lines may be similarity-only neighbors, not promoted lessons. Weight live indicators and quality-gated governed records higher; do not let fuzzy memory override P-1 through P-6.
+
 HYPOTHESIS REQUIREMENT (R-002):
 State your primary thesis (h1) and the best counter-argument (h2), each with confidence [0.0-1.0].
 Use INSUFFICIENT_DATA only when signals genuinely contradict each other and you truly cannot decide.

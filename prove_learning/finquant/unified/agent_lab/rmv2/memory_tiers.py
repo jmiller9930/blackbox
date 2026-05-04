@@ -51,6 +51,25 @@ def prune_expired_stm(db_path: str | Path) -> int:
         conn.close()
 
 
+def count_pattern_memory_for_symbol(db_path: str | Path, symbol: str) -> int:
+    """Rows in ``pattern_memory_v1`` for ``symbol`` (STM + LTM)."""
+    path = Path(db_path)
+    sym = (symbol or "").strip()
+    if not path.is_file() or not sym:
+        return 0
+    conn = sqlite3.connect(str(path))
+    try:
+        row = conn.execute(
+            "SELECT COUNT(*) FROM pattern_memory_v1 WHERE symbol = ?",
+            (sym,),
+        ).fetchone()
+        return int(row[0]) if row else 0
+    except sqlite3.OperationalError:
+        return 0
+    finally:
+        conn.close()
+
+
 def insert_stm(
     db_path: str | Path,
     *,
