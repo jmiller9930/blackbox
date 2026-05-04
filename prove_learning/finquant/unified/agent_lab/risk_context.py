@@ -40,6 +40,11 @@ BASELINE_RISK_PCT = 1.23   # Sean's floor — never changes
 MIN_RISK_PCT      = 0.50   # absolute floor
 MAX_RISK_PCT      = 2.00   # absolute ceiling
 
+# CALIBRATION STATUS: factors are directionally correct (blocked > low in real data)
+# but currently too conservative — most decisions score in 'low' bucket.
+# Recalibration needed after live forward test accumulates 50+ falsified decisions.
+# Do not treat current factor values as production-ready.
+
 
 # ---------------------------------------------------------------------------
 # Factor computations
