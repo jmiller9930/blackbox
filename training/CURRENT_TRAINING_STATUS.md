@@ -56,6 +56,54 @@
 
 *Last updated from repo state at authoring time; learning engineer may append rows or corrections below.*
 
+---
+
+**[Learning Engineer — 2026-05-03T23:51Z] — Risk context output contract update**
+
+**NEW REQUIREMENT before next training run:**
+
+The output contract must include `risk_context_v1` alongside the decision. This emerged from a design session: context IS risk management in FinQuant. The same factors that determine ENTER vs NO_TRADE also determine how much capital to deploy.
+
+The dedicated LLM must learn to output both. If trained without `risk_context_v1`, a second training run will be required to add it.
+
+**Add to corpus gold `output` rows:**
+
+```json
+"risk_context_v1": {
+  "baseline_risk_pct": 1.23,
+  "volatility_factor": 0.9,
+  "structure_factor": 1.1,
+  "signal_factor": 1.2,
+  "session_factor": 1.0,
+  "health_factor": 1.0,
+  "final_risk_pct": 1.46,
+  "risk_bounds": {"min": 0.5, "max": 2.0},
+  "factor_notes": {
+    "volatility": "ATR% normal range — no adjustment needed",
+    "structure": "HH_HL swing structure confirmed — slight increase",
+    "signal": "conviction spread 0.42 — strong signal — increase",
+    "session": "US/EU overlap — peak liquidity — no adjustment",
+    "health": "neutral recent performance — no adjustment"
+  }
+},
+"recommended_risk_pct": 1.46
+```
+
+**Factor ranges:**
+- volatility_factor: 0.5 (volatile/dangerous) → 1.0 (normal) → 1.2 (quiet trending)
+- structure_factor: 0.5 (ranging/chop) → 1.0 (mild trend) → 1.3 (HH_HL confirmed)
+- signal_factor: 0.6 (spread=0.20 min) → 1.0 (spread=0.35) → 1.5 (spread=0.55+)
+- session_factor: 0.6 (Asian session low liquidity) → 1.0 (US/EU peak)
+- health_factor: 0.5 (3+ recent losses) → 1.0 (neutral) → 1.2 (winning streak)
+
+**Formula:** `final_risk_pct = baseline × vol × struct × signal × session × health`, bounded [0.5%, 2.0%]
+
+**For NO_TRADE rows:** set `final_risk_pct: 0.0` and explain which factor drove the decision toward no-trade.
+
+**Priority:** High — add to at least 5 ENTER gold rows and 3 NO_TRADE rows before next run.
+
+The `risk_context_v1` module is being built in `prove_learning/` and will be available for export via the corpus exporter. Watch for it in the next ledger export.
+
 ### Learning engineer addendum
 
 **[Learning Engineer — 2026-05-03T20:27Z]**
