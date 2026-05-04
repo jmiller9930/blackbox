@@ -690,7 +690,7 @@ def main() -> None:
     print(f"[export] categories: {cats}")
     print(f"\nNext steps:")
     print(f"  python3 training/validate_agentic_corpus_v1.py {out_path}")
-    print(f"  cat {out_path} >> training/corpus_v05_agentic_seed.jsonl")
+    print(f"  Merge via training/run_finquant_cycle.sh prepare (MERGED_JSONL), not append-to-seed.")
 
 
 if __name__ == "__main__":

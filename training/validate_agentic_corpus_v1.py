@@ -79,7 +79,9 @@ def validate_row(row: dict, memory_ids: set[str], path: str, line_no: int) -> li
                         errs.append(f"{prefix} unknown evidence_memory_id {mid!r}")
 
     inp = row.get("input")
-    if isinstance(inp, dict):
+    if not isinstance(inp, dict):
+        errs.append(f"{prefix} input must be an object")
+    else:
         rm = inp.get("retrieved_memory_v1")
         if isinstance(rm, list):
             for item in rm:
@@ -87,6 +89,58 @@ def validate_row(row: dict, memory_ids: set[str], path: str, line_no: int) -> li
                     mid = item.get("memory_id")
                     if isinstance(mid, str) and mid not in memory_ids:
                         errs.append(f"{prefix} retrieved_memory_v1 cites unknown {mid!r}")
+
+        ass = inp.get("case_assumptions_v1")
+        if not isinstance(ass, dict):
+            errs.append(f"{prefix} case_assumptions_v1 required object")
+        else:
+            for k in (
+                "fee_per_side_bps",
+                "slippage_band_bps",
+                "estimated_round_trip_friction_bps",
+                "fill_latency_class",
+            ):
+                if k not in ass:
+                    errs.append(f"{prefix} case_assumptions_v1 missing {k}")
+            fee = ass.get("fee_per_side_bps")
+            slip = ass.get("slippage_band_bps")
+            frict = ass.get("estimated_round_trip_friction_bps")
+            if isinstance(fee, (int, float)) and isinstance(slip, (int, float)) and isinstance(frict, (int, float)):
+                expected = int(2 * float(fee) + 2 * float(slip))
+                if int(frict) != expected:
+                    errs.append(
+                        f"{prefix} estimated_round_trip_friction_bps {frict} "
+                        f"must equal 2×fee + 2×slippage ({expected})"
+                    )
+
+        inv = inp.get("context_inventory_v1")
+        if not isinstance(inv, dict):
+            errs.append(f"{prefix} context_inventory_v1 required object")
+        else:
+            if inv.get("bars_in_window") != 3:
+                errs.append(f"{prefix} context_inventory_v1.bars_in_window must be 3")
+            if inv.get("decision_bar_index_in_window") != 2:
+                errs.append(f"{prefix} context_inventory_v1.decision_bar_index_in_window must be 2")
+            wbs = inv.get("window_bar_source")
+            if not isinstance(wbs, str) or not wbs.strip():
+                errs.append(f"{prefix} context_inventory_v1.window_bar_source required string")
+
+        ref = inp.get("reference_facts_v1")
+        if not isinstance(ref, dict):
+            errs.append(f"{prefix} reference_facts_v1 required object")
+        else:
+            bars = ref.get("bars_recent_oldest_to_newest")
+            if not isinstance(bars, list) or len(bars) != 3:
+                errs.append(f"{prefix} reference_facts_v1.bars_recent_oldest_to_newest must be length 3")
+            if ref.get("decision_bar_index_in_window") != 2:
+                errs.append(f"{prefix} reference_facts_v1.decision_bar_index_in_window must be 2")
+            pc = ref.get("perp_context_v1")
+            if not isinstance(pc, dict):
+                errs.append(f"{prefix} reference_facts_v1.perp_context_v1 required object")
+            else:
+                for k in ("funding_rate_bucket", "oi_change_bucket", "vol_stress_bucket"):
+                    if k not in pc or not isinstance(pc.get(k), str) or not str(pc.get(k)).strip():
+                        errs.append(f"{prefix} perp_context_v1 missing or empty {k}")
 
     exp = out.get("expectancy_check_v1")
     if exp is not None:
