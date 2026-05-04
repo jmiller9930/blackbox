@@ -54,6 +54,23 @@
 
 ---
 
+## 5. Corpus growth backlog — LE + training engineer (LLM context engineering)
+
+**Status:** Agreed priority — **do not pivot** architecture. **Defer heavy corpus edits while a full QLoRA run is in flight** (~24h); pick this up after train completes + `finquant_llm_eval.py`.
+
+**Weak spot (confirmed):** `retrieved_memory_v1` is often **empty** → model mostly learns **reasoning without discriminative retrieval**. Fix by **biasing corpus growth**, not by ripping up RM (separate thread).
+
+| Priority | Training-stream action |
+|----------|-------------------------|
+| **A** | **Non-empty memory:** exporter / merge includes realistic `retrieved_memory_v1` (IDs in `training/finquant_memory/exemplar_store.jsonl`, on-topic stubs) from ledger fields such as `memory_records_used` where available. |
+| **B** | **Balanced mix:** intentional proportion of **non-empty memory**, **memory conflict / contrast**, and **empty-memory baseline** so neither “always ignore memory” nor “always obey memory” wins. |
+| **C** | **Authority / inventory stress (small curated set):** rows where narrative tries to contradict **packet** → gold follows **`reference_facts_v1` / `case_assumptions_v1` / `context_inventory_v1`**; rows where **inventory marks gaps** → gold **`INSUFFICIENT_DATA`** or conservative **`NO_TRADE`**. |
+| **D** | **Taxonomy:** align memory tags with `prove_learning/finquant/unified/agent_lab/MEMORY_TAXONOMY.md` when populating slices. |
+
+**Ownership:** LE + operator define **what** memories mean; **training stream** owns **coverage** (export hooks, seed stress rows, validator staying strict). Reference: Tier 2 in LE handoff.
+
+---
+
 *Last updated from repo state at authoring time; learning engineer may append rows or corrections below.*
 
 ---
