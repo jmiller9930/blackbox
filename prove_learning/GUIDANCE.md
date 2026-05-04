@@ -273,5 +273,38 @@ Implication for FinQuant: regime detection is essential before the signal is tru
 
 4. **Partner ledger ready** at `prove_learning/ledger_output/` — use with `OPERATOR_AUDIT_GUIDE.md`.
 
-**Last updated:** 2026-05-02  
-**Status:** Session paused. Training loop ran. Next: calibrate R-002 gate and get entries with positive expectancy.**
+---
+
+## Open gaps worklog (2026-05-04)
+
+### CLOSED ✓
+- RSI divergence signal — feature extraction + prompt visibility
+- Quality-gated memory (5+ obs, 65% win rate, regime-matched)
+- R-002 conviction spread gate (≥ 0.20 to enter)
+- Session filter (Asian session blocked, weekend skip M-F only)
+- Circuit breaker (3 consecutive losses → 2hr halt)
+- Pattern promotion ladder with retirement
+- risk_context.py — context-as-risk-management (R is anchor, context is throttle)
+- risk_context wired into RMv2 decide() output (risk_pct + factor breakdown logged)
+- exit_price and realized_r in live falsification
+
+### OPEN — next iteration ⚠️
+- **Risk context calibration** — factors directionally correct, not yet calibrated. Need 50+ live falsified outcomes. Due: end of first live week (May 9).
+- **Regime-adaptive R target** — flat 2.5R regardless of regime. Ranging=tighter, trending=wider. Build after calibration data.
+- **Swing detection** — HH_HL/LH_LL structure from 20 context bars → add to pattern signature and prompt. High value.
+- **Signal contract schema** — formal JSON schema for FinQuant → execution payload. Before wiring to execution.
+- **Realized R feedback into memory** — realized_r logged but not yet used to update pattern quality scores.
+- **Dedicated LLM integration** — QLoRA on trx40 must pass baseline harness. Training engineer owns.
+- **Corpus merge** — 286 gold rows ready in prove_learning/. Operator task.
+
+### LIVE FORWARD TEST STATUS (as of 2026-05-04)
+- Session: `finquant_live` on clawbot.a51.corp
+- Weekend: skipping correctly
+- Resumes: Monday 2026-05-05 13:00 UTC (8:00 AM ET)
+- First outcomes: Monday 14:45 UTC
+- First weekly report: Friday 2026-05-08 20:00 UTC
+- Risk context: logging with every decision ✓
+- Exit price / realized R: tracked ✓
+
+**Last updated:** 2026-05-04  
+**Status:** Live forward test running in tmux. Weekend skip active. Resumes Monday 13:00 UTC. All pre-test gaps closed.**
