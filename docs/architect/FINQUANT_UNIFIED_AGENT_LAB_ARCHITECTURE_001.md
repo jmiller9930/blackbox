@@ -438,3 +438,151 @@ The scaffold proof must run without Flask, without the web app, and without serv
 ## 17. One-line instruction
 
 Create an isolated FinQuant Unified Agent Lab under `finquant/unified/agent_lab/` so we can prove the agent can learn punch-in / punch-out lifecycle behavior before plugging it back into the application.
+
+---
+
+## 18. RMv2 memory architecture — governed learning + tiered pattern memory (2026)
+
+This section normatively describes the **Reasoning Module v2 (RMv2)** memory stack as implemented under the learning-engineering tree. Canonical workspace today:
+
+```text
+prove_learning/finquant/unified/agent_lab/
+  rmv2/
+    engine.py          # LangGraph pipeline; retrieval node builds narrative query
+    memory_index.py    # SQLite schema: learning_memory, context_snapshots, pattern_memory_v1
+    memory_tiers.py    # STM insert, LTM promotion, cosine search, TTL prune
+    embeddings.py      # Ollama /api/embed (+ legacy /api/embeddings), deterministic fallback
+  retrieval.py         # Single public retrieval API: retrieve_eligible
+  memory_store.py      # Run artifacts + append JSONL + dual-write learning rows to SQLite
+```
+
+Older references in this document to `finquant/unified/agent_lab/` without `prove_learning/` should be read as **repository-relative path drift**; the normative lab root for blackbox is `prove_learning/finquant/unified/agent_lab/`.
+
+### 18.1 Design goals
+
+1. **Audit spine** — Append-only JSONL for governed learning records remains the human-inspectable source of truth for promotion governance.
+2. **Indexed read path** — Companion SQLite (`*.jsonl` → sibling `*.db`) accelerates retrieval and holds structured rows without replacing JSONL.
+3. **Exact vs fuzzy recall** — **Governed memory** answers “what passed quality gates?” **Pattern memory (STM/LTM)** answers “what situations felt like this before?” using **embedding similarity** (probabilistic).
+4. **Single retrieval API** — All callers use `retrieval.retrieve_eligible` only (no parallel retrieval entry points).
+5. **Resilience** — Semantic embeddings preferred in production; **deterministic fallback** if Ollama is unreachable so loops keep running with weaker geometry.
+
+### 18.2 Storage pairing (one rule)
+
+- Config key `memory_store_path` MUST point to a path ending in `.jsonl` when companion DB features are required.
+- **Companion DB path** is always `same_basename.db` (see `retrieval.companion_memory_sqlite_path`).
+- There is **no** separate `memory_sqlite_path_v1` override; one pairing rule reduces drift.
+
+### 18.3 SQLite tables (companion DB)
+
+| Table | Purpose |
+|--------|---------|
+| `learning_memory` | Governed learning records mirrored from JSONL (full `record_json`, indexed columns for gates). |
+| `pattern_memory_v1` | **STM/LTM** rows: narrative text, float **embedding blob**, tier, regime/symbol/timestamps, optional `outcome_hint`, TTL for STM. |
+| `context_snapshots` | Optional audit rows for immutable context packets (replay / training exports); not required for hot path. |
+
+### 18.4 Retrieval pipeline (`retrieve_eligible`)
+
+```mermaid
+flowchart LR
+  subgraph inputs
+    CASE[case: symbol, regime_v1, context_narrative_v1]
+    CFG[config flags]
+    JSONL[memory_store_path .jsonl]
+    DB[(companion .db)]
+  end
+  subgraph governed
+    G{retrieval_enabled_default_v1?}
+    SQL[learning_memory SQL + gates]
+    SCAN[JSONL full scan + gates]
+  end
+  subgraph fuzzy
+    V{memory_vector_enabled_v1?}
+    EMB[embed narrative]
+    COS[cosine search pattern_memory_v1]
+    SYN[synthetic neighbor records]
+  end
+  CASE --> G
+  CFG --> G
+  G -->|yes| SQL
+  G -->|no rows| SCAN
+  SQL --> MERGE
+  SCAN --> MERGE
+  G -->|disabled| MERGE[merge eligible]
+  DB --> SQL
+  JSONL --> SCAN
+  CASE --> V
+  CFG --> V
+  MERGE --> V
+  V -->|yes| EMB --> COS --> SYN
+  V --> OUT[out: prior_records + trace]
+  SYN --> OUT
+```
+
+**Order of operations:**
+
+1. If `memory_store_path` is missing → trace `no_memory_store_path`; still attempt vector merge only if DB path cannot resolve (usually nothing happens).
+2. **Governed retrieval** (optional): if `retrieval_enabled_default_v1`, prefer `learning_memory` when non-empty; else scan JSONL with the same quality gates (min obs, min win rate, status, regime match rules).
+3. **Vector merge** (optional): if `memory_vector_enabled_v1` and `context_narrative_v1` non-empty and DB file exists → prune expired STM → embed narrative → cosine retrieve top STM + top LTM → append bounded synthetic records (`memory_vector_max_extra_v1`).
+
+Synthetic neighbors are shaped like learning records for prompt formatting but carry `memory_source_v1` / `pattern_similarity_v1` / `pattern_status_v1: vector_probe_v1` so auditors can distinguish **fuzzy** hits from **promoted** lessons.
+
+### 18.5 RMv2 graph integration
+
+RMv2 (`rmv2/engine.py`) runs:
+
+`feature_extraction` → `quality_retrieval` → `tot_reasoning` → `guard_rails`
+
+**`quality_retrieval`** builds **`context_narrative_v1`** via `context_builder.build_rich_context` (trajectory / regime / divergence-style summary), passes it into `retrieve_eligible`, and stores the same string on graph state and on **`RMDecision.context_narrative_v1`** for downstream logging (e.g. live STM insert).
+
+### 18.6 STM vs LTM semantics
+
+| Tier | Meaning | Lifetime |
+|------|---------|----------|
+| **STM** | “I just saw this kind of market story.” | Rows carry `expires_stm_at` (default **168h** in production config); pruned on retrieval and live loop. |
+| **LTM** | “This kind of story got an outcome label.” | Promoted from STM when the live loop completes falsification (`promote_stm_to_ltm`), `outcome_hint` set from falsifier outcome. |
+
+This mirrors human recall: **recent vivid episodes** plus **longer-lived labeled experience**.
+
+### 18.7 Embeddings — production and fallback
+
+Configuration (`configs/default_lab_config.json` and RMConfig):
+
+| Key | Role |
+|-----|------|
+| `memory_embedding_backend_v1` | `ollama` (semantic) or `deterministic` (hash projection). |
+| `ollama_base_url_v1` | Same host as chat LLM unless deliberately split. |
+| `ollama_embeddings_model_v1` | e.g. `nomic-embed-text`. |
+| `memory_embedding_fallback_v1` | If true and Ollama fails → deterministic embedding (label `deterministic_fallback`). |
+| `memory_embedding_dim_v1` | Dimension for **deterministic** path; Ollama vectors use model-native dimension (stored per row in `embedding_dim`). |
+
+Implementation detail (`rmv2/embeddings.py`):
+
+- Calls **`POST /api/embed`** with `{ "model", "input", "truncate": true }` and reads `embeddings[0]`.
+- Falls back to **`POST /api/embeddings`** with `{ "model", "prompt" }` and reads `embedding` for older Ollama builds.
+
+**Operator prerequisite on embed host:** `ollama pull <ollama_embeddings_model_v1>`.
+
+### 18.8 Live forward loop hooks (`live_forward_test.py`)
+
+- Uses **`lab_config_path`** so production JSON drives RMConfig (vectors + LLM).
+- **Prune** expired STM each bar (via `companion_memory_sqlite_path` + `prune_expired_stm`).
+- After each decision: **`insert_stm`** when vectors enabled (stores narrative + embedding).
+- After falsification: **`promote_stm_to_ltm`** using `vector_memory_id_v1` captured on the decision record.
+
+### 18.9 Relationship to FinQuant LLM training
+
+- Runtime RMv2 feeds **retrieved packets** (governed + synthetic similarity) into Qwen prompts.
+- The dedicated FinQuant fine-tune pipeline consumes **exported** examples (`finquant_agentic_qa_v1` schema); alignment is by **field contracts** (`retrieved_memory_v1`, narratives, risk JSON), not by direct DB reads from the training cluster.
+
+### 18.10 Strength / risk posture
+
+- **Strength:** Semantic neighborhoods improve “have I seen something like this?” without requiring identical historical bars.
+- **Risk:** Similarity is **not proof**; governed gates and falsification remain the integrity backbone. Vector hits should be treated as **context**, not automatic promotion.
+
+---
+
+## 19. Document history
+
+| Date | Change |
+|------|--------|
+| 2026-05-04 | Added §18–§19: RMv2 companion DB, STM/LTM pattern memory, Ollama embeddings, single `retrieve_eligible` contract, live hooks, training boundary note. |
