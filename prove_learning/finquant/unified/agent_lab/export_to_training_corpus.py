@@ -62,6 +62,118 @@ EXAM_SCHEMA = "finquant_quant_exam_v1"
 TRAINING_SCHEMA = "finquant_agentic_qa_v1"
 
 
+BAR_FIELDS = ("close", "open", "high", "low", "volume", "rsi_14", "ema_20", "atr_14", "atr_pct")
+
+
+def _ledger_row_to_bar_dict(row: dict[str, Any]) -> dict[str, Any]:
+    """Minimal OHLCV+indicator dict for bars_recent_oldest_to_newest."""
+    out: dict[str, Any] = {}
+    for k in BAR_FIELDS:
+        if row.get(k) is not None:
+            out[k] = row[k]
+    out["timestamp"] = row.get("timestamp") or row.get("bar_timestamp") or ""
+    return out
+
+
+def _build_3bar_window(
+    row: dict[str, Any],
+    *,
+    ledger_index: int | None = None,
+    all_rows: list[dict[str, Any]] | None = None,
+) -> tuple[list[dict[str, Any]], str]:
+    """
+    Return (3 bars oldest→newest ending at decision bar, window_source).
+    Prefer consecutive ledger rows [i-2, i-1, i] when available.
+    """
+    decision_bar = _ledger_row_to_bar_dict(row)
+
+    if (
+        ledger_index is not None
+        and all_rows is not None
+        and ledger_index >= 2
+        and ledger_index < len(all_rows)
+    ):
+        b0 = _ledger_row_to_bar_dict(all_rows[ledger_index - 2])
+        b1 = _ledger_row_to_bar_dict(all_rows[ledger_index - 1])
+        return [b0, b1, decision_bar], "ledger_sequence"
+
+    if ledger_index is not None and all_rows is not None and ledger_index < len(all_rows):
+        # Pad head with duplicates of earliest available bar in window
+        pad = _ledger_row_to_bar_dict(all_rows[0])
+        if ledger_index == 0:
+            return [pad, pad, decision_bar], "ledger_sequence_padded"
+        if ledger_index == 1:
+            b0 = _ledger_row_to_bar_dict(all_rows[0])
+            return [b0, b0, decision_bar], "ledger_sequence_padded"
+
+    bar_m1 = dict(decision_bar)
+    bar_m1["timestamp"] = "synthetic_prior_1"
+    bar_m2 = dict(decision_bar)
+    bar_m2["timestamp"] = "synthetic_prior_2"
+    return [bar_m2, bar_m1, decision_bar], "synthetic_fallback"
+
+
+def _vol_stress_bucket(atr_pct: Any) -> str:
+    if atr_pct is None:
+        return "not_in_packet"
+    try:
+        a = float(atr_pct)
+    except (TypeError, ValueError):
+        return "not_in_packet"
+    if a > 5.0:
+        return "elevated"
+    if a > 3.0:
+        return "normal_high"
+    if a > 1.5:
+        return "normal"
+    return "compressed"
+
+
+def _perp_context_from_row(row: dict[str, Any]) -> dict[str, str]:
+    """
+    Bucketed perp-native context. Uses ledger fields when present; else not_in_packet.
+    """
+    out: dict[str, str] = {
+        "funding_rate_bucket": "not_in_packet",
+        "oi_change_bucket": "not_in_packet",
+        "vol_stress_bucket": _vol_stress_bucket(row.get("atr_pct")),
+    }
+    # Optional ledger columns (forward-compatible)
+    fb = row.get("funding_rate_bucket")
+    if isinstance(fb, str) and fb.strip():
+        out["funding_rate_bucket"] = fb.strip()
+    elif row.get("funding_rate") is not None:
+        try:
+            fr = float(row["funding_rate"])
+            if fr > 0.0003:
+                out["funding_rate_bucket"] = "longs_pay_elevated"
+            elif fr < -0.0003:
+                out["funding_rate_bucket"] = "shorts_pay_elevated"
+            else:
+                out["funding_rate_bucket"] = "neutral"
+        except (TypeError, ValueError):
+            pass
+    ob = row.get("oi_change_bucket")
+    if isinstance(ob, str) and ob.strip():
+        out["oi_change_bucket"] = ob.strip()
+    elif row.get("oi_change_pct") is not None:
+        try:
+            oc = float(row["oi_change_pct"])
+            if oc > 5.0:
+                out["oi_change_bucket"] = "rising_fast"
+            elif oc < -5.0:
+                out["oi_change_bucket"] = "falling_fast"
+            else:
+                out["oi_change_bucket"] = "stable"
+        except (TypeError, ValueError):
+            pass
+    return out
+
+
+FEE_PER_SIDE_BPS = 5
+SLIPPAGE_BAND_BPS = 10  # one-way modeling band
+
+
 def outcome_to_final_status(row: dict[str, Any]) -> str | None:
     action = str(row.get("action") or "")
     outcome = str(row.get("outcome_kind") or "")
@@ -205,7 +317,13 @@ def build_hypotheses(row: dict[str, Any], final_status: str) -> list[dict[str, A
     return [h1, h2]
 
 
-def build_corpus_row(row: dict[str, Any], case_num: int) -> dict[str, Any] | None:
+def build_corpus_row(
+    row: dict[str, Any],
+    case_num: int,
+    *,
+    ledger_index: int | None = None,
+    all_rows: list[dict[str, Any]] | None = None,
+) -> dict[str, Any] | None:
     """Convert a single ledger row to finquant_agentic_qa_v1 format."""
     final_status = outcome_to_final_status(row)
     if final_status is None:
@@ -278,6 +396,12 @@ def build_corpus_row(row: dict[str, Any], case_num: int) -> dict[str, Any] | Non
 
     case_id = f"FQ-LIVE-{case_num:04d}-C{cycle}"
     outcome_kind = str(row.get("outcome_kind") or "")
+
+    bars_3, window_src = _build_3bar_window(
+        row, ledger_index=ledger_index, all_rows=all_rows
+    )
+    perp_ctx = _perp_context_from_row(row)
+    friction_bps = int(2 * FEE_PER_SIDE_BPS + 2 * SLIPPAGE_BAND_BPS)
 
     atr_pct_f = float(atr_pct) if atr_pct is not None else None
     rc_v1, rec_pct = build_risk_context_for_gold(
@@ -363,15 +487,13 @@ def build_corpus_row(row: dict[str, Any], case_num: int) -> dict[str, Any] | Non
         "Numeric_answer": exp_per_trade if final_status in ("ENTER_LONG", "ENTER_SHORT") else None,
         "Leakage_check": "No future bars referenced. Decision based on causal indicator data only.",
         "Policy_alignment": "RSI divergence signal + regime check + confidence spread gate applied.",
-        "DATA_or_assumption_gaps": "Volume is tick_count proxy. Single timeframe. No volume_base available.",
+        "DATA_or_assumption_gaps": (
+            "Three-bar window oldest→newest; decision is last bar only. "
+            "Volume is tick_count proxy. Single timeframe 15m. "
+            "Funding/OI not in packet unless listed in perp_context_v1."
+        ),
         "Final_status": final_status,
     }
-
-    # Build reference_facts from row
-    bar_data = {}
-    for field in ("close", "open", "high", "low", "volume", "rsi_14", "ema_20", "atr_14"):
-        if row.get(field) is not None:
-            bar_data[field] = row[field]
 
     corpus_row = {
         "case_id": case_id,
@@ -381,12 +503,12 @@ def build_corpus_row(row: dict[str, Any], case_num: int) -> dict[str, Any] | Non
         "primary_category": _map_category(final_status, regime, outcome_kind),
         "secondary_tags": ["real_sol_perp_15m", "divergence_signal", f"cycle_{cycle}", regime],
         "instruction": (
-            "You are FinQuant. Using ONLY reference_facts_v1 and retrieved_memory_v1, "
-            "produce strict JSON matching the gold contract: observe context, test hypotheses "
-            "(minimum 2), state deterministic baseline verdict, run expectancy_check_v1, "
-            "emit risk_context_v1 (factors, factor_notes, final_risk_pct, risk_bounds) and "
-            "numeric recommended_risk_pct (must equal final_risk_pct; 0.0 for NO_TRADE), "
-            "and emit learning_record_candidate_v1. RSI divergence is the primary entry signal."
+            "You are FinQuant. Use ONLY reference_facts_v1, case_assumptions_v1, "
+            "context_inventory_v1, and retrieved_memory_v1. Decision applies to the LAST bar "
+            "(decision_bar_index_in_window). Produce strict JSON: hypotheses (≥2), "
+            "deterministic baseline verdict, expectancy_check_v1, risk_context_v1 with "
+            "recommended_risk_pct equal to final_risk_pct, learning_record_candidate_v1. "
+            "Factor declared fees/slippage (case_assumptions_v1) into economic reasoning."
         ),
         "input": {
             "case_assumptions_v1": {
@@ -396,16 +518,37 @@ def build_corpus_row(row: dict[str, Any], case_num: int) -> dict[str, Any] | Non
                 "equity_usd": EQUITY_USD,
                 "planned_stop_atr_multiple": STOP_ATR_MULT,
                 "planned_target_atr_multiple": TARGET_ATR_MULT,
-                "notes": "Real SOL-PERP 15m bar from Pyth oracle. RSI divergence = price lower-low + RSI higher-low (bullish) or price higher-high + RSI lower-high (bearish).",
+                "fee_per_side_bps": FEE_PER_SIDE_BPS,
+                "slippage_band_bps": SLIPPAGE_BAND_BPS,
+                "estimated_round_trip_friction_bps": friction_bps,
+                "fill_latency_class": "interactive_market_order",
+                "economics_notes": (
+                    "estimated_round_trip_friction_bps = 2×fee_per_side_bps + 2×slippage_band_bps "
+                    "(conservative round-trip model)."
+                ),
+                "notes": (
+                    "SOL-PERP 15m; oracle/bar facts as provided. "
+                    "RSI divergence definitions per operator briefing."
+                ),
+            },
+            "context_inventory_v1": {
+                "bars_in_window": 3,
+                "decision_bar_index_in_window": 2,
+                "window_bar_source": window_src,
+                "has_declared_economics": True,
+                "has_funding_oi_in_packet": perp_ctx["funding_rate_bucket"] != "not_in_packet"
+                or perp_ctx["oi_change_bucket"] != "not_in_packet",
             },
             "reference_facts_v1": {
-                "bars_recent": [bar_data],
+                "bars_recent_oldest_to_newest": bars_3,
+                "decision_bar_index_in_window": 2,
                 "indicator_values_at_close": {
                     "rsi14": rsi,
                     "ema20": row.get("ema_20"),
                     "atr14": atr,
                     "atr_pct": atr_pct,
                 },
+                "perp_context_v1": perp_ctx,
                 "lifecycle_state_prior": "no_trade",
                 "open_position": None,
                 "regime": regime,
@@ -414,7 +557,8 @@ def build_corpus_row(row: dict[str, Any], case_num: int) -> dict[str, Any] | Non
                 "schema": "finquant_agentic_response_v1",
                 "required_sections": [
                     "context_observed_v1", "hypotheses_v1", "deterministic_baseline_verdict_v1",
-                    "expectancy_check_v1", "learning_record_candidate_v1",
+                    "expectancy_check_v1", "risk_context_v1", "recommended_risk_pct",
+                    "learning_record_candidate_v1",
                     "Claim_reviewed", "Math_verdict", "Numeric_answer",
                     "Leakage_check", "Policy_alignment", "DATA_or_assumption_gaps", "Final_status",
                 ],
@@ -523,7 +667,7 @@ def main() -> None:
                 except (TypeError, ValueError):
                     pass
 
-            corpus_row = build_corpus_row(row, exported + 1)
+            corpus_row = build_corpus_row(row, exported + 1, ledger_index=i, all_rows=rows)
             if corpus_row is None:
                 skipped_no_final += 1
                 continue
