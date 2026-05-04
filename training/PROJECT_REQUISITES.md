@@ -108,3 +108,8 @@ USE_REPO_CORPUS=1 ./training/docker/run_smoke.sh
 - Inside the container, `training/smoke_trx40.sh` sees `FINQUANT_CONTAINER=1` and **skips venv, git pull, and pip**.
 
 Bare-metal venv workflow remains supported; container avoids PEP 668 on the host OS Python.
+
+## Holdout splits and frozen exam manifests
+
+- **`training/split_agentic_corpus_holdout.py`** — deterministic **train / holdout** JSONL from `finquant_agentic_qa_v1` merges (seed `FQ-AGENTIC-*` always train; `FQ-LIVE-*-*` supports tail or hash splits). See **`CURRENT_TRAINING_STATUS.md` §7**.
+- **`training/frozen_exam_manifest.py`** — checksum + version pin for promotion exam bundles; cite **`sha256`** in eval reports.

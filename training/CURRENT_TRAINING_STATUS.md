@@ -236,6 +236,27 @@ All checks pass: action match, promotion_candidate correct, R=2.5, breakeven=0.2
 
 ---
 
+## 7. Holdout splits + frozen exam manifests (eval discipline)
+
+**Purpose:** Reduce silent leakage between supervision and “promotion” scores (time-aware / deterministic splits; pinned exam checksums). Not a substitute for full AFML purged CV — a **program-level** baseline.
+
+| Script | Role |
+|--------|------|
+| `training/split_agentic_corpus_holdout.py` | Writes **`train.jsonl`** + **`holdout.jsonl`** from a merged corpus. **`FQ-AGENTIC-*`** seed rows **always** go to train. **`FQ-LIVE-*-*`** rows support **tail** splits (ordering by `case_num` + cycle suffix) or **hash_ratio** splits. |
+| `training/frozen_exam_manifest.py` | SHA256 + line count + **`exam_version`** for any JSONL used as a **primary promotion** gate; eval reports should cite **`sha256`**. |
+
+**Suggested trx40 flow (next train after current run finishes):**
+
+1. Validate merged corpus: `python3 training/validate_agentic_corpus_v1.py "$MERGED_JSONL"`.
+2. Split (example — time-ordered proxy on exported live rows):  
+   `python3 training/split_agentic_corpus_holdout.py --input "$MERGED_JSONL" --train-out "$FINQUANT_BASE/datasets/train_agentic_v1.jsonl" --holdout-out "$FINQUANT_BASE/datasets/holdout_agentic_v1.jsonl" --strategy live_tail_fraction --live-holdout-fraction 0.15 --report "$FINQUANT_BASE/reports/holdout_split_report_v1.json"`
+3. Pin the holdout (or a separate frozen exam pack):  
+   `python3 training/frozen_exam_manifest.py --exam-jsonl "$FINQUANT_BASE/datasets/holdout_agentic_v1.jsonl" --exam-version finquant_holdout_v1 --bundle-role primary_promotion_gate --out "$FINQUANT_BASE/manifests/frozen_exam_holdout_v1.json"`
+4. **Train** only on **`train_agentic_v1.jsonl`** (`train_qlora.py … --dataset …`). **Do not** tune prompts or thresholds against holdout labels between promotion attempts.
+5. **Eval** the adapter on **`holdout_agentic_v1.jsonl`** (or export cases into `finquant_llm_eval` / verifier); archive logs with manifest **`sha256`**.
+
+---
+
 ## Unified operator pipeline (repeatable)
 
 Script: **`training/run_finquant_cycle.sh`** — same flow every campaign; only change **env vars** (`MERGED_JSONL`, optional `LEDGER_JSON`, `INCLUDE_SEED`, `TRAIN_LOG`, etc.).
