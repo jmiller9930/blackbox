@@ -43,6 +43,11 @@ import uuid
 from pathlib import Path
 from typing import Any
 
+_REPO_ROOT = Path(__file__).resolve().parents[4]
+if str(_REPO_ROOT) not in sys.path:
+    sys.path.insert(0, str(_REPO_ROOT))
+from training.risk_context_contract import build_risk_context_for_gold
+
 STOP_ATR_MULT   = 1.6
 TARGET_ATR_MULT = 4.0
 R_MULTIPLE      = TARGET_ATR_MULT / STOP_ATR_MULT       # 2.5
@@ -274,6 +279,16 @@ def build_corpus_row(row: dict[str, Any], case_num: int) -> dict[str, Any] | Non
     case_id = f"FQ-LIVE-{case_num:04d}-C{cycle}"
     outcome_kind = str(row.get("outcome_kind") or "")
 
+    atr_pct_f = float(atr_pct) if atr_pct is not None else None
+    rc_v1, rec_pct = build_risk_context_for_gold(
+        final_status,
+        conf_gap=conf_gap,
+        regime=regime,
+        atr_pct=atr_pct_f,
+        i_dont_know=i_dont_know,
+        baseline_risk_pct=RISK_PCT * 100.0,
+    )
+
     output_obj = {
         "context_observed_v1": {
             "trend_regime": regime,
@@ -336,6 +351,8 @@ def build_corpus_row(row: dict[str, Any], case_num: int) -> dict[str, Any] | Non
                 else "No entry — expectancy not applicable."
             ),
         },
+        "risk_context_v1": rc_v1,
+        "recommended_risk_pct": rec_pct,
         "context_decision_link_v1": f"{regime} regime + {rsi_zone} RSI + divergence_signal → {final_status}",
         "lifecycle_state_v1": "trade" if final_status in ("ENTER_LONG", "ENTER_SHORT") else "no_trade",
         "Claim_reviewed": f"{final_status} consistent with prime directive and indicator evidence.",
@@ -367,6 +384,8 @@ def build_corpus_row(row: dict[str, Any], case_num: int) -> dict[str, Any] | Non
             "You are FinQuant. Using ONLY reference_facts_v1 and retrieved_memory_v1, "
             "produce strict JSON matching the gold contract: observe context, test hypotheses "
             "(minimum 2), state deterministic baseline verdict, run expectancy_check_v1, "
+            "emit risk_context_v1 (factors, factor_notes, final_risk_pct, risk_bounds) and "
+            "numeric recommended_risk_pct (must equal final_risk_pct; 0.0 for NO_TRADE), "
             "and emit learning_record_candidate_v1. RSI divergence is the primary entry signal."
         ),
         "input": {

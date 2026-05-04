@@ -103,6 +103,39 @@ def validate_row(row: dict, memory_ids: set[str], path: str, line_no: int) -> li
         if not sig or not str(sig).strip():
             errs.append(f"{prefix} learning_record_candidate_v1.setup_signature required")
 
+    rc = out.get("risk_context_v1")
+    rec = out.get("recommended_risk_pct")
+    if not isinstance(rc, dict):
+        errs.append(f"{prefix} output.risk_context_v1 required object")
+    else:
+        for k in (
+            "baseline_risk_pct",
+            "volatility_factor",
+            "structure_factor",
+            "signal_factor",
+            "session_factor",
+            "health_factor",
+            "final_risk_pct",
+            "risk_bounds",
+            "factor_notes",
+        ):
+            if k not in rc:
+                errs.append(f"{prefix} risk_context_v1 missing {k}")
+        rb = rc.get("risk_bounds")
+        if not isinstance(rb, dict) or "min" not in rb or "max" not in rb:
+            errs.append(f"{prefix} risk_context_v1.risk_bounds must be object with min,max")
+        fn = rc.get("factor_notes")
+        if not isinstance(fn, dict) or not fn:
+            errs.append(f"{prefix} risk_context_v1.factor_notes must be non-empty object")
+    if not isinstance(rec, (int, float)):
+        errs.append(f"{prefix} output.recommended_risk_pct must be number")
+    elif isinstance(rc, dict) and "final_risk_pct" in rc:
+        if abs(float(rec) - float(rc["final_risk_pct"])) > 1e-9:
+            errs.append(
+                f"{prefix} recommended_risk_pct must equal risk_context_v1.final_risk_pct "
+                f"(got {rec} vs {rc.get('final_risk_pct')})"
+            )
+
     return errs
 
 
