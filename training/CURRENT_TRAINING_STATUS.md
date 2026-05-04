@@ -71,6 +71,62 @@
 
 ---
 
+## 6. HW engineering actions — logs, ToT branch scorer, weight handoff (2026-05-04)
+
+*Training engineer execution of HW team asks.*
+
+### 6.1 Training logs — loss decay (pulled from trx40)
+
+**Source:** `FINQUANT_BASE/adapters/finquant-1-qwen7b-v0.1/checkpoint-*/trainer_state.json` (`log_history` loss entries).
+
+**Snapshot (latest `checkpoint-*` on disk at pull time — step 1000 save):**
+
+| Field | Value |
+|--------|--------|
+| `global_step` / `max_steps` | 1000 / 3000 |
+| Loss points in save | 20 |
+| First logged loss | ~1.582 |
+| Last logged loss | ~0.011 |
+| Tail | ~0.011–0.012 (flat) |
+
+**Read:** Loss **decayed strongly** through the logged segment, then **plateaued near ~0.01** — typical for late-interval SFT. **Not** evidence of gradient blow-ups in this snapshot.
+
+**Caveats:** Full train may **still be running** (`train_qlora.py … --resume`); disk checkpoint **lags** live step until next `save_steps` (500). **Re-pull** `trainer_state.json` from the **final** `checkpoint-*` (or post-complete report) when the job finishes; open **`full_training_report_v0.1.md`** under `FINQUANT_BASE/reports/` when generated.
+
+**Commands (operator):**
+
+```bash
+CKPT=$(ls -dt "$FINQUANT_BASE/adapters/finquant-1-qwen7b-v0.1/checkpoint-"* | head -1)
+python3 -c "import json; t=json.load(open(\"$CKPT/trainer_state.json\")); lh=t.get(\"log_history\") or []; \
+  losses=[x[\"loss\"] for x in lh if \"loss\" in x]; print(\"step\", t.get(\"global_step\"), \"losses\", len(losses), \"first\", losses[:1], \"last\", losses[-3:])"
+```
+
+### 6.2 ToT branch scorer — deterministic rule (inference orchestration)
+
+ToT **search is not in QLoRA training**; orchestration must **score** each candidate branch with **auditable rules**. Until architect overrides, use:
+
+1. **Discard:** Parsed JSON fails corpus/verifier contract → **eliminate** branch.
+2. **Hard veto:** `ENTER_*` but `deterministic_baseline_verdict_v1.blocking_rules` contradicts entry, or R-math / policy gates fail → **eliminate**.
+3. **Primary score (ENTER):** `expectancy_check_v1.expectancy_per_trade_dollars` when finite; otherwise **`contributes_to_long_run_math`** (boolean promoted to ranked tier).
+4. **Risk consistency:** Prefer `recommended_risk_pct == risk_context_v1.final_risk_pct` with `final_risk_pct` inside `risk_bounds`.
+5. **Abstention paths:** Prefer coherent **`INSUFFICIENT_DATA` / `NO_TRADE`** when `context_inventory_v1` marks gaps; rank by **`confidence_gap_v1`** consistent with R-002 (spread gate).
+6. **Tie-break:** Higher `confidence_gap_v1` → higher expectancy dollars → operator-defined status preference.
+
+**EV / R:R:** Encoded via **`expectancy_check_v1`** (planned R-multiple, breakeven win rate, expectancy dollars) and **`risk_context_v1`** — not a separate mystery scalar.
+
+### 6.3 Handoff — train host (e.g. A6000 class) → RTX 4000 for ToT graph build
+
+| # | Action |
+|---|--------|
+| 1 | Record **git `HEAD`** on train host + exact **`merged_finquant_v0.2.jsonl`** (or dataset path) used. |
+| 2 | Archive **`adapters/finquant-1-qwen7b-v0.1/`** after final write (`adapter_model.safetensors`, `adapter_config.json`, tokenizer artifacts, latest `checkpoint-*` if retained). |
+| 3 | Copy **`reports/full_training_report_v0.1.md`**, **`finquant_llm_eval`** outputs when available. |
+| 4 | On **4000**: install same **`training/requirements-finquant-training.txt`**; verify **`nvidia-smi`**. |
+| 5 | **Smoke:** load **DeepSeek-R1-Distill-Qwen-7B** + adapter; run **`finquant_llm_eval.py`** (or minimal generate) **before** wiring BFS/DFS ToT. |
+| 6 | **ToT:** implement **search + §6.2 scorer** in orchestration — model weights supply **proposals** only. |
+
+---
+
 *Last updated from repo state at authoring time; learning engineer may append rows or corrections below.*
 
 ---
