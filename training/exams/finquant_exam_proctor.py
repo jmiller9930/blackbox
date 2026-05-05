@@ -253,6 +253,29 @@ def normalize_numeric(val: Any) -> float | None:
         return None
 
 
+_FIELD_ALIASES: dict[str, str] = {
+    "final_status": "Final_status",
+    "claim_reviewed": "Claim_reviewed",
+    "math_verdict": "Math_verdict",
+    "numeric_answer": "Numeric_answer",
+    "numeric_answer_v1": "Numeric_answer",
+    "leakage_check": "Leakage_check",
+    "policy_alignment": "Policy_alignment",
+    "data_or_assumption_gaps": "DATA_or_assumption_gaps",
+    "rule_checks": "rule_checks",
+    "math_verdict_v1": "Math_verdict",
+}
+
+
+def _normalize_response(resp: dict[str, Any]) -> dict[str, Any]:
+    """Remap lowercase / variant field names to the contract's expected keys."""
+    out = dict(resp)
+    for src, dst in _FIELD_ALIASES.items():
+        if src in out and dst not in out:
+            out[dst] = out[src]
+    return out
+
+
 def grade_case(
     case: dict[str, Any],
     response: dict[str, Any] | None,
@@ -264,6 +287,9 @@ def grade_case(
     rules = grading.get("rules") or grading.get("automated_rules") or []
     failure_codes: list[str] = []
     passes: list[bool] = []
+
+    if response is not None:
+        response = _normalize_response(response)
 
     if response is None:
         return {
