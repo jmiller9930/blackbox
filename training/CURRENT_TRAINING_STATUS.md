@@ -255,6 +255,22 @@ All checks pass: action match, promotion_candidate correct, R=2.5, breakeven=0.2
 4. **Train** only on **`train_agentic_v1.jsonl`** (`train_qlora.py … --dataset …`). **Do not** tune prompts or thresholds against holdout labels between promotion attempts.
 5. **Eval** the adapter on **`holdout_agentic_v1.jsonl`** (or export cases into `finquant_llm_eval` / verifier); archive logs with manifest **`sha256`**.
 
+### 7.1 Executed on trx40 (2026-05-05)
+
+| Artifact | Detail |
+|----------|--------|
+| **Merged corpus SHA256** | `9056f76172c5ca94e0aaeb14db2b17b0bc045ed1f1939289e9462b1690f65654` → `reports/merged_finquant_v0.2.sha256` |
+| **Merged line count** | **289** rows (`reports/merged_finquant_v0.2.linecount`) |
+| **Validate merged** | **OK** (`validate_agentic_corpus_v1.py`) |
+| **Train split** | `datasets/train_agentic_v1.jsonl` — **246** lines, **OK** |
+| **Holdout split** | `datasets/holdout_agentic_v1.jsonl` — **43** lines, **OK** (`live_tail_fraction` **0.15**) |
+| **Split report** | `reports/holdout_split_report_v1.json` |
+| **Frozen manifest** | `manifests/frozen_exam_holdout_agentic_v1.json` — holdout **`sha256`** = `a6ebb7123d40d478043eefc582d284da3686eff3370e364f54b3aaa2a697700b` |
+
+**Note:** **`finquant_llm_eval.py`** was **not** run on trx40 — no **`market_data.db`** on that host. See **`reports/llm_eval_pending_note.md`** on `FINQUANT_BASE` for the command once a DB path exists (and Ollama has **`finquant-1-qwen7b-v0.1`**).
+
+**Training note:** The adapter already trained on **full** `merged_finquant_v0.2.jsonl` (289 rows), so the **43** holdout lines were **included** in that run. For **honest promotion scoring**, the **next** full train should use **`--dataset train_agentic_v1.jsonl`** only; keep **`holdout_agentic_v1.jsonl`** for eval-only gates.
+
 ---
 
 ## Unified operator pipeline (repeatable)
