@@ -165,10 +165,40 @@ def ollama_generate(
         raise SystemExit(f"Ollama error at {url}: {e}") from e
 
 
+def _find_json_objects(text: str) -> list[str]:
+    """Find all top-level JSON objects using bracket counting (handles nesting)."""
+    results = []
+    depth = 0
+    start = -1
+    in_string = False
+    escape = False
+    for i, ch in enumerate(text):
+        if escape:
+            escape = False
+            continue
+        if ch == "\\" and in_string:
+            escape = True
+            continue
+        if ch == '"':
+            in_string = not in_string
+            continue
+        if in_string:
+            continue
+        if ch == "{":
+            if depth == 0:
+                start = i
+            depth += 1
+        elif ch == "}":
+            depth -= 1
+            if depth == 0 and start != -1:
+                results.append(text[start:i + 1])
+                start = -1
+    return results
+
+
 def extract_json(raw: str) -> dict[str, Any] | None:
-    """Extract best JSON object from model output.
-    Prefers the LAST valid markdown-fenced block (model often drafts first then produces final).
-    Falls back to largest { } block."""
+    """Extract best JSON object from model output using proper bracket counting.
+    Prefers the LAST valid top-level object (model often drafts, then produces final)."""
     raw = raw.strip()
 
     # Try direct parse first
@@ -177,30 +207,24 @@ def extract_json(raw: str) -> dict[str, Any] | None:
     except json.JSONDecodeError:
         pass
 
-    # Collect ALL markdown-fenced JSON blocks and return the last one
-    fence_matches = list(re.finditer(r"```(?:json)?\s*(\{.*?\})\s*```", raw, re.DOTALL))
-    for m in reversed(fence_matches):
-        try:
-            return json.loads(m.group(1))
-        except json.JSONDecodeError:
-            continue
-
-    # Collect ALL { } blocks and return the last parseable one
-    brace_matches = list(re.finditer(r"\{[^{}]*(?:\{[^{}]*\}[^{}]*)?\}", raw, re.DOTALL))
-    for m in reversed(brace_matches):
-        try:
-            return json.loads(m.group(0))
-        except json.JSONDecodeError:
-            continue
-
-    # Last resort: find any { and try from there to end
-    start = raw.rfind("{")
-    if start != -1:
-        for end in range(len(raw), start, -1):
+    # Try markdown fences (last wins)
+    for m in reversed(list(re.finditer(r"```(?:json)?\s*(.*?)\s*```", raw, re.DOTALL))):
+        candidate = m.group(1).strip()
+        objs = _find_json_objects(candidate)
+        for obj in reversed(objs):
             try:
-                return json.loads(raw[start:end])
+                return json.loads(obj)
             except json.JSONDecodeError:
                 continue
+
+    # Find all top-level JSON objects in raw text (last wins)
+    objs = _find_json_objects(raw)
+    for obj in reversed(objs):
+        try:
+            return json.loads(obj)
+        except json.JSONDecodeError:
+            continue
+
     return None
 
 
