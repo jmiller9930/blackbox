@@ -63,44 +63,50 @@ HARD_FAIL_CASES = {
     "FQ-Q-0505",  # SHORT ATR mirror
 }
 
-# Prompt template sent to model (grading_v1 stripped)
+# System prompt aligned with training contract (finquant_agentic_qa_v1)
 SYSTEM_PROMPT = """You are FinQuant, a disciplined quantitative crypto-perps reasoning agent.
 
-PRIME DIRECTIVES:
 P-1 NEVER LIE. Only use data in this prompt. Never invent values.
-P-2 REASON WITH TOOLS. Cite specific indicator values in your thesis.
-P-3 SELECTIVE ENTRY. Enter only when multiple signals align clearly.
+P-2 REASON WITH TOOLS. Cite specific indicator values (RSI, ATR, EMA) in your thesis.
+P-3 SELECTIVE ENTRY. Enter only when multiple signals align and all hard rules pass.
 P-4 PATTERN SIMILARITY. Weight governed memory records over fuzzy similarity.
+P-5 CONTEXT FIRST. Read regime before applying rules.
+P-6 LONG-RUN MATH. Aim for R >= 1.5 when entering.
 
-OUTPUT CONTRACT (respond with valid JSON only — no other text):
-{
-  "Final_status": "ENTER_LONG | ENTER_SHORT | NO_TRADE | INSUFFICIENT_DATA | FAIL",
-  "Claim_reviewed": "one sentence restating what is being assessed",
-  "Math_verdict": "correct | incorrect | insufficient — with brief arithmetic check",
-  "Numeric_answer": null,
-  "Leakage_check": "PASS | FAIL",
-  "Policy_alignment": "which rules governed the decision and whether they were satisfied",
-  "DATA_or_assumption_gaps": "what is missing that would change the answer",
-  "rule_checks": {
-    "atr_filter_passed": true,
-    "spread_liquidity_ok": true,
-    "data_quality_passed": true,
-    "confidence_gap_passed": true
-  }
-}"""
+Respond with a single valid JSON object. Required fields:
+Final_status (ENTER_LONG|ENTER_SHORT|NO_TRADE|INSUFFICIENT_DATA|FAIL),
+Claim_reviewed, Math_verdict, Numeric_answer, Leakage_check,
+Policy_alignment, DATA_or_assumption_gaps, rule_checks."""
 
 
 def build_prompt(case: dict[str, Any]) -> str:
-    """Build student-facing prompt — grading_v1 and human_review fields stripped."""
-    student_case = {
-        k: v for k, v in case.items()
-        if k not in ("grading_v1", "human_review_required", "difficulty")
-    }
+    """Build student-facing prompt using training instruction format — grading metadata stripped."""
+    # Use the training instruction if present (model was trained on this exact format)
+    instruction = case.get("instruction") or (
+        "You are FinQuant. Use ONLY the data in this packet. "
+        "Decision applies to the LAST bar. Produce strict JSON with all required fields."
+    )
+
+    # Build input packet from case fields (strip grader fields)
+    input_packet: dict[str, Any] = {}
+    for k in ("case_assumptions_v1", "reference_facts_v1"):
+        if k in case:
+            input_packet[k] = case[k]
+
+    # For cases without structured packets (math/policy/learning cases)
+    if not input_packet:
+        for k, v in case.items():
+            if k not in ("grading_v1", "human_review_required", "difficulty",
+                         "exam_schema", "exam_version", "instruction",
+                         "secondary_tags", "required"):
+                input_packet[k] = v
+
     return (
-        f"EXAM CASE: {case['case_id']}\n"
-        f"Category: {case['primary_category']}\n\n"
-        f"PACKET:\n{json.dumps(student_case, indent=2, ensure_ascii=False)}\n\n"
-        "Respond with the required JSON contract only."
+        f"{instruction}\n\n"
+        f"CASE ID: {case['case_id']}\n"
+        f"CATEGORY: {case.get('primary_category', '')}\n\n"
+        f"PACKET:\n{json.dumps(input_packet, indent=2, ensure_ascii=False)}\n\n"
+        "Respond with valid JSON only. Include all required fields."
     )
 
 
