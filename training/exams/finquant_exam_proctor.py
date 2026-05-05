@@ -115,9 +115,13 @@ def sha256_text(text: str) -> str:
 
 
 def strip_think_blocks(text: str) -> str:
-    """Remove DeepSeek <think>…</think> reasoning traces before extracting JSON."""
+    """Remove DeepSeek <think>…</think> reasoning traces before extracting JSON.
+    Also handles orphaned </think> closing tags and everything before them."""
+    # Full think block
     text = re.sub(r"<think>.*?</think>", "", text, flags=re.DOTALL)
-    # Also strip bare <think> with no closing tag (truncated output)
+    # Orphaned closing tag — strip everything up to and including </think>
+    text = re.sub(r"^.*?</think>", "", text, flags=re.DOTALL)
+    # Bare unclosed <think> (truncated output)
     text = re.sub(r"<think>.*$", "", text, flags=re.DOTALL)
     return text.strip()
 
@@ -140,7 +144,8 @@ def ollama_generate(
         "options": {
             "temperature": 0.05,
             "top_p": 0.9,
-            "num_ctx": 8192,
+            "num_ctx": 12288,
+            "num_predict": 2048,
         },
     }).encode()
 
@@ -161,27 +166,41 @@ def ollama_generate(
 
 
 def extract_json(raw: str) -> dict[str, Any] | None:
-    """Extract first JSON object from model output (handles markdown fences)."""
-    # Try direct parse
+    """Extract best JSON object from model output.
+    Prefers the LAST valid markdown-fenced block (model often drafts first then produces final).
+    Falls back to largest { } block."""
     raw = raw.strip()
+
+    # Try direct parse first
     try:
         return json.loads(raw)
     except json.JSONDecodeError:
         pass
-    # Try markdown fence
-    m = re.search(r"```(?:json)?\s*(\{.*?\})\s*```", raw, re.DOTALL)
-    if m:
+
+    # Collect ALL markdown-fenced JSON blocks and return the last one
+    fence_matches = list(re.finditer(r"```(?:json)?\s*(\{.*?\})\s*```", raw, re.DOTALL))
+    for m in reversed(fence_matches):
         try:
             return json.loads(m.group(1))
         except json.JSONDecodeError:
-            pass
-    # Try first { … } block
-    m = re.search(r"(\{.*\})", raw, re.DOTALL)
-    if m:
+            continue
+
+    # Collect ALL { } blocks and return the last parseable one
+    brace_matches = list(re.finditer(r"\{[^{}]*(?:\{[^{}]*\}[^{}]*)?\}", raw, re.DOTALL))
+    for m in reversed(brace_matches):
         try:
-            return json.loads(m.group(1))
+            return json.loads(m.group(0))
         except json.JSONDecodeError:
-            pass
+            continue
+
+    # Last resort: find any { and try from there to end
+    start = raw.rfind("{")
+    if start != -1:
+        for end in range(len(raw), start, -1):
+            try:
+                return json.loads(raw[start:end])
+            except json.JSONDecodeError:
+                continue
     return None
 
 
