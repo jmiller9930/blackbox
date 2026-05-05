@@ -1,0 +1,14 @@
+{
+  "schema": "frozen_exam_manifest_v1",
+  "created_utc": "2026-05-05T16:02:32Z",
+  "exam_version": "finquant_adversarial_exam_v1",
+  "bundle_role": "primary_promotion_gate",
+  "artifact_path": "/Users/bigmac/Documents/code_projects/blackbox/training/exams/finquant_adversarial_exam_v1_cases.jsonl",
+  "sha256": "dbe649ebbade9d05fb3285444c77429c534f585c2458234024337155c41c550f",
+  "byte_size": 18352,
+  "line_count": 19,
+  "notes": [
+    "Promotion decisions MUST record this sha256 next to eval outputs.",
+    "If exam JSONL changes, bump exam_version and regenerate manifest."
+  ]
+}
