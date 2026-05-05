@@ -13,7 +13,7 @@
 | **Validator** | `python3 training/validate_agentic_corpus_v1.py training/corpus_v05_agentic_seed.jsonl` → **OK** on current seed. |
 | **Ledger → agentic export** | Implemented as `prove_learning/finquant/unified/agent_lab/export_to_training_corpus.py` (not under `training/`). Supports `--ledger PATH` or `--latest`, `--good-only`, `--min-confidence-spread`. |
 | **Export validation check** | On latest `prove_learning/ledger_output/*_decisions.json`, **`--good-only` full export = 286 lines**; **`validate_agentic_corpus_v1.py` on that file → OK** (after fixes for `--latest` path + R-002 `confidence_gap_v1` / `i_dont_know_triggered` + decisive ENTER confidences). |
-| **QLoRA / trx40** | Not re-verified from this workspace in this report. Operator should confirm under `FINQUANT_BASE`: `full_training_report_v0.1.md`, non-empty `adapters/finquant-1-qwen7b-v0.1/`, and verifier reports after last full run. |
+| **QLoRA / trx40 (verified 2026-05-05)** | **Full train complete:** `global_step` **3000 / 3000**, checkpoint `checkpoint-3000`. **Dataset:** `FINQUANT_BASE/datasets/merged_finquant_v0.2.jsonl`. **Report:** `reports/full_training_report_v0.1.md` (generated **2026-05-05T08:59:01Z**); loss first/last **1.5818 / 0.0107**. **Adapter:** `adapters/finquant-1-qwen7b-v0.1/` (**44** files in post-run digest). **Verifier eval:** `reports/v0.1_eval_report.md` (**2026-05-05T09:01:06Z**) — **6 / 6** cases pass (strict four-heading harness). **trx40 repo HEAD at pull:** `2a96ffb` — **`git pull`** recommended to pick up holdout-split tooling (`main` ≥ `df963f56`). |
 
 ---
 
@@ -49,14 +49,16 @@
 ## 4. Suggested next actions (for review / edit)
 
 1. Learning engineer: **annotate Section 2C** if lab expects different bar packet or `Final_status` mapping rules.  
-2. Training engineer: **add two ENTER gold rows** to seed (or approve merged JSONL only), **re-validate**, then schedule next **full** run on trx40.  
-3. Operator: **record last trx40 HEAD commit + artifact paths** in a line below when known.
+2. Training engineer: **add two ENTER gold rows** to seed (or approve merged JSONL only), **re-validate**, then schedule next **full** run on trx40 **after holdout split** (§7) if tightening promotion discipline.  
+3. ~~Operator: record trx40 HEAD + paths~~ **Done** — see §1 table (refresh after each campaign).  
+4. Operator: **`git pull` on trx40**, then run **`split_agentic_corpus_holdout.py`** + **`frozen_exam_manifest.py`** (§7) before the **next** full train; keep current adapter as **v0.1 production** artifact until superseded.  
+5. **`finquant_llm_eval.py`** on agentic cases if not already part of routine (verifier **6/6** ≠ quant exam — see architect spec).
 
 ---
 
 ## 5. Corpus growth backlog — LE + training engineer (LLM context engineering)
 
-**Status:** Agreed priority — **do not pivot** architecture. **Defer heavy corpus edits while a full QLoRA run is in flight** (~24h); pick this up after train completes + `finquant_llm_eval.py`.
+**Status:** **Full QLoRA run completed** (see §1). Safe to resume **corpus growth** and **`finquant_llm_eval`** cadence without deferring for GPU contention.
 
 **Weak spot (confirmed):** `retrieved_memory_v1` is often **empty** → model mostly learns **reasoning without discriminative retrieval**. Fix by **biasing corpus growth**, not by ripping up RM (separate thread).
 
@@ -75,23 +77,21 @@
 
 *Training engineer execution of HW team asks.*
 
-### 6.1 Training logs — loss decay (pulled from trx40)
+### 6.1 Training logs — loss decay (final trx40 pull)
 
-**Source:** `FINQUANT_BASE/adapters/finquant-1-qwen7b-v0.1/checkpoint-*/trainer_state.json` (`log_history` loss entries).
+**Source:** `FINQUANT_BASE/adapters/finquant-1-qwen7b-v0.1/checkpoint-3000/trainer_state.json` (`log_history`).
 
-**Snapshot (latest `checkpoint-*` on disk at pull time — step 1000 save):**
+**Final snapshot (2026-05-05):**
 
 | Field | Value |
 |--------|--------|
-| `global_step` / `max_steps` | 1000 / 3000 |
-| Loss points in save | 20 |
-| First logged loss | ~1.582 |
-| Last logged loss | ~0.011 |
-| Tail | ~0.011–0.012 (flat) |
+| `global_step` / `max_steps` | **3000 / 3000** |
+| Loss first / last (report) | **1.5818 / 0.0107** |
+| Tail (`step` 2900–3000) | **~0.0107** (flat) |
 
-**Read:** Loss **decayed strongly** through the logged segment, then **plateaued near ~0.01** — typical for late-interval SFT. **Not** evidence of gradient blow-ups in this snapshot.
+**Read:** Loss **decayed strongly** early, then **plateaued ~0.0107** — typical late SFT on this corpus.
 
-**Caveats:** Full train may **still be running** (`train_qlora.py … --resume`); disk checkpoint **lags** live step until next `save_steps` (500). **Re-pull** `trainer_state.json` from the **final** `checkpoint-*` (or post-complete report) when the job finishes; open **`full_training_report_v0.1.md`** under `FINQUANT_BASE/reports/` when generated.
+**Verifier snapshot:** `v0.1_eval_report.md` — **6 / 6** pass (structural + heuristic gates); **not** quant-exam certification.
 
 **Commands (operator):**
 
