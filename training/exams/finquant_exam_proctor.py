@@ -108,18 +108,29 @@ def sha256_text(text: str) -> str:
     return hashlib.sha256(text.encode()).hexdigest()[:16]
 
 
+def strip_think_blocks(text: str) -> str:
+    """Remove DeepSeek <think>…</think> reasoning traces before extracting JSON."""
+    text = re.sub(r"<think>.*?</think>", "", text, flags=re.DOTALL)
+    # Also strip bare <think> with no closing tag (truncated output)
+    text = re.sub(r"<think>.*$", "", text, flags=re.DOTALL)
+    return text.strip()
+
+
 def ollama_generate(
     prompt: str,
     model: str,
     ollama_url: str,
     timeout: int = 90,
 ) -> str:
-    url = ollama_url.rstrip("/") + "/api/generate"
+    """Use /api/chat so Ollama applies the model's chat template correctly."""
+    url = ollama_url.rstrip("/") + "/api/chat"
     payload = json.dumps({
         "model": model,
-        "prompt": prompt,
-        "system": SYSTEM_PROMPT,
         "stream": False,
+        "messages": [
+            {"role": "system", "content": SYSTEM_PROMPT},
+            {"role": "user", "content": prompt},
+        ],
         "options": {
             "temperature": 0.05,
             "top_p": 0.9,
@@ -136,7 +147,9 @@ def ollama_generate(
     try:
         with urllib.request.urlopen(req, timeout=timeout) as resp:
             data = json.loads(resp.read())
-            return data.get("response", "")
+            # /api/chat returns message.content
+            raw = data.get("message", {}).get("content", "")
+            return strip_think_blocks(raw)
     except urllib.error.URLError as e:
         raise SystemExit(f"Ollama error at {url}: {e}") from e
 
