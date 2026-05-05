@@ -73,6 +73,7 @@
 3. ~~Operator: record trx40 HEAD + paths~~ **Done** — see §1 table (refresh after each campaign).  
 4. Operator: **`git pull` on trx40**, then run **`split_agentic_corpus_holdout.py`** + **`frozen_exam_manifest.py`** (§7) before the **next** full train; keep current adapter as **v0.1 production** artifact until superseded.  
 5. **`finquant_llm_eval.py`** on agentic cases if not already part of routine (verifier **6/6** ≠ quant exam — see architect spec).
+6. **Adversarial quant exam FAIL** (see §8) — corpus and training improvements required before next certification attempt.
 
 ---
 
@@ -290,6 +291,60 @@ All checks pass: action match, promotion_candidate correct, R=2.5, breakeven=0.2
 **Note:** **`finquant_llm_eval.py`** was **not** run on trx40 — no **`market_data.db`** on that host. See **`reports/llm_eval_pending_note.md`** on `FINQUANT_BASE` for the command once a DB path exists (and Ollama has **`finquant-1-qwen7b-v0.1`**).
 
 **Training note:** Same fact as **§1b** — current **`finquant-1-qwen7b-v0.1`** saw all **289** rows; **next** promotion-quality train uses **`train_agentic_v1.jsonl`** only.
+
+---
+
+## 8. Adversarial Quant Exam Results — v0.1 adapter (2026-05-05)
+
+**Exam:** `training/exams/finquant_adversarial_exam_v1_cases.jsonl` (22 cases, SHA256 `6cc73f9b`)  
+**Model:** `finquant-1-qwen7b-v0.1` (full 3000-step QLoRA, merged into Ollama on trx40)  
+**Result file:** `FINQUANT_BASE/reports/exam_results/exam_result_finquant_v0.1_certified_20260505T175358Z.json`
+
+### Scores
+
+| Gate | Score | Threshold | Result |
+|------|-------|-----------|--------|
+| Economic (correct `Final_status`) | **5%** | ≥ 75% | **FAIL** |
+| Process (schema + fields present) | **55%** | ≥ 80% | **FAIL** |
+| Hard rule violations | 5 cases | 0 allowed | **FAIL** |
+
+**Verdict: `FinQuant quant exam v3 FAIL — finquant-1-qwen7b-v0.1 — 2026-05-05`**
+
+### Hard rule violations (most critical)
+
+| Case | Expected | Got | Diagnosis |
+|------|----------|-----|-----------|
+| FQ-Q-0103 | `NO_TRADE` (ATR > 1.35) | `ENTER_LONG` | ATR hard rule not learned |
+| FQ-Q-0401 | `FAIL` (lookahead) | `ENTER_LONG` | Leakage not detected |
+| FQ-Q-0502 | `FAIL` (same-bar SL first) | `ENTER_LONG` | Same-bar rule not learned |
+| FQ-Q-0602 | `FAIL` (funding sign wrong) | `ENTER_LONG` | Funding semantics inverted |
+| FQ-Q-0505 | `NO_TRADE` (SHORT ATR) | `ENTER_SHORT` | ATR rule not symmetric |
+
+### Remediation buckets
+
+| Bucket | Failures |
+|--------|---------|
+| **policy_adherence** | 34 — does not apply hard rules, enters on weak signal |
+| **data_hygiene** | 11 — schema violations, `LONG` not in enum, missing fields |
+
+### Root cause (plain English)
+
+The model was trained on **`finquant_agentic_qa_v1`** agentic decision format but the exam cases represent a **different exposure** than what it saw — explicit rule-testing, math, and adversarial traps. The model's behavior suggests it learned the **narrative format** well (loss 0.011 is SFT memorization) but **did not learn generalizable rule application** because:
+
+1. **No ATR hard rule cases** in training corpus (the seed/merged data had no cases explicitly testing `atr_ratio > 1.35 → NO_TRADE`)
+2. **No lookahead/leakage detection** cases in corpus
+3. **No same-bar rule** cases
+4. **No funding sign** adversarial cases
+5. **Overtrading bias** — model defaults to `ENTER_LONG` on anything bullish
+
+### Required before next certification attempt
+
+See §5 corpus backlog + add targeted exam-aligned rows to the training corpus:
+- ATR hard rule cases (both long and short, boundary values like 1.34 vs 1.36)
+- Leakage detection cases (future bar in context note)
+- Same-bar kill cases
+- Funding sign / perp semantics cases
+- Abstention / `INSUFFICIENT_DATA` cases where data is missing
 
 ---
 
