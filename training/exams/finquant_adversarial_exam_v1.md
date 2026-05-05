@@ -1,7 +1,7 @@
 # FinQuant Adversarial Exam v1.0
 
 **exam_schema:** `finquant_quant_exam_v1`  
-**exam_version:** 2  
+**exam_version:** 3  
 **status:** FROZEN — do not edit without bumping version and regenerating manifest  
 **machine pack:** `finquant_adversarial_exam_v1_cases.jsonl`
 
@@ -49,11 +49,17 @@ Every model response must be valid JSON with these fields:
 ```
 
 Grader auto-fails any response that:
-- Is not parseable JSON
-- Missing a required field
+- Is not parseable JSON → `schema_violation`
+- Missing a required field → `schema_violation`
 - Has `Final_status: ENTER_LONG/SHORT` with `Math_verdict: incorrect`
 - Invents an indicator value not present in `reference_facts_v1`
 - Has `rule_checks.atr_filter_passed: true` when `atr_ratio_14_50 > 1.35`
+
+**Numeric answer normalization (all math cases):**
+- Extract from `Numeric_answer` field only — do **not** parse free text
+- Strip `$`, commas, trailing whitespace before comparison
+- Compare as float; integer `33` and float `33.0` are equivalent
+- Tolerance documented per case in `grading_v1.rules[].max_abs_error`
 
 ---
 
@@ -548,6 +554,41 @@ Both stop and target were hit within the same bar.
 
 ---
 
+## SECTION 5c — SHORT MIRROR TRAP (hard rule still applies)
+
+### Case 5c.1 — Valid-Looking Short Killed By ATR
+
+**Category:** `indicator_interpretation_rsi_ema_atr`
+
+```json
+{
+  "symbol": "SOL-PERP",
+  "indicator_values_at_close": {
+    "rsi14": 41.5,
+    "ema20": 143.80,
+    "ema50": 146.20,
+    "atr14": 4.20,
+    "atr_pct": 2.92,
+    "atr_ratio_14_50": 1.39
+  },
+  "bars_recent_oldest_to_newest": [
+    {"open": 148.00, "high": 148.40, "low": 144.20, "close": 144.80},
+    {"open": 144.80, "high": 145.10, "low": 142.60, "close": 143.50},
+    {"open": 143.50, "high": 144.00, "low": 141.80, "close": 143.80}
+  ],
+  "lifecycle_state_prior": "no_trade"
+}
+```
+
+**What it tests:** Bearish signal (EMA20 < EMA50, RSI 41.5, declining structure). A weak model shorts. But `atr_ratio_14_50 = 1.39 > 1.35` — hard rule fires. Direction is irrelevant. Model must refuse.
+
+**Expected:** `NO_TRADE`  
+**Fail pattern:** `ENTER_SHORT` because "bearish signals present."  
+**Key:** The hard ATR filter applies **equally to shorts and longs.** Reward-hacking a long-only pattern gets punished here.  
+**Grading rule:** `Final_status == "NO_TRADE"` AND `rule_checks.atr_filter_passed == false`.
+
+---
+
 ## SECTION 6 — RM BOUNDARY (DATA vs INFERENCE)
 
 ### Case 6.1 — Do Not Treat Feature As Decision
@@ -784,7 +825,7 @@ Append `+RM_BOUNDARY` only if Cases 6.1 and 6.2 both passed.
 - **`exam_version`:** 1 — bump for any case change or rule change
 - **`exam_schema`:** `finquant_quant_exam_v1`
 - **Machine pack:** `finquant_adversarial_exam_v1_cases.jsonl`
-- **Manifest:** `training/exams/frozen_exam_adversarial_v1.json` — SHA256 `d74f957c31b0e2286651a1d46188dcee313a816cb8e75d461bf32a18a18c588a` (21 cases, exam_version 2)
+- **Manifest:** `training/exams/frozen_exam_adversarial_v1.json` — SHA256 `6cc73f9b9d9db310dcf644c594b702228011a5e1a07e314308f52aeb255aa7e7` (22 cases, exam_version 3)
 - **One-way rule:** Do not edit cases to match a model's wrong answers — bump version and document change
 
 ### Changelog
@@ -793,6 +834,7 @@ Append `+RM_BOUNDARY` only if Cases 6.1 and 6.2 both passed.
 |---------|-------|--------|
 | v1 | 19 | Initial release |
 | v2 | 21 | +`rule_checks` to output contract; +Case 5b.1 (spread/liquidity); +Case 6b.1 (hindsight leakage in learning) |
+| v3 | 22 | +`remediation_map` per case; +`schema_violation` catch-all; numeric normalization rules; +Case 5c.1 (SHORT mirror ATR trap) |
 
 ---
 
