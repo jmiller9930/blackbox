@@ -4,7 +4,10 @@ from __future__ import annotations
 
 import argparse
 import os
+import re
 from pathlib import Path
+
+_STAGING_RE = re.compile(r"^\*\*Staging:\*\*\s*`([^`]+)`", re.MULTILINE)
 
 
 def _adapter_has_weights(adapter: Path) -> bool:
@@ -81,6 +84,51 @@ def main() -> int:
             )
     else:
         print("\nWARN: reports/ missing — training may not have written reports yet.", flush=True)
+
+    # --- Holdout / train honesty (audit) ------------------------------------
+    holdout_ds = base / "datasets" / "holdout_agentic_v1.jsonl"
+    train_ds = base / "datasets" / "train_agentic_v1.jsonl"
+    staging_path: str | None = None
+    if full_report.is_file():
+        m = _STAGING_RE.search(full_report.read_text(encoding="utf-8"))
+        if m:
+            staging_path = m.group(1).strip()
+    if staging_path:
+        st_low = staging_path.lower()
+        train_only = "train_agentic" in st_low
+        merged_agentic = "merged_" in st_low and "finquant" in st_low
+        if train_only:
+            print(
+                "\nADAPTER_LINEAGE: Training report Staging points at TRAIN split — "
+                "holdout scores (with frozen manifest) may support promotion claims "
+                "per training/CURRENT_TRAINING_STATUS.md §1b.",
+                flush=True,
+            )
+        elif holdout_ds.is_file() and merged_agentic:
+            print(
+                "\nADAPTER_LINEAGE (read carefully):\n"
+                "  • full_training_report Staging: "
+                + staging_path
+                + "\n"
+                "  • Holdout file exists: "
+                + str(holdout_ds)
+                + "\n"
+                "  • This run used the merged agentic corpus — holdout rows were almost certainly "
+                "inside supervision unless you rebuilt merge without them.\n"
+                "  • Do NOT cite holdout metrics as unbiased generalization for THIS checkpoint.\n"
+                "  • Certification: TRAINED_ON_FULL_MERGE — HOLDOUT_NOT_EXCLUDED (STATUS §1b).\n"
+                "  • Next promotion train: --dataset "
+                + str(train_ds)
+                + " (train-only).",
+                flush=True,
+            )
+        elif holdout_ds.is_file() and not train_only:
+            print(
+                "\nADAPTER_LINEAGE: Holdout file on disk but Staging is not train_agentic_*. "
+                "Confirm whether holdout rows were in training before citing holdout scores — "
+                "training/CURRENT_TRAINING_STATUS.md §1b.",
+                flush=True,
+            )
 
     print(
         "\nNext steps:\n"

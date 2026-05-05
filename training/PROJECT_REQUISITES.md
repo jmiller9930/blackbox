@@ -113,3 +113,4 @@ Bare-metal venv workflow remains supported; container avoids PEP 668 on the host
 
 - **`training/split_agentic_corpus_holdout.py`** — deterministic **train / holdout** JSONL from `finquant_agentic_qa_v1` merges (seed `FQ-AGENTIC-*` always train; `FQ-LIVE-*-*` supports tail or hash splits). See **`CURRENT_TRAINING_STATUS.md` §7**.
 - **`training/frozen_exam_manifest.py`** — checksum + version pin for promotion exam bundles; cite **`sha256`** in eval reports.
+- **Adapter lineage / what “holdout” proves:** **`CURRENT_TRAINING_STATUS.md` §1b** — certification strings so merged-train vs train-only promotion tags cannot be confused.

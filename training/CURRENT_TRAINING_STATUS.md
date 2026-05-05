@@ -17,6 +17,26 @@
 
 ---
 
+## 1b. Adapter lineage & holdout honesty — gap closure (normative)
+
+**Problem we closed:** Confusion between **“holdout JSONL exists”** and **“holdout proves generalization for *this* checkpoint.”** Without explicit wording, external reviewers (or future you) can mis-read scores.
+
+### Certification strings (copy into release notes / emails)
+
+| Adapter / artifact | Honest one-line certification |
+|--------------------|-------------------------------|
+| **`finquant-1-qwen7b-v0.1` (current trx40 prod dir)** | **TRAINED_ON_FULL_MERGE — HOLDOUT_NOT_EXCLUDED.** Verifier **6/6** OK. **`holdout_agentic_v1.jsonl`** scores on this tag are **regression / sanity only**, **not** unbiased out-of-sample proof for those rows. |
+| **Future promotion adapter** (after train-only run) | **TRAINED_ON_TRAIN_SPLIT_ONLY.** `--dataset` must match **`datasets/train_agentic_v1.jsonl`** (or successor). **`holdout_agentic_v1.jsonl`** + **`manifests/frozen_exam_holdout_agentic_v1.json` `sha256`** may be cited for **promotion** generalization on that frozen pack — **only if** no prompt/threshold tuning was done against holdout labels between freezes. |
+
+### Hard rules (avoid future bites)
+
+1. **Never** merge **`holdout_*.jsonl`** into a training corpus.  
+2. **Never** cite holdout metrics as **“proof of generalization”** for **`finquant-1-qwen7b-v0.1`** without the **TRAINED_ON_FULL_MERGE** caveat above.  
+3. **Promotion narrative:** Use **train-only** weights + **frozen manifest** when someone asks “did it see the test?”  
+4. **`python3 training/finquant_post_run_digest.py`** prints an **ADAPTER_LINEAGE** notice when the full-training report’s **Staging** path is the **full merge** while a holdout file exists on disk.
+
+---
+
 ## 2. Corpus correctness — what was wrong, what is fixed
 
 **A. Schema vocabulary**
@@ -269,7 +289,7 @@ All checks pass: action match, promotion_candidate correct, R=2.5, breakeven=0.2
 
 **Note:** **`finquant_llm_eval.py`** was **not** run on trx40 — no **`market_data.db`** on that host. See **`reports/llm_eval_pending_note.md`** on `FINQUANT_BASE` for the command once a DB path exists (and Ollama has **`finquant-1-qwen7b-v0.1`**).
 
-**Training note:** The adapter already trained on **full** `merged_finquant_v0.2.jsonl` (289 rows), so the **43** holdout lines were **included** in that run. For **honest promotion scoring**, the **next** full train should use **`--dataset train_agentic_v1.jsonl`** only; keep **`holdout_agentic_v1.jsonl`** for eval-only gates.
+**Training note:** Same fact as **§1b** — current **`finquant-1-qwen7b-v0.1`** saw all **289** rows; **next** promotion-quality train uses **`train_agentic_v1.jsonl`** only.
 
 ---
 
