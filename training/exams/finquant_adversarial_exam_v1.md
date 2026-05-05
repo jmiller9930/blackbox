@@ -1,7 +1,7 @@
 # FinQuant Adversarial Exam v1.0
 
 **exam_schema:** `finquant_quant_exam_v1`  
-**exam_version:** 1  
+**exam_version:** 2  
 **status:** FROZEN — do not edit without bumping version and regenerating manifest  
 **machine pack:** `finquant_adversarial_exam_v1_cases.jsonl`
 
@@ -38,7 +38,13 @@ Every model response must be valid JSON with these fields:
   "Numeric_answer": null,
   "Leakage_check": "PASS | FAIL — state if any future data appeared in the packet",
   "Policy_alignment": "which rules governed the decision and whether they were satisfied",
-  "DATA_or_assumption_gaps": "what is missing from the packet that would change the answer"
+  "DATA_or_assumption_gaps": "what is missing from the packet that would change the answer",
+  "rule_checks": {
+    "atr_filter_passed": true,
+    "spread_liquidity_ok": true,
+    "data_quality_passed": true,
+    "confidence_gap_passed": true
+  }
 }
 ```
 
@@ -47,6 +53,7 @@ Grader auto-fails any response that:
 - Missing a required field
 - Has `Final_status: ENTER_LONG/SHORT` with `Math_verdict: incorrect`
 - Invents an indicator value not present in `reference_facts_v1`
+- Has `rule_checks.atr_filter_passed: true` when `atr_ratio_14_50 > 1.35`
 
 ---
 
@@ -507,6 +514,40 @@ Both stop and target were hit within the same bar.
 
 ---
 
+## SECTION 5b — SPREAD / LIQUIDITY TRAP
+
+### Case 5b.1 — Wide Spread Kills Valid Signal
+
+**Category:** `no_trade_abstention`
+
+```json
+{
+  "symbol": "SOL-PERP",
+  "indicator_values_at_close": {
+    "rsi14": 54.0,
+    "ema20": 151.50,
+    "ema50": 150.20,
+    "atr14": 2.00,
+    "atr_pct": 1.32,
+    "atr_ratio_14_50": 1.05
+  },
+  "market_conditions": {
+    "spread_bps": 38,
+    "volume_trend": "thin",
+    "session": "off_hours"
+  },
+  "lifecycle_state_prior": "no_trade"
+}
+```
+
+**What it tests:** Spread of 38 bps on a 5 bps fee stack — effective round-trip cost is >50 bps on notional before slippage. At this spread, the trade **cannot be entered at fair economics** even if signal is valid. The `rule_checks.spread_liquidity_ok` must be `false`.
+
+**Expected:** `NO_TRADE`  
+**Fail pattern:** Enters "because EMA20 > EMA50 and RSI mid-zone."  
+**Grading rule:** `Final_status == "NO_TRADE"` AND `rule_checks.spread_liquidity_ok == false`.
+
+---
+
 ## SECTION 6 — RM BOUNDARY (DATA vs INFERENCE)
 
 ### Case 6.1 — Do Not Treat Feature As Decision
@@ -560,6 +601,52 @@ Both stop and target were hit within the same bar.
 
 **Expected:** `Final_status = "FAIL"` on the claim. `Math_verdict = "incorrect"`. Model must explain: positive rate = longs PAY, not collect. High positive funding is a COST drag for new longs, and may signal crowded positioning.  
 **Grading rule:** `Final_status == "FAIL"` AND `Math_verdict == "incorrect"` AND response must mention "longs pay" or "funding is a cost for longs."
+
+---
+
+## SECTION 6b — HINDSIGHT LEAKAGE IN LEARNING
+
+### Case 6b.1 — No-Trade That Became a Win (avoid hindsight)
+
+**Category:** `no_trade_abstention`
+
+**Scenario:** Two missed setups are shown. One turned out to be a win. The other turned out to be a loss. Model must not conclude "all NO_TRADEs that were wins should become future entries."
+
+```json
+{
+  "symbol": "SOL-PERP",
+  "missed_setups": [
+    {
+      "setup_id": "N1",
+      "decision": "NO_TRADE",
+      "rsi14": 55.0,
+      "ema20_above_ema50": true,
+      "atr_ratio_14_50": 1.05,
+      "volume_trend": "increasing",
+      "reason_at_time": "confidence_gap_below_threshold",
+      "future_result_if_entered": "WIN"
+    },
+    {
+      "setup_id": "N2",
+      "decision": "NO_TRADE",
+      "rsi14": 77.0,
+      "ema20_above_ema50": true,
+      "atr_ratio_14_50": 1.22,
+      "volume_trend": "falling",
+      "reason_at_time": "rsi_overextended_volume_declining",
+      "future_result_if_entered": "LOSS"
+    }
+  ]
+}
+```
+
+**Expected:**
+- N1: Valid NO_TRADE at the time (confidence gap); *possibly* worth re-examining confidence gate thresholds — **not** "should have entered."
+- N2: Correct NO_TRADE — future outcome doesn't change the reasoning; RSI overextended + declining volume is bad regardless of what happened next.
+
+**Fail pattern:** "N1 should have been entered because it was a winner" — this is hindsight leakage.  
+**Critical fail:** Recommends lowering the confidence gate specifically because N1 was a WIN in hindsight.  
+**Grading rule:** Free text review required. Automated check: `DATA_or_assumption_gaps` must mention "hindsight" or "future outcome" or "causal" — model must explicitly acknowledge the leakage risk.
 
 ---
 
@@ -697,8 +784,15 @@ Append `+RM_BOUNDARY` only if Cases 6.1 and 6.2 both passed.
 - **`exam_version`:** 1 — bump for any case change or rule change
 - **`exam_schema`:** `finquant_quant_exam_v1`
 - **Machine pack:** `finquant_adversarial_exam_v1_cases.jsonl`
-- **Manifest:** `manifests/frozen_exam_adversarial_v1.json` (SHA256 pinned after first freeze)
+- **Manifest:** `training/exams/frozen_exam_adversarial_v1.json` — SHA256 `d74f957c31b0e2286651a1d46188dcee313a816cb8e75d461bf32a18a18c588a` (21 cases, exam_version 2)
 - **One-way rule:** Do not edit cases to match a model's wrong answers — bump version and document change
+
+### Changelog
+
+| Version | Cases | Change |
+|---------|-------|--------|
+| v1 | 19 | Initial release |
+| v2 | 21 | +`rule_checks` to output contract; +Case 5b.1 (spread/liquidity); +Case 6b.1 (hindsight leakage in learning) |
 
 ---
 
