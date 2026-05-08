@@ -32,4 +32,6 @@ python3 "${HOME}/blackbox/training/exams/finquant_exam_proctor.py" \
   --timeout 180 \
   2>&1 | tee "${FINQUANT_BASE}/reports/exam_results/exam_v03.log"
 
-echo "JOB_ALL_DONE" | tee -a "${FINQUANT_BASE}/reports/exam_results/exam_v03.log"
+proc_exit=${PIPESTATUS[0]:-1}
+echo "JOB_ALL_DONE (proctor_exit=${proc_exit})" | tee -a "${FINQUANT_BASE}/reports/exam_results/exam_v03.log"
+exit "${proc_exit}"
