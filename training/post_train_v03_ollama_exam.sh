@@ -7,6 +7,8 @@ export FINQUANT_BASE="${FINQUANT_BASE:-/data/NDE/finquant/agentic_v05}"
 source /data/NDE/finquant/.venv-finquant/bin/activate
 cd "${HOME}/blackbox"
 mkdir -p "${FINQUANT_BASE}/reports/exam_results"
+RAW_EXAM="${FINQUANT_BASE}/reports/exam_results/raw_v03_latest"
+mkdir -p "${RAW_EXAM}"
 
 echo "[v03] Post-run digest…"
 python3 "${HOME}/blackbox/training/finquant_post_run_digest.py" \
@@ -28,6 +30,7 @@ python3 "${HOME}/blackbox/training/exams/finquant_exam_proctor.py" \
   --model finquant-1-qwen7b-v0.3 \
   --ollama-url http://localhost:11434 \
   --out "${FINQUANT_BASE}/reports/exam_results/" \
+  --raw-dir "${RAW_EXAM}" \
   --run-label finquant_v0.3_certification \
   --timeout 180 \
   2>&1 | tee "${FINQUANT_BASE}/reports/exam_results/exam_v03.log"

@@ -495,6 +495,13 @@ def main() -> None:
     ap.add_argument("--timeout", type=int, default=120, help="Per-case Ollama timeout (seconds)")
     ap.add_argument("--skip-human", action="store_true",
                     help="Skip human-review cases (grade only auto cases)")
+    ap.add_argument(
+        "--raw-dir",
+        type=Path,
+        default=None,
+        help="If set, save each case's raw model string to this dir "
+        "as <case_id>.txt (for engineering diagnosis; use with finquant_exam_diagnose.py)",
+    )
     args = ap.parse_args()
 
     if not args.cases.is_file():
@@ -513,6 +520,10 @@ def main() -> None:
     print(f"[proctor] SHA256:    {exam_sha}", flush=True)
     print(f"[proctor] Cases:     {len(cases)}", flush=True)
     print(f"[proctor] Model:     {args.model} @ {args.ollama_url}", flush=True)
+    raw_dir = Path(args.raw_dir).expanduser().resolve() if args.raw_dir else None
+    if raw_dir is not None:
+        raw_dir.mkdir(parents=True, exist_ok=True)
+        print(f"[proctor] Raw outputs:  {raw_dir}", flush=True)
 
     results: list[dict[str, Any]] = []
     raw_outputs: list[str] = []
@@ -531,6 +542,11 @@ def main() -> None:
         parsed = extract_json(raw)
 
         result = grade_case(case, parsed, raw)
+        if raw_dir is not None:
+            safe_id = case["case_id"].replace("/", "_").replace(" ", "_")
+            raw_path = raw_dir / f"{safe_id}.txt"
+            raw_path.write_text(raw, encoding="utf-8")
+            result["raw_artifact_path"] = str(raw_path)
         results.append(result)
         raw_outputs.append(raw)
 
@@ -556,6 +572,7 @@ def main() -> None:
             "ollama_url": args.ollama_url,
             "run_label": label,
             "created_utc": datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ"),
+            "raw_outputs_dir": str(raw_dir) if raw_dir else None,
             "scores": scores,
             "results": results,
         }
