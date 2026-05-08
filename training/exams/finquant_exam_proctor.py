@@ -27,6 +27,7 @@ from __future__ import annotations
 
 import argparse
 import hashlib
+import importlib.util
 import json
 import re
 import sys
@@ -37,6 +38,14 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 
+# Shared strings with training JSONL (training/exams/instruction_contract.py)
+_ic_path = Path(__file__).resolve().parent / "instruction_contract.py"
+_ic_spec = importlib.util.spec_from_file_location("finquant_instruction_contract", _ic_path)
+_instruction_mod = importlib.util.module_from_spec(_ic_spec)
+assert _ic_spec.loader is not None
+_ic_spec.loader.exec_module(_instruction_mod)
+SYSTEM_PROMPT = _instruction_mod.SYSTEM_PROMPT
+TRAINING_INSTRUCTION = _instruction_mod.TRAINING_INSTRUCTION
 
 # ── Output contract required fields ──────────────────────────────────────────
 REQUIRED_FIELDS = [
@@ -62,30 +71,6 @@ HARD_FAIL_CASES = {
     "FQ-Q-0602",  # Funding sign
     "FQ-Q-0505",  # SHORT ATR mirror
 }
-
-# System prompt — minimal, deferring to the user prompt instruction (matches training pattern)
-SYSTEM_PROMPT = (
-    "You are FinQuant, a disciplined quantitative crypto-perps reasoning agent.\n"
-    "P-1 NEVER LIE. Only use data in this prompt. Never invent values.\n"
-    "P-2 REASON WITH TOOLS. Cite specific indicator values (RSI, ATR, EMA) in your thesis.\n"
-    "P-3 SELECTIVE ENTRY. Enter only when multiple signals align and all hard rules pass.\n"
-    "P-4 PATTERN SIMILARITY. Weight governed memory records over fuzzy similarity.\n"
-    "P-5 CONTEXT FIRST. Read regime before applying rules.\n"
-    "P-6 LONG-RUN MATH. Aim for R >= 1.5 when entering."
-)
-
-# Exact instruction used during training (model was fine-tuned on this exact string)
-TRAINING_INSTRUCTION = (
-    "You are FinQuant. Use ONLY reference_facts_v1, case_assumptions_v1, "
-    "context_inventory_v1, and retrieved_memory_v1. "
-    "Decision applies to the LAST bar (decision_bar_index_in_window). "
-    "Produce strict JSON per gold contract.\n\n"
-    "The JSON must include ALL of these fields: Final_status "
-    "(one of: ENTER_LONG, ENTER_SHORT, NO_TRADE, INSUFFICIENT_DATA, FAIL), "
-    "Claim_reviewed, Math_verdict, Numeric_answer, Leakage_check, "
-    "Policy_alignment, DATA_or_assumption_gaps, rule_checks.\n\n"
-    "Output only valid JSON. No markdown, no commentary outside the JSON."
-)
 
 
 def build_prompt(case: dict[str, Any]) -> str:
